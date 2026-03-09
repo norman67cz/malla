@@ -43,6 +43,7 @@ import paho.mqtt.client as mqtt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from meshtastic import (
+    admin_pb2,
     config_pb2,
     mesh_pb2,
     mqtt_pb2,
@@ -94,6 +95,54 @@ node_cache: dict[
 ] = {}  # In-memory cache: {node_id_numeric: {'hex_id': '!abc123', 'long_name': 'Name', 'short_name': 'Short', 'last_updated': timestamp}}
 cleanup_thread: threading.Thread | None = None  # Background thread for data cleanup
 stop_cleanup = threading.Event()  # Event to signal cleanup thread to stop
+
+
+def format_lora_modem_preset(preset_name: str | None) -> str | None:
+    """Convert enum-like preset names such as ``MEDIUM_FAST`` to ``MEDIUM-FAST``."""
+    if not preset_name:
+        return None
+    return preset_name.replace("_", "-")
+
+
+def extract_lora_modem_preset_from_admin(
+    admin_message: admin_pb2.AdminMessage,
+    from_node_id: int | None,
+    to_node_id: int | None,
+) -> tuple[int, str, str] | None:
+    """Extract LoRa modem preset details from an ADMIN_APP payload.
+
+    Returns ``(target_node_id, preset_name, source_field)`` when the payload
+    contains a LoRa config with a modem preset, otherwise ``None``.
+    """
+
+    def _extract_from_config(config_message, target_node: int | None, source_field: str):
+        if not target_node:
+            return None
+        if not config_message.HasField("lora"):
+            return None
+        if not config_message.lora.use_preset:
+            return None
+
+        preset_name = config_pb2.Config.LoRaConfig.ModemPreset.Name(
+            config_message.lora.modem_preset
+        )
+        return (target_node, preset_name, source_field)
+
+    if admin_message.HasField("get_config_response"):
+        return _extract_from_config(
+            admin_message.get_config_response,
+            from_node_id,
+            "get_config_response",
+        )
+
+    if admin_message.HasField("set_config"):
+        return _extract_from_config(
+            admin_message.set_config,
+            to_node_id,
+            "set_config",
+        )
+
+    return None
 
 
 # --- Decryption Functions ---
@@ -361,6 +410,8 @@ def init_database() -> None:
             hw_model TEXT,
             role TEXT,
             primary_channel TEXT,
+            lora_modem_preset TEXT,
+            lora_modem_preset_updated_at REAL,
             is_licensed BOOLEAN,
             mac_address TEXT,
             first_seen REAL NOT NULL,
@@ -403,15 +454,23 @@ def init_database() -> None:
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_node_hex_id ON node_info(hex_id)")
 
-    # Ensure primary_channel column exists for legacy databases
-    try:
-        cursor.execute("ALTER TABLE node_info ADD COLUMN primary_channel TEXT")
-        logging.info("Added primary_channel column to node_info table")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e).lower():
-            logging.debug("primary_channel column already exists")
-        else:
-            logging.warning(f"Could not add primary_channel column: {e}")
+    # Ensure newer node metadata columns exist for legacy databases
+    legacy_columns = [
+        ("primary_channel", "TEXT"),
+        ("lora_modem_preset", "TEXT"),
+        ("lora_modem_preset_updated_at", "REAL"),
+    ]
+    for column_name, column_type in legacy_columns:
+        try:
+            cursor.execute(
+                f"ALTER TABLE node_info ADD COLUMN {column_name} {column_type}"
+            )
+            logging.info(f"Added {column_name} column to node_info table")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" in str(e).lower():
+                logging.debug(f"{column_name} column already exists")
+            else:
+                logging.warning(f"Could not add {column_name} column: {e}")
 
     # Index for faster channel filtering
     cursor.execute(
@@ -439,6 +498,54 @@ def init_database() -> None:
     except Exception as e:
         logging.warning(f"Could not backfill primary_channel column: {e}")
 
+    # Backfill LoRa modem preset from captured ADMIN_APP payloads if available
+    try:
+        cursor.execute(
+            """
+            SELECT timestamp, from_node_id, to_node_id, raw_payload
+            FROM packet_history
+            WHERE portnum_name = 'ADMIN_APP'
+              AND raw_payload IS NOT NULL
+              AND length(raw_payload) > 0
+            ORDER BY timestamp DESC
+            """
+        )
+        updated_nodes: set[int] = set()
+        for timestamp, from_node_id, to_node_id, raw_payload in cursor.fetchall():
+            try:
+                admin_message = admin_pb2.AdminMessage()
+                admin_message.ParseFromString(raw_payload)
+                extracted = extract_lora_modem_preset_from_admin(
+                    admin_message, from_node_id, to_node_id
+                )
+                if not extracted:
+                    continue
+
+                target_node_id, preset_name, _source_field = extracted
+                if target_node_id in updated_nodes:
+                    continue
+
+                cursor.execute(
+                    """
+                    UPDATE node_info
+                    SET lora_modem_preset = ?, lora_modem_preset_updated_at = ?
+                    WHERE node_id = ?
+                      AND (lora_modem_preset IS NULL OR lora_modem_preset = '')
+                    """,
+                    (preset_name, timestamp, target_node_id),
+                )
+                if cursor.rowcount > 0:
+                    updated_nodes.add(target_node_id)
+            except Exception as e:  # noqa: BLE001
+                logging.debug(f"Skipping ADMIN_APP preset backfill row: {e}")
+        if updated_nodes:
+            logging.info(
+                "Backfilled lora_modem_preset for %s nodes from ADMIN_APP history",
+                len(updated_nodes),
+            )
+    except Exception as e:
+        logging.warning(f"Could not backfill lora_modem_preset column: {e}")
+
     conn.commit()
     conn.close()
     logging.info(f"Database initialized: {DATABASE_FILE}")
@@ -454,7 +561,8 @@ def load_node_cache() -> None:
 
         cursor.execute("""
             SELECT node_id, hex_id, long_name, short_name, hw_model, role,
-                   is_licensed, mac_address, primary_channel, last_updated
+                   is_licensed, mac_address, primary_channel, lora_modem_preset,
+                   lora_modem_preset_updated_at, last_updated
             FROM node_info
         """)
 
@@ -472,6 +580,8 @@ def load_node_cache() -> None:
                 is_licensed,
                 mac_address,
                 primary_channel,
+                lora_modem_preset,
+                lora_modem_preset_updated_at,
                 last_updated,
             ) = row
             node_cache[node_id] = {
@@ -483,6 +593,8 @@ def load_node_cache() -> None:
                 "is_licensed": bool(is_licensed),
                 "mac_address": mac_address,
                 "primary_channel": primary_channel,
+                "lora_modem_preset": lora_modem_preset,
+                "lora_modem_preset_updated_at": lora_modem_preset_updated_at,
                 "last_updated": last_updated,
             }
 
@@ -500,6 +612,8 @@ def update_node_cache(
     is_licensed: bool | None = None,
     mac_address: str | None = None,
     primary_channel: str | None = None,
+    lora_modem_preset: str | None = None,
+    lora_modem_preset_updated_at: float | None = None,
 ) -> None:
     """Update both in-memory cache and database with node information."""
     global node_cache
@@ -519,6 +633,8 @@ def update_node_cache(
             "is_licensed": is_licensed,
             "mac_address": mac_address,
             "primary_channel": primary_channel,
+            "lora_modem_preset": lora_modem_preset,
+            "lora_modem_preset_updated_at": lora_modem_preset_updated_at,
             "last_updated": current_time,
         }
     else:
@@ -539,6 +655,12 @@ def update_node_cache(
             node_cache[node_id]["mac_address"] = mac_address
         if primary_channel is not None:
             node_cache[node_id]["primary_channel"] = primary_channel
+        if lora_modem_preset is not None:
+            node_cache[node_id]["lora_modem_preset"] = lora_modem_preset
+        if lora_modem_preset_updated_at is not None:
+            node_cache[node_id]["lora_modem_preset_updated_at"] = (
+                lora_modem_preset_updated_at
+            )
         node_cache[node_id]["last_updated"] = current_time
 
     # Update database using INSERT OR REPLACE to handle existing nodes
@@ -549,7 +671,7 @@ def update_node_cache(
 
         # Get existing values from database if node exists
         cursor.execute(
-            "SELECT hex_id, long_name, short_name, hw_model, role, is_licensed, mac_address, primary_channel, first_seen FROM node_info WHERE node_id = ?",
+            "SELECT hex_id, long_name, short_name, hw_model, role, is_licensed, mac_address, primary_channel, lora_modem_preset, lora_modem_preset_updated_at, first_seen FROM node_info WHERE node_id = ?",
             (node_id,),
         )
         existing = cursor.fetchone()
@@ -565,6 +687,8 @@ def update_node_cache(
                 existing_is_licensed,
                 existing_mac_address,
                 existing_primary_channel,
+                existing_lora_modem_preset,
+                existing_lora_modem_preset_updated_at,
                 _first_seen,
             ) = existing
             final_hex_id = hex_id if hex_id is not None else existing_hex_id
@@ -585,12 +709,23 @@ def update_node_cache(
                 if primary_channel is not None
                 else existing_primary_channel
             )
+            final_lora_modem_preset = (
+                lora_modem_preset
+                if lora_modem_preset is not None
+                else existing_lora_modem_preset
+            )
+            final_lora_modem_preset_updated_at = (
+                lora_modem_preset_updated_at
+                if lora_modem_preset_updated_at is not None
+                else existing_lora_modem_preset_updated_at
+            )
 
             cursor.execute(
                 """
                 UPDATE node_info
                 SET hex_id = ?, long_name = ?, short_name = ?, hw_model = ?, role = ?,
-                    is_licensed = ?, mac_address = ?, primary_channel = ?, last_updated = ?
+                    is_licensed = ?, mac_address = ?, primary_channel = ?,
+                    lora_modem_preset = ?, lora_modem_preset_updated_at = ?, last_updated = ?
                 WHERE node_id = ?
             """,
                 (
@@ -602,6 +737,8 @@ def update_node_cache(
                     final_is_licensed,
                     final_mac_address,
                     final_primary_channel,
+                    final_lora_modem_preset,
+                    final_lora_modem_preset_updated_at,
                     current_time,
                     node_id,
                 ),
@@ -616,8 +753,9 @@ def update_node_cache(
                 """
                 INSERT INTO node_info
                 (node_id, hex_id, long_name, short_name, hw_model, role,
-                 is_licensed, mac_address, primary_channel, first_seen, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 is_licensed, mac_address, primary_channel, lora_modem_preset,
+                 lora_modem_preset_updated_at, first_seen, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     node_id,
@@ -629,6 +767,8 @@ def update_node_cache(
                     is_licensed,
                     mac_address,
                     primary_channel,
+                    lora_modem_preset,
+                    lora_modem_preset_updated_at,
                     current_time,
                     current_time,
                 ),
@@ -1245,6 +1385,36 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             else:
                 logging.info(
                     f"📊 Telemetry from {from_node_display}{via_mqtt_str}: Unknown type"
+                )
+
+            processed_successfully = True
+
+        elif mesh_packet.decoded.portnum == portnums_pb2.PortNum.ADMIN_APP:
+            admin_message = admin_pb2.AdminMessage()
+            admin_message.ParseFromString(mesh_packet.decoded.payload)
+
+            extracted = extract_lora_modem_preset_from_admin(
+                admin_message,
+                from_node_id_numeric,
+                to_node_id_numeric,
+            )
+            if extracted:
+                target_node_id, preset_name, source_field = extracted
+                update_node_cache(
+                    node_id=target_node_id,
+                    lora_modem_preset=preset_name,
+                    lora_modem_preset_updated_at=time.time(),
+                )
+                logging.info(
+                    "📡 LoRa modem preset for %s captured from ADMIN_APP %s: %s",
+                    get_node_display_name(target_node_id),
+                    source_field,
+                    format_lora_modem_preset(preset_name),
+                )
+            else:
+                logging.debug(
+                    "ADMIN_APP packet %s did not contain LoRa modem preset information",
+                    mesh_packet.id,
                 )
 
             processed_successfully = True

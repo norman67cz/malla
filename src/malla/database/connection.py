@@ -59,7 +59,7 @@ def get_db_connection() -> sqlite3.Connection:
         # Lightweight schema migrations – run once per connection.
         # ------------------------------------------------------------------
         try:
-            _ensure_schema_migrations(cursor)
+            _ensure_schema_migrations(cursor, db_path)
         except Exception as e:
             logger.warning(f"Schema migration check failed: {e}")
 
@@ -117,15 +117,16 @@ def init_database() -> None:
 # ----------------------------------------------------------------------
 
 
-_SCHEMA_MIGRATIONS_DONE: set[str] = set()
+_SCHEMA_MIGRATIONS_DONE: set[tuple[str, str]] = set()
 
 
-def _ensure_schema_migrations(cursor: sqlite3.Cursor) -> None:
+def _ensure_schema_migrations(cursor: sqlite3.Cursor, db_path: str) -> None:
     """Run any idempotent schema updates that the application depends on.
 
-    Currently this checks that ``node_info`` has a ``primary_channel`` column
-    (added in April 2024) so queries that reference it do not fail when the
-    database was created with an older version of the schema.
+    Currently this checks that ``node_info`` has the metadata columns used by
+    the UI (``primary_channel``, ``lora_modem_preset``,
+    ``lora_modem_preset_updated_at``) so queries do not fail when the database
+    was created with an older version of the schema.
 
     The function is **safe** to run repeatedly – it will only attempt each
     migration once per Python process and each individual migration is
@@ -133,9 +134,10 @@ def _ensure_schema_migrations(cursor: sqlite3.Cursor) -> None:
     """
 
     global _SCHEMA_MIGRATIONS_DONE  # pylint: disable=global-statement
+    migration_key = (db_path, "node_info_metadata")
 
     # Quickly short-circuit if we've already handled migrations in this process
-    if "primary_channel" in _SCHEMA_MIGRATIONS_DONE:
+    if migration_key in _SCHEMA_MIGRATIONS_DONE:
         return
 
     try:
@@ -145,18 +147,23 @@ def _ensure_schema_migrations(cursor: sqlite3.Cursor) -> None:
 
         if "primary_channel" not in columns:
             cursor.execute("ALTER TABLE node_info ADD COLUMN primary_channel TEXT")
+        if "lora_modem_preset" not in columns:
+            cursor.execute("ALTER TABLE node_info ADD COLUMN lora_modem_preset TEXT")
+        if "lora_modem_preset_updated_at" not in columns:
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_node_primary_channel ON node_info(primary_channel)"
-            )
-            logging.info(
-                "Added primary_channel column to node_info table via auto-migration"
+                "ALTER TABLE node_info ADD COLUMN lora_modem_preset_updated_at REAL"
             )
 
-        _SCHEMA_MIGRATIONS_DONE.add("primary_channel")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_node_primary_channel ON node_info(primary_channel)"
+        )
+        logging.info("Ensured node_info metadata columns exist via auto-migration")
+
+        _SCHEMA_MIGRATIONS_DONE.add(migration_key)
     except sqlite3.OperationalError as exc:
         # Ignore errors about duplicate columns in race situations – another
         # process may have altered the table first.
         if "duplicate column name" in str(exc).lower():
-            _SCHEMA_MIGRATIONS_DONE.add("primary_channel")
+            _SCHEMA_MIGRATIONS_DONE.add(migration_key)
         else:
             raise

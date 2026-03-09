@@ -19,6 +19,13 @@ from .connection import get_db_connection
 logger = logging.getLogger(__name__)
 
 
+def _format_lora_modem_preset(preset_name: str | None) -> str | None:
+    """Convert enum-style names such as ``MEDIUM_FAST`` to ``MEDIUM-FAST``."""
+    if not preset_name:
+        return None
+    return preset_name.replace("_", "-")
+
+
 class DashboardRepository:
     """Repository for dashboard statistics."""
 
@@ -1141,6 +1148,8 @@ class NodeRepository:
                 n.hw_model,
                 n.role,
                 n.primary_channel,
+                n.lora_modem_preset,
+                n.lora_modem_preset_updated_at,
                 COUNT(*) as total_packets,
                 MAX(p.timestamp) as last_seen,
                 MIN(p.timestamp) as first_seen,
@@ -1155,7 +1164,8 @@ class NodeRepository:
             FROM packet_history p
             LEFT JOIN node_info n ON p.from_node_id = n.node_id
             WHERE p.from_node_id = ?
-            GROUP BY p.from_node_id, n.long_name, n.short_name, n.hw_model, n.role, n.primary_channel
+            GROUP BY p.from_node_id, n.long_name, n.short_name, n.hw_model, n.role,
+                     n.primary_channel, n.lora_modem_preset, n.lora_modem_preset_updated_at
             """
 
             cursor.execute(query, (node_id,))
@@ -1170,6 +1180,16 @@ class NodeRepository:
                     return None
 
                 # Node exists but has no packets
+                no_packet_lora_preset = (
+                    node_info_row["lora_modem_preset"]
+                    if "lora_modem_preset" in node_info_row.keys()
+                    else None
+                )
+                no_packet_lora_updated_at = (
+                    node_info_row["lora_modem_preset_updated_at"]
+                    if "lora_modem_preset_updated_at" in node_info_row.keys()
+                    else None
+                )
                 node_info = {
                     "node_id": node_info_row["node_id"],
                     "hex_id": f"!{node_id:08x}",
@@ -1180,7 +1200,30 @@ class NodeRepository:
                     "short_name": node_info_row["short_name"],
                     "hw_model": node_info_row["hw_model"],
                     "role": node_info_row["role"],
-                    "primary_channel": node_info_row.get("primary_channel"),
+                    "primary_channel": node_info_row["primary_channel"]
+                    if "primary_channel" in node_info_row.keys()
+                    else None,
+                    "lora_modem_preset": no_packet_lora_preset,
+                    "lora_modem_preset_display": _format_lora_modem_preset(
+                        no_packet_lora_preset
+                    ),
+                    "lora_modem_preset_status": (
+                        "captured"
+                        if no_packet_lora_preset
+                        else "not_captured"
+                    ),
+                    "lora_modem_preset_status_label": (
+                        "Captured"
+                        if no_packet_lora_preset
+                        else "Not captured yet"
+                    ),
+                    "lora_modem_preset_updated_at": (
+                        datetime.fromtimestamp(
+                            no_packet_lora_updated_at, UTC
+                        ).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        if no_packet_lora_updated_at
+                        else None
+                    ),
                     "total_packets": 0,
                     "last_seen": None,
                     "first_seen": None,
@@ -1220,6 +1263,34 @@ class NodeRepository:
                 "primary_channel": node_row["primary_channel"]
                 if "primary_channel" in node_row.keys()
                 else None,
+                "lora_modem_preset": node_row["lora_modem_preset"]
+                if "lora_modem_preset" in node_row.keys()
+                else None,
+                "lora_modem_preset_display": _format_lora_modem_preset(
+                    node_row["lora_modem_preset"]
+                    if "lora_modem_preset" in node_row.keys()
+                    else None
+                ),
+                "lora_modem_preset_status": (
+                    "captured"
+                    if "lora_modem_preset" in node_row.keys()
+                    and node_row["lora_modem_preset"]
+                    else "not_captured"
+                ),
+                "lora_modem_preset_status_label": (
+                    "Captured"
+                    if "lora_modem_preset" in node_row.keys()
+                    and node_row["lora_modem_preset"]
+                    else "Not captured yet"
+                ),
+                "lora_modem_preset_updated_at": (
+                    datetime.fromtimestamp(
+                        node_row["lora_modem_preset_updated_at"], UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    if "lora_modem_preset_updated_at" in node_row.keys()
+                    and node_row["lora_modem_preset_updated_at"]
+                    else None
+                ),
                 "total_packets": node_row["total_packets"],
                 "last_seen": last_seen.strftime("%Y-%m-%d %H:%M:%S UTC"),
                 "last_seen_timestamp": last_seen.timestamp(),  # Raw Unix timestamp for client-side formatting

@@ -158,6 +158,23 @@
                                     <td>{{ node.primary_channel }}</td>
                                 </tr>
                                 {% endif %}
+                                <tr>
+                                    <th>LoRa Preset:</th>
+                                    <td>
+                                        {% if node.lora_modem_preset_display %}
+                                            <span class="badge bg-info text-dark">{{ node.lora_modem_preset_display }}</span>
+                                            {% if node.lora_modem_preset_updated_at %}
+                                                <br><small class="text-muted">Captured from ADMIN_APP config at {{ node.lora_modem_preset_updated_at }}</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">Not captured yet</span>
+                                            <i class="bi bi-info-circle text-muted ms-1"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
+                                               title="LoRa preset information is only available after Malla captures an ADMIN_APP config packet for this node."></i>
+                                        {% endif %}
+                                    </td>
+                                </tr>
                                 {% if node.mac_address %}
                                 <tr>
                                     <th>MAC Address:</th>
