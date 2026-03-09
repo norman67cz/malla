@@ -42,6 +42,10 @@ def api_stats():
     try:
         gateway_id = request.args.get("gateway_id")
         stats = DashboardRepository.get_stats(gateway_id=gateway_id)
+        from ..services.gateway_service import GatewayService
+
+        gateway_stats = GatewayService.get_gateway_statistics(hours=24)
+        stats["gateway_count"] = gateway_stats.get("total_gateways", 0)
         return safe_jsonify(stats)
     except Exception as e:
         logger.error(f"Error in API stats: {e}")

@@ -28,6 +28,7 @@ wheels
 .venv
 venv
 .env
+.uv-cache
 
 # IDEs
 .vscode

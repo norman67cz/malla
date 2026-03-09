@@ -1,29 +1,36 @@
-.PHONY: help install install-dev test test-cov lint format clean build upload docs serve-docs
+.PHONY: help bootstrap doctor install install-dev test test-cov lint format clean build upload docs serve-docs ssh-check deploy-remote
 .DEFAULT_GOAL := help
+UV_CACHE_DIR := $(CURDIR)/.uv-cache
+UV := UV_CACHE_DIR=$(UV_CACHE_DIR) uv
+
+bootstrap: ## Check local prerequisites and print next steps
+	./scripts/bootstrap_dev.sh
+
+doctor: bootstrap ## Alias for bootstrap
 
 help: ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install the package in development mode
-	uv sync
+	$(UV) sync
 
 install-dev: ## Install with development dependencies
-	uv sync --dev
+	$(UV) sync --dev
 
 test: ## Run tests
-	uv run pytest
+	$(UV) run pytest
 
 test-cov: ## Run tests with coverage
-	uv run pytest --cov=src/malla --cov-report=html --cov-report=term
+	$(UV) run pytest --cov=src/malla --cov-report=html --cov-report=term
 
 lint: ## Run linting tools
-	uv run ruff check src tests
-	uv run basedpyright src
+	$(UV) run ruff check src tests
+	$(UV) run basedpyright src
 
 format: ## Format code
-	uv run ruff format src tests
-	uv run ruff check --fix src tests
+	$(UV) run ruff format src tests
+	$(UV) run ruff check --fix src tests
 
 clean: ## Clean build artifacts
 	rm -rf build/
@@ -36,10 +43,10 @@ clean: ## Clean build artifacts
 	find . -type f -name "*.pyc" -delete
 
 build: clean ## Build the package
-	uv build
+	$(UV) build
 
 upload: build ## Upload to PyPI (requires authentication)
-	uv publish
+	$(UV) publish
 
 docs: ## Build documentation
 	@echo "Documentation build not yet configured"
@@ -54,8 +61,14 @@ run-capture: ## Run the MQTT capture tool
 	./malla-capture
 
 dev-setup: install-dev ## Set up development environment
-	uv run pre-commit install
+	$(UV) run pre-commit install
 
 check: lint test ## Run all checks (lint + test)
 
-ci: install-dev check ## Run CI pipeline locally 
+ci: install-dev check ## Run CI pipeline locally
+
+ssh-check: ## Verify SSH connectivity to the remote Docker host
+	ssh $${DEPLOY_USER:+$${DEPLOY_USER}@}$${DEPLOY_HOST:-10.5.0.71} true
+
+deploy-remote: ## Sync the repo to the remote host and rebuild with Docker Compose
+	./scripts/deploy_remote.sh

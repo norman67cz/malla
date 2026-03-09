@@ -28,7 +28,7 @@
         <div class="col-md-2">
             <div class="card h-100">
                 <div class="card-body card-metric">
-                    <div class="metric-value">{{ stats.total_nodes }}</div>
+                    <div class="metric-value" id="totalNodesMetric">{{ stats.total_nodes }}</div>
                     <div class="metric-label">Total Nodes</div>
                     <small class="text-muted">Known mesh participants</small>
                 </div>
@@ -37,18 +37,18 @@
         <div class="col-md-2">
             <div class="card h-100">
                 <div class="card-body card-metric">
-                    <div class="metric-value text-success">{{ stats.active_nodes_24h }}</div>
+                    <div class="metric-value text-success" id="activeNodesMetric">{{ stats.active_nodes_24h }}</div>
                     <div class="metric-label">Active Nodes (24h)</div>
                     {% set total_nodes_safe = stats.total_nodes if stats.total_nodes > 0 else 1 %}
                     {% set coverage_pct = (stats.active_nodes_24h / total_nodes_safe * 100)|int %}
-                    <small class="text-muted">{{ coverage_pct }}% network coverage</small>
+                    <small class="text-muted" id="coverageMetricLabel">{{ coverage_pct }}% network coverage</small>
                 </div>
             </div>
         </div>
         <div class="col-md-2">
             <div class="card h-100">
                 <div class="card-body card-metric">
-                    <div class="metric-value text-warning">{{ gateway_count }}</div>
+                    <div class="metric-value text-warning" id="gatewayCountMetric">{{ gateway_count }}</div>
                     <div class="metric-label">Gateway Diversity</div>
                     <small class="text-muted">Data source reliability</small>
                 </div>
@@ -57,7 +57,7 @@
         <div class="col-md-2">
             <div class="card h-100">
                 <div class="card-body card-metric">
-                    <div class="metric-value text-info">{{ stats.packet_types|length }}</div>
+                    <div class="metric-value text-info" id="protocolDiversityMetric">{{ stats.packet_types|length }}</div>
                     <div class="metric-label">Protocol Diversity</div>
                     <small class="text-muted">Message types in use</small>
                 </div>
@@ -66,7 +66,7 @@
         <div class="col-md-2">
             <div class="card h-100">
                 <div class="card-body card-metric">
-                    <div class="metric-value">{{ "{:,}".format(stats.total_packets) }}</div>
+                    <div class="metric-value" id="totalMessagesMetric">{{ "{:,}".format(stats.total_packets) }}</div>
                     <div class="metric-label">Total Messages</div>
                     <small class="text-muted">Network activity</small>
                 </div>
@@ -76,7 +76,7 @@
             <div class="card h-100">
                 <div class="card-body card-metric">
                     {% set success_class = 'text-success' if stats.success_rate >= 95 else 'text-warning' if stats.success_rate >= 85 else 'text-danger' %}
-                    <div class="metric-value {{ success_class }}">{{ stats.success_rate }}%</div>
+                    <div class="metric-value {{ success_class }}" id="successRateMetric">{{ stats.success_rate }}%</div>
                     <div class="metric-label">Processing Success</div>
                     <small class="text-muted">Message reliability</small>
                 </div>
@@ -117,18 +117,18 @@
                             {% set total_nodes_safe = stats.total_nodes if stats.total_nodes > 0 else 1 %}
                             {% set activity_percentage = (stats.active_nodes_24h / total_nodes_safe * 100)|int %}
                             {% set coverage_class = 'bg-success' if activity_percentage >= 70 else 'bg-warning' if activity_percentage >= 40 else 'bg-danger' %}
-                            <div class="progress-bar {{ coverage_class }}" style="width: {{ activity_percentage }}%;">
+                            <div class="progress-bar {{ coverage_class }}" id="networkCoverageBar" style="width: {{ activity_percentage }}%;">
                                 {{ activity_percentage }}%
                             </div>
                         </div>
-                        <small class="text-muted">{{ stats.active_nodes_24h }} of {{ stats.total_nodes }} nodes active</small>
+                        <small class="text-muted" id="networkCoverageLabel">{{ stats.active_nodes_24h }} of {{ stats.total_nodes }} nodes active</small>
                     </div>
 
                     <div class="mb-3">
                         <h6>Message Success Rate</h6>
                         <div class="progress mb-2">
                             {% set success_bar_class = 'bg-success' if stats.success_rate >= 95 else 'bg-warning' if stats.success_rate >= 85 else 'bg-danger' %}
-                            <div class="progress-bar {{ success_bar_class }}" style="width: {{ stats.success_rate }}%;">
+                            <div class="progress-bar {{ success_bar_class }}" id="successRateBar" style="width: {{ stats.success_rate }}%;">
                                 {{ stats.success_rate }}%
                             </div>
                         </div>
@@ -139,7 +139,7 @@
                         <h6>Gateway Diversity</h6>
                         <div class="progress mb-2">
                             {% set gateway_diversity = (gateway_count / 10 * 100)|int if gateway_count <= 10 else 100 %}
-                            <div class="progress-bar bg-primary" style="width: {{ gateway_diversity }}%;">
+                            <div class="progress-bar bg-primary" id="gatewayDiversityBar" style="width: {{ gateway_diversity }}%;">
                                 {{ gateway_count }} sources
                             </div>
                         </div>
@@ -151,12 +151,12 @@
                     <div class="row text-center">
                         <div class="col-6">
                             <div class="border-end">
-                                <div class="fw-bold text-primary">{{ stats.recent_packets }}</div>
+                                <div class="fw-bold text-primary" id="recentActivityMetric">{{ stats.recent_packets }}</div>
                                 <small class="text-muted">Recent Activity</small>
                             </div>
                         </div>
                         <div class="col-6">
-                            <div class="fw-bold text-success">{{ stats.packet_types|length }}</div>
+                                <div class="fw-bold text-success" id="protocolTypesMetric">{{ stats.packet_types|length }}</div>
                             <small class="text-muted">Protocol Types</small>
                         </div>
                     </div>
@@ -306,22 +306,22 @@
                     <div class="row">
                         <div class="col-6">
                             <strong>Total Nodes:</strong><br>
-                            <span class="text-primary">{{ stats.total_nodes }}</span>
+                            <span class="text-primary" id="networkInfoTotalNodes">{{ stats.total_nodes }}</span>
                         </div>
                         <div class="col-6">
                             <strong>Active (24h):</strong><br>
-                            <span class="text-success">{{ stats.active_nodes_24h }}</span>
+                            <span class="text-success" id="networkInfoActiveNodes">{{ stats.active_nodes_24h }}</span>
                         </div>
                     </div>
                     <hr>
                     <div class="row">
                         <div class="col-6">
                             <strong>Gateways:</strong><br>
-                            <span class="text-warning">{{ gateway_count }}</span>
+                            <span class="text-warning" id="networkInfoGatewayCount">{{ gateway_count }}</span>
                         </div>
                         <div class="col-6">
                             <strong>Protocols:</strong><br>
-                            <span class="text-info">{{ stats.packet_types|length }}</span>
+                            <span class="text-info" id="networkInfoProtocols">{{ stats.packet_types|length }}</span>
                         </div>
                     </div>
                 </div>
@@ -337,11 +337,11 @@
                     <div class="row">
                         <div class="col-6">
                             <strong>Total Messages:</strong><br>
-                            <span class="text-primary">{{ "{:,}".format(stats.total_packets) }}</span>
+                            <span class="text-primary" id="activitySummaryTotalMessages">{{ "{:,}".format(stats.total_packets) }}</span>
                         </div>
                         <div class="col-6">
                             <strong>Recent (1h):</strong><br>
-                            <span class="text-success">{{ stats.recent_packets }}</span>
+                            <span class="text-success" id="activitySummaryRecentMessages">{{ stats.recent_packets }}</span>
                         </div>
                     </div>
                     <hr>
@@ -349,7 +349,7 @@
                         <div class="col-12">
                             <strong>Success Rate:</strong><br>
                             {% set success_class = 'text-success' if stats.success_rate >= 95 else 'text-warning' if stats.success_rate >= 85 else 'text-danger' %}
-                            <span class="{{ success_class }}">{{ stats.success_rate }}%</span>
+                            <span class="{{ success_class }}" id="activitySummarySuccessRate">{{ stats.success_rate }}%</span>
                         </div>
                     </div>
                 </div>
@@ -365,11 +365,11 @@
                     <div class="row">
                         <div class="col-6">
                             <strong>Avg RSSI:</strong><br>
-                            <span class="text-primary">{{ stats.avg_rssi|format_rssi }}dBm</span>
+                            <span class="text-primary" id="signalQualityAvgRssi">{{ stats.avg_rssi|format_rssi }}dBm</span>
                         </div>
                         <div class="col-6">
                             <strong>Avg SNR:</strong><br>
-                            <span class="text-success">{{ stats.avg_snr|format_snr }}dB</span>
+                            <span class="text-success" id="signalQualityAvgSnr">{{ stats.avg_snr|format_snr }}dB</span>
                         </div>
                     </div>
                     <hr>
@@ -379,11 +379,11 @@
                             {% set total_nodes_safe = stats.total_nodes if stats.total_nodes > 0 else 1 %}
                             {% set activity_percentage = (stats.active_nodes_24h / total_nodes_safe * 100)|int %}
                             {% if activity_percentage >= 70 %}
-                                <span class="text-success">Excellent</span>
+                                <span class="text-success" id="networkHealthStatus">Excellent</span>
                             {% elif activity_percentage >= 40 %}
-                                <span class="text-warning">Good</span>
+                                <span class="text-warning" id="networkHealthStatus">Good</span>
                             {% else %}
-                                <span class="text-danger">Needs Attention</span>
+                                <span class="text-danger" id="networkHealthStatus">Needs Attention</span>
                             {% endif %}
                         </div>
                     </div>
@@ -399,6 +399,9 @@
 // Load analytics data asynchronously to improve initial page load time
 let analyticsData = null;
 let chartInstances = {}; // Store chart instances for theme updates
+let dashboardRefreshTimer = null;
+let dashboardRefreshInFlight = false;
+const DASHBOARD_REFRESH_MS = 30000;
 
 // Get theme-aware colors for charts
 function getChartColors() {
@@ -488,8 +491,8 @@ function updateChartsForTheme() {
 
 // Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', function () {
-    // Load analytics data asynchronously
-    loadAnalyticsData();
+    refreshDashboardData();
+    startDashboardAutoRefresh();
 
     // Listen for theme changes and update charts
     window.addEventListener('themeChanged', function(event) {
@@ -497,28 +500,161 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-async function loadAnalyticsData() {
-    try {
-        const response = await fetch('/api/analytics');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+function startDashboardAutoRefresh() {
+    if (dashboardRefreshTimer) {
+        clearInterval(dashboardRefreshTimer);
+    }
+
+    dashboardRefreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            refreshDashboardData();
         }
-        analyticsData = await response.json();
+    }, DASHBOARD_REFRESH_MS);
+}
 
-        // Render all charts and tables with loaded data
-        createTimeSeriesChart(analyticsData.temporal_patterns);
-        createNodeActivityChart(analyticsData.node_statistics);
-        createGatewayActivityChart(analyticsData.gateway_distribution);
-        createSignalDistributionChart(analyticsData.signal_quality);
-        createHopDistributionChart(analyticsData.temporal_patterns);
-        createPacketTypesChart(analyticsData.packet_types);
-        populateTopNodesTable(analyticsData.top_nodes);
+async function refreshDashboardData() {
+    if (dashboardRefreshInFlight) return;
+    dashboardRefreshInFlight = true;
 
+    try {
+        const [statsResponse, analyticsResponse] = await Promise.all([
+            fetch('/api/stats'),
+            fetch('/api/analytics')
+        ]);
+
+        if (!statsResponse.ok) {
+            throw new Error(`Stats HTTP error! status: ${statsResponse.status}`);
+        }
+        if (!analyticsResponse.ok) {
+            throw new Error(`Analytics HTTP error! status: ${analyticsResponse.status}`);
+        }
+
+        const statsData = await statsResponse.json();
+        analyticsData = await analyticsResponse.json();
+
+        updateDashboardStats(statsData);
+        renderAnalyticsData();
     } catch (error) {
-        console.error('Error loading analytics data:', error);
-        // Hide loading spinners and show error message
+        console.error('Error refreshing dashboard data:', error);
         hideAllLoadingSpinners();
-        showErrorMessage('Failed to load chart data. Please refresh the page.');
+        showErrorMessage('Failed to refresh dashboard data. Please try again later.');
+    } finally {
+        dashboardRefreshInFlight = false;
+    }
+}
+
+async function loadAnalyticsData() {
+    await refreshDashboardData();
+}
+
+function formatInteger(value) {
+    return new Intl.NumberFormat().format(value || 0);
+}
+
+function formatSignal(value, suffix, decimals) {
+    if (value === null || value === undefined) return `N/A${suffix}`;
+    return `${Number(value).toFixed(decimals)}${suffix}`;
+}
+
+function setText(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function setClass(id, className) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.className = className;
+    }
+}
+
+function renderAnalyticsData() {
+    if (!analyticsData) return;
+
+    Object.values(chartInstances).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    chartInstances = {};
+
+    createTimeSeriesChart(analyticsData.temporal_patterns);
+    createNodeActivityChart(analyticsData.node_statistics);
+    createGatewayActivityChart(analyticsData.gateway_distribution);
+    createSignalDistributionChart(analyticsData.signal_quality);
+    createHopDistributionChart(analyticsData.temporal_patterns);
+    createPacketTypesChart(analyticsData.packet_types);
+    populateTopNodesTable(analyticsData.top_nodes);
+}
+
+function updateDashboardStats(stats) {
+    const totalNodes = stats.total_nodes || 0;
+    const activeNodes = stats.active_nodes_24h || 0;
+    const gatewayCount = stats.gateway_count || 0;
+    const totalPackets = stats.total_packets || 0;
+    const recentPackets = stats.recent_packets || 0;
+    const successRate = stats.success_rate || 0;
+    const protocolCount = (stats.packet_types || []).length;
+    const coveragePct = totalNodes > 0 ? Math.floor((activeNodes / totalNodes) * 100) : 0;
+    const gatewayDiversity = Math.min(gatewayCount * 10, 100);
+
+    setText('totalNodesMetric', totalNodes);
+    setText('activeNodesMetric', activeNodes);
+    setText('coverageMetricLabel', `${coveragePct}% network coverage`);
+    setText('gatewayCountMetric', gatewayCount);
+    setText('protocolDiversityMetric', protocolCount);
+    setText('totalMessagesMetric', formatInteger(totalPackets));
+    setText('successRateMetric', `${successRate}%`);
+    setText('recentActivityMetric', recentPackets);
+    setText('protocolTypesMetric', protocolCount);
+    setText('networkInfoTotalNodes', totalNodes);
+    setText('networkInfoActiveNodes', activeNodes);
+    setText('networkInfoGatewayCount', gatewayCount);
+    setText('networkInfoProtocols', protocolCount);
+    setText('activitySummaryTotalMessages', formatInteger(totalPackets));
+    setText('activitySummaryRecentMessages', recentPackets);
+    setText('activitySummarySuccessRate', `${successRate}%`);
+    setText('signalQualityAvgRssi', formatSignal(stats.avg_rssi, 'dBm', 1));
+    setText('signalQualityAvgSnr', formatSignal(stats.avg_snr, 'dB', 2));
+
+    const successClass = successRate >= 95 ? 'metric-value text-success' : successRate >= 85 ? 'metric-value text-warning' : 'metric-value text-danger';
+    setClass('successRateMetric', successClass);
+    const summarySuccessClass = successRate >= 95 ? 'text-success' : successRate >= 85 ? 'text-warning' : 'text-danger';
+    setClass('activitySummarySuccessRate', summarySuccessClass);
+
+    const coverageBar = document.getElementById('networkCoverageBar');
+    if (coverageBar) {
+        coverageBar.style.width = `${coveragePct}%`;
+        coverageBar.textContent = `${coveragePct}%`;
+        coverageBar.className = `progress-bar ${coveragePct >= 70 ? 'bg-success' : coveragePct >= 40 ? 'bg-warning' : 'bg-danger'}`;
+    }
+    setText('networkCoverageLabel', `${activeNodes} of ${totalNodes} nodes active`);
+
+    const successBar = document.getElementById('successRateBar');
+    if (successBar) {
+        successBar.style.width = `${successRate}%`;
+        successBar.textContent = `${successRate}%`;
+        successBar.className = `progress-bar ${successRate >= 95 ? 'bg-success' : successRate >= 85 ? 'bg-warning' : 'bg-danger'}`;
+    }
+
+    const gatewayBar = document.getElementById('gatewayDiversityBar');
+    if (gatewayBar) {
+        gatewayBar.style.width = `${gatewayDiversity}%`;
+        gatewayBar.textContent = `${gatewayCount} sources`;
+    }
+
+    const healthStatus = document.getElementById('networkHealthStatus');
+    if (healthStatus) {
+        if (coveragePct >= 70) {
+            healthStatus.textContent = 'Excellent';
+            healthStatus.className = 'text-success';
+        } else if (coveragePct >= 40) {
+            healthStatus.textContent = 'Good';
+            healthStatus.className = 'text-warning';
+        } else {
+            healthStatus.textContent = 'Needs Attention';
+            healthStatus.className = 'text-danger';
+        }
     }
 }
 

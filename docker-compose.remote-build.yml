@@ -1,0 +1,6 @@
+services:
+  malla-web:
+    build: .
+
+  malla-capture:
+    build: .

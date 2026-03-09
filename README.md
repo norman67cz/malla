@@ -258,6 +258,49 @@ The Gunicorn configuration automatically:
 - `MALLA_NAME`: Display name in the web interface
 
 ### Data Persistence
+
+## Development takeover workflow
+
+For taking ownership of this repository and working against a remote Docker host on `10.5.0.71`, use this baseline flow:
+
+1. Check the local toolchain:
+   ```bash
+   make bootstrap
+   ```
+2. Create your local config:
+   ```bash
+   cp env.example .env
+   $EDITOR .env
+   ```
+3. Install dependencies for development and tests:
+   ```bash
+   uv sync --dev
+   ```
+4. Run quality checks locally:
+   ```bash
+   make lint
+   make test
+   ```
+5. Deploy the current checkout to the remote Docker host:
+   ```bash
+   export DEPLOY_USER=your-ssh-user
+   export DEPLOY_PATH=/opt/malla
+   make deploy-remote
+   ```
+
+### Remote deploy notes
+
+- Default remote host: `10.5.0.71`
+- The deploy script syncs the repository with `rsync` over SSH.
+- The remote deployment uses:
+  ```bash
+  docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.prod.yml \
+    -f docker-compose.remote-build.yml \
+    up -d --build
+  ```
+- On the first deploy, if the remote `.env` file does not exist, the script creates it from `env.example` and stops so you can fill in the production values before rerunning the deploy.
 Data is automatically stored in a Docker volume (`malla_data`) and persists across container restarts. No manual volume setup is required when using `docker-compose`.
 
 ## Configuration Options

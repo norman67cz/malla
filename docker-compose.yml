@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   malla-web:
     # Use pre-built image by default, override with 'build: .' for development
