@@ -1110,7 +1110,9 @@ class NodeRepository:
             raise
 
     @staticmethod
-    def get_node_details(node_id: int) -> dict[str, Any] | None:
+    def get_node_details(
+        node_id: int, protocol_window: str = "all"
+    ) -> dict[str, Any] | None:
         """Get comprehensive details about a specific node."""
         try:
             conn = get_db_connection()
@@ -1137,6 +1139,15 @@ class NodeRepository:
             # Guard against obviously invalid IDs (e.g. negative numbers).
             if node_id <= 0:
                 return None
+
+            protocol_window_map = {
+                "last_hour": 3600,
+                "last_day": 24 * 3600,
+                "all": None,
+            }
+            protocol_window = (
+                protocol_window if protocol_window in protocol_window_map else "all"
+            )
 
             # Get basic node information from packet_history with node_info join
             query = """
@@ -1239,6 +1250,8 @@ class NodeRepository:
                     "node": node_info,
                     "recent_packets": [],
                     "protocols": [],
+                    "protocol_total_packets": 0,
+                    "protocol_window": protocol_window,
                     "received_gateways": [],
                     "location": None,
                 }
@@ -1658,7 +1671,7 @@ class NodeRepository:
                 key=lambda x: x["timestamp_sort"], reverse=True
             )
 
-            # Get protocol breakdown
+            # Get protocol breakdown with a selectable time window.
             protocol_query = """
             SELECT
                 portnum_name,
@@ -1666,12 +1679,22 @@ class NodeRepository:
                 AVG(CAST(rssi AS FLOAT)) as avg_rssi,
                 AVG(CAST(snr AS FLOAT)) as avg_snr
             FROM packet_history
-            WHERE from_node_id = ?
+            WHERE from_node_id = ?{time_filter}
             GROUP BY portnum_name
             ORDER BY count DESC
             """
 
-            cursor.execute(protocol_query, (node_id,))
+            protocol_params: list[Any] = [node_id]
+            protocol_time_filter = ""
+            protocol_cutoff = protocol_window_map[protocol_window]
+            if protocol_cutoff is not None:
+                protocol_time_filter = " AND timestamp >= ?"
+                protocol_params.append(time.time() - protocol_cutoff)
+
+            cursor.execute(
+                protocol_query.format(time_filter=protocol_time_filter),
+                tuple(protocol_params),
+            )
             protocols = []
 
             for row in cursor.fetchall():
@@ -1685,6 +1708,8 @@ class NodeRepository:
                         "avg_snr": round(row["avg_snr"], 1) if row["avg_snr"] else None,
                     }
                 )
+
+            protocol_total_packets = sum(protocol["count"] for protocol in protocols)
 
             # Get received gateways information (gateways that have received packets from this node)
             gateways_query = """
@@ -1936,6 +1961,8 @@ class NodeRepository:
                 "recent_packets": recent_packets,
                 "recent_reported_packets": recent_reported_packets,
                 "protocols": protocols,
+                "protocol_total_packets": protocol_total_packets,
+                "protocol_window": protocol_window,
                 "received_gateways": received_gateways,
                 "matrix_gateways": matrix_gateways,
                 "location": location_info,

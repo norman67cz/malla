@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/table_layout_macros.html" import fullscreen_table_container, filter_section, table_controls_section, table_stats_section, table_layout_styles %}
 
-{% block title %}Nodes - Malla{% endblock %}
+{% block title %}{{ t('page.nodes_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
@@ -12,37 +12,37 @@
 <!-- Override the base template's container to make this page full-width/full-height -->
 </div> <!-- Close the base template's container -->
 
-{% call fullscreen_table_container("nodesTable", "Network Nodes", "bi bi-diagram-3", "toggleSidebar") %}
+{% call fullscreen_table_container("nodesTable", t('nodes.network_nodes'), "bi bi-diagram-3", "toggleSidebar") %}
     <!-- Main table content -->
     <div id="nodesTable" class="modern-table-container"></div>
 {% endcall %}
 
 <!-- Sidebar content (will be injected into the sidebar) -->
 <div id="sidebarContent" style="display: none;">
-    {% call filter_section("filtersForm", "Node Filters") %}
+    {% call filter_section("filtersForm", t('nodes.node_filters')) %}
         <div class="row g-3">
             <div class="col-12">
-                <label for="search" class="form-label">Search</label>
-                <input type="text" class="form-control form-control-sm" id="search" name="search" placeholder="Search by name, ID, or hardware...">
+                <label for="search" class="form-label">{{ t('common.search') }}</label>
+                <input type="text" class="form-control form-control-sm" id="search" name="search" placeholder="{{ t('nodes.search_placeholder') }}">
             </div>
             <div class="col-12">
-                <label for="role" class="form-label">Role</label>
+                <label for="role" class="form-label">{{ t('common.role') }}</label>
                 <select class="form-select form-select-sm" id="role" name="role">
-                    <option value="">All Roles</option>
+                    <option value="">{{ t('common.all_roles') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
             <div class="col-12">
-                <label for="hw_model" class="form-label">Hardware Model</label>
+                <label for="hw_model" class="form-label">{{ t('common.hardware_model') }}</label>
                 <select class="form-select form-select-sm" id="hw_model" name="hw_model">
-                    <option value="">All Hardware</option>
+                    <option value="">{{ t('common.all_hardware') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
             <div class="col-12">
-                <label for="primary_channel" class="form-label">Primary Channel</label>
+                <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
                 <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                    <option value="">All Channels</option>
+                    <option value="">{{ t('common.all_channels') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
@@ -50,7 +50,7 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="active_only" name="active_only" value="1">
                     <label class="form-check-label" for="active_only">
-                        <i class="bi bi-activity"></i> Active nodes only (24h)
+                        <i class="bi bi-activity"></i> {{ t('nodes.active_only_24h') }}
                     </label>
                 </div>
             </div>
@@ -58,7 +58,7 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="named_only" name="named_only" value="1">
                     <label class="form-check-label" for="named_only">
-                        <i class="bi bi-tag"></i> Named nodes only
+                        <i class="bi bi-tag"></i> {{ t('nodes.named_only') }}
                     </label>
                 </div>
             </div>
@@ -66,16 +66,16 @@
     {% endcall %}
 
     {% set table_controls = [
-        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": "Apply Filters", "type": "button"},
-        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": "Clear Filters", "type": "button"},
-        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": "Refresh", "type": "button"},
-        {"class": "btn-outline-success", "id": "shareFilters", "icon": "bi bi-share", "text": "Share", "type": "button"}
+        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": t('common.apply_filters'), "type": "button"},
+        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": t('common.clear_filters'), "type": "button"},
+        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": t('common.refresh'), "type": "button"},
+        {"class": "btn-outline-success", "id": "shareFilters", "icon": "bi bi-share", "text": t('nodes.share'), "type": "button"}
     ] %}
     {{ table_controls_section(table_controls) }}
 
     <!-- Legend Section -->
     <div class="sidebar-section">
-        <h6><i class="bi bi-palette"></i> Legend</h6>
+        <h6><i class="bi bi-palette"></i> {{ t('common.legend') }}</h6>
         <div class="legend-content">
             <div class="legend-item">
                 <span class="badge bg-primary me-2">Client</span>
@@ -84,8 +84,8 @@
                 <span class="badge bg-warning me-2">Repeater</span>
             </div>
             <div class="legend-item mt-2">
-                <span class="text-success me-2">Active (24h activity)</span>
-                <span class="text-muted me-2">Inactive (no recent activity)</span>
+                <span class="text-success me-2">{{ t('nodes.active') }}</span>
+                <span class="text-muted me-2">{{ t('nodes.inactive') }}</span>
             </div>
         </div>
     </div>

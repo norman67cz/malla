@@ -4,12 +4,13 @@ Main routes for the Meshtastic Mesh Health Web UI
 
 import logging
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, redirect, render_template, request, session, url_for
 
 # Import from the new modular architecture
 from ..database.repositories import (
     DashboardRepository,
 )
+from ..utils.i18n import normalize_language
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint("main", __name__)
@@ -81,3 +82,25 @@ def line_of_sight():
     except Exception as e:
         logger.error(f"Error in line of sight route: {e}")
         return f"Line of sight error: {e}", 500
+
+
+@main_bp.route("/help")
+def help_page():
+    """Simple help page describing the main menu sections."""
+    try:
+        return render_template("help.html")
+    except Exception as e:
+        logger.error(f"Error in help route: {e}")
+        return f"Help error: {e}", 500
+
+
+@main_bp.route("/set-language/<lang>")
+def set_language(lang: str):
+    """Store the selected UI language in the session and return back."""
+    session["lang"] = normalize_language(lang)
+
+    next_url = request.args.get("next", "").strip()
+    if next_url.startswith("/"):
+        return redirect(next_url)
+
+    return redirect(url_for("main.dashboard"))

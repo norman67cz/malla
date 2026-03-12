@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, session
 
 # Import application configuration loader
 from .config import AppConfig, get_config
@@ -25,6 +25,7 @@ from .routes import register_routes
 
 # Import utility functions for template filters
 from .utils.formatting import format_node_id, format_time_ago
+from .utils.i18n import normalize_language, translate
 from .utils.node_utils import (
     start_cache_cleanup,
     stop_cache_cleanup,
@@ -215,11 +216,14 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
     @app.context_processor
     def inject_config():
         """Inject selected config values into all templates."""
+        current_lang = normalize_language(session.get("lang"))
 
         return {
             "APP_NAME": cfg.name,
             "APP_CONFIG": cfg,
             "DATABASE_FILE": cfg.database_file,
+            "current_lang": current_lang,
+            "t": lambda key: translate(key, current_lang),
         }
 
     # Initialize database

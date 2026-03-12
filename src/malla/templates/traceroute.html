@@ -2,7 +2,7 @@
 {% from "macros.html" import node_picker, gateway_picker %}
 {% from "components/table_layout_macros.html" import fullscreen_table_container, filter_section, table_controls_section, grouping_section, table_stats_section, table_layout_styles %}
 
-{% block title %}Traceroute - Malla{% endblock %}
+{% block title %}{{ t('page.traceroute_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/node-picker.css') }}">
@@ -14,97 +14,97 @@
 <!-- Override the base template's container to make this page full-width/full-height -->
 </div> <!-- Close the base template's container -->
 
-{% call fullscreen_table_container("tracerouteTable", "Traceroute Analysis", "bi bi-map", "toggleSidebar") %}
+{% call fullscreen_table_container("tracerouteTable", t('traceroute.analysis'), "bi bi-map", "toggleSidebar") %}
     <!-- Main table content -->
     <div id="tracerouteTable" class="modern-table-container"></div>
 {% endcall %}
 
 <!-- Sidebar content (will be injected into the sidebar) -->
 <div id="sidebarContent" style="display: none;">
-    {% call filter_section("filtersForm", "Traceroute Filters") %}
+    {% call filter_section("filtersForm", t('traceroute.filters')) %}
         <div class="row g-3">
             <div class="col-12">
-                <label for="start_time" class="form-label">Start Time</label>
+                <label for="start_time" class="form-label">{{ t('common.start_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="start_time" name="start_time">
             </div>
             <div class="col-12">
-                <label for="end_time" class="form-label">End Time</label>
+                <label for="end_time" class="form-label">{{ t('common.end_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="end_time" name="end_time">
             </div>
             <div class="col-12">
                 {{ node_picker(
                     field_name="from_node",
-                    label="Source Node",
+                    label=t('traceroute.source_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All source nodes"
+                    placeholder=t('traceroute.all_source_nodes')
                 ) }}
             </div>
             <div class="col-12">
                 {{ node_picker(
                     field_name="to_node",
-                    label="Destination Node",
+                    label=t('traceroute.destination_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All destination nodes"
+                    placeholder=t('traceroute.all_destination_nodes')
                 ) }}
             </div>
             <div class="col-12">
                 {{ node_picker(
                     field_name="route_node",
-                    label="Route Node",
+                    label=t('traceroute.route_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All route nodes"
+                    placeholder=t('traceroute.all_route_nodes')
                 ) }}
                 <div class="form-text">
-                    <small class="text-muted">Filter by nodes that appear anywhere in the traceroute path</small>
+                    <small class="text-muted">{{ t('traceroute.route_node_help') }}</small>
                 </div>
             </div>
             <div class="col-12">
                 {{ gateway_picker(
                     field_name="gateway_id",
-                    label="Gateway",
+                    label=t('common.gateway'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All gateways"
+                    placeholder=t('packets.all_gateways')
                 ) }}
             </div>
             <div class="col-12">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="return_path_only" name="return_path_only" value="1">
                     <label class="form-check-label" for="return_path_only">
-                        <i class="bi bi-arrow-return-left"></i> Return path only
+                        <i class="bi bi-arrow-return-left"></i> {{ t('traceroute.return_path_only') }}
                     </label>
                     <div class="form-text">
-                        <small class="text-muted">Show only traceroutes with return path data (completed round trip)</small>
+                        <small class="text-muted">{{ t('traceroute.return_path_help') }}</small>
                     </div>
                 </div>
             </div>
             <div class="col-12">
-                <label for="primary_channel" class="form-label">Primary Channel</label>
+                <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
                 <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                    <option value="">All Channels</option>
+                    <option value="">{{ t('common.all_channels') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
         </div>
     {% endcall %}
 
-    {{ grouping_section("group_packets", "Group by Packet ID", "Group traceroutes with the same packet ID") }}
+    {{ grouping_section("group_packets", t('common.group_by_packet_id'), t('traceroute.group_same_id')) }}
 
     {% set table_controls = [
-        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": "Apply Filters", "type": "button"},
-        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": "Clear Filters", "type": "button"},
-        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": "Refresh", "type": "button"},
+        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": t('common.apply_filters'), "type": "button"},
+        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": t('common.clear_filters'), "type": "button"},
+        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": t('common.refresh'), "type": "button"},
     ] %}
     {{ table_controls_section(table_controls) }}
 
     {% set stats_items = [
-        {"label": "Total Traceroutes", "id": "statsTotal", "default": "0"},
-        {"label": "Filtered", "id": "statsFiltered", "default": "0"},
-        {"label": "Grouped", "id": "statsGrouped", "default": "0"},
-        {"label": "Last Update", "id": "statsLastUpdate", "default": "--"}
+        {"label": t('traceroute.total_traceroutes'), "id": "statsTotal", "default": "0"},
+        {"label": t('common.filtered'), "id": "statsFiltered", "default": "0"},
+        {"label": t('common.grouped'), "id": "statsGrouped", "default": "0"},
+        {"label": t('common.last_update'), "id": "statsLastUpdate", "default": "--"}
     ] %}
     {{ table_stats_section("tableStats", stats_items) }}
 </div>
@@ -195,8 +195,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const table = new ModernTable('tracerouteTable', {
         endpoint: '/api/traceroute/data',
         pageSize: 100,
-        searchPlaceholder: 'Search traceroutes...',
-        emptyMessage: 'No traceroutes found',
+        searchPlaceholder: '{{ t("traceroute.search_placeholder") }}',
+        emptyMessage: '{{ t("traceroute.empty_message") }}',
         deferInitialLoad: true,
         enableSearch: false,
         columns: [

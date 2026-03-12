@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/sidebar_macros.html" import sidebar_container, selected_details_section, search_section, controls_section, stats_section, legend_section, sidebar_styles %}
 
-{% block title %}Node Map - Malla{% endblock %}
+{% block title %}{{ t('page.map_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <!-- Leaflet CSS -->
@@ -20,26 +20,26 @@
     <div class="map-main">
         <div id="mapLoading" class="loading-overlay">
             <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+                <span class="visually-hidden">{{ t('common.loading') }}</span>
             </div>
-            <p class="mt-2 text-muted">Loading node locations...</p>
+            <p class="mt-2 text-muted">{{ t('common.loading_node_locations') }}</p>
         </div>
         <div id="map" class="network-map"></div>
         <div id="mapError" class="error-overlay" style="display: none;">
             <i class="bi bi-exclamation-triangle"></i>
-            <p class="mt-2">Error loading map data</p>
+            <p class="mt-2">{{ t('graph.error_loading') }}</p>
         </div>
     </div>
 
     <!-- Sidebar -->
-    {% call sidebar_container("sidebar", "Network Map", "bi bi-map", "toggleSidebar") %}
+    {% call sidebar_container("sidebar", t('map.network_map'), "bi bi-map", "toggleSidebar") %}
         {{ selected_details_section("clearSelection") }}
 
         <!-- Node Search and List Combined -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-search"></i> Search & Filter Nodes</h6>
+            <h6><i class="bi bi-search"></i> {{ t('map.search_filter_nodes') }}</h6>
             <div class="input-group input-group-sm mb-2">
-                <input type="text" class="form-control" id="nodeSearch" placeholder="Search by node name or ID...">
+                <input type="text" class="form-control" id="nodeSearch" placeholder="{{ t('map.search_placeholder') }}">
                 <button class="btn btn-outline-secondary" type="button" id="clearSearch">
                     <i class="bi bi-x"></i>
                 </button>
@@ -48,36 +48,36 @@
             <!-- Combined search results and node list -->
             <div id="nodeListContainer" class="node-list-container">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <small class="text-muted">Nodes (<span id="nodeCount">0</span>)</small>
+                    <small class="text-muted">{{ t('map.nodes') }} (<span id="nodeCount">0</span>)</small>
                     <small class="text-muted" id="searchResultsCount" style="display: none;">
-                        <span id="searchCount">0</span> results
+                        <span id="searchCount">0</span> {{ t('map.results') }}
                     </small>
                 </div>
                 <div id="nodeList" class="node-list">
                     <div class="text-center text-muted py-4">
                         <div class="spinner-border spinner-border-sm" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">{{ t('common.loading') }}</span>
                         </div>
-                        <p class="mt-2 small">Loading nodes...</p>
+                        <p class="mt-2 small">{{ t('common.loading_nodes') }}</p>
                     </div>
                 </div>
             </div>
         </div>
 
         {% set map_controls = [
-            {"class": "btn-outline-secondary", "onclick": "fitMapToNodes()", "icon": "bi bi-arrows-move", "text": "Fit All Nodes"},
-            {"class": "btn-outline-primary", "onclick": "refreshMap()", "icon": "bi bi-arrow-clockwise", "text": "Refresh"}
+            {"class": "btn-outline-secondary", "onclick": "fitMapToNodes()", "icon": "bi bi-arrows-move", "text": t('map.fit_all_nodes')},
+            {"class": "btn-outline-primary", "onclick": "refreshMap()", "icon": "bi bi-arrow-clockwise", "text": t('common.refresh')}
         ] %}
         {{ controls_section(map_controls) }}
 
         <!-- Filters -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-funnel"></i> Filters</h6>
+            <h6><i class="bi bi-funnel"></i> {{ t('common.filters') }}</h6>
             <form id="locationFilterForm">
                 <div class="mb-3">
-                    <label for="maxAge" class="form-label">Max Age</label>
+                    <label for="maxAge" class="form-label">{{ t('map.max_age') }}</label>
                     <select class="form-select form-select-sm" id="maxAge" name="maxAge">
-                        <option value="">No Limit</option>
+                        <option value="">{{ t('map.no_limit') }}</option>
                         <option value="1">1 Hour</option>
                         <option value="6">6 Hours</option>
                         <option value="24" selected>24 Hours</option>
@@ -86,9 +86,9 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="roleFilter" class="form-label">Node Role</label>
+                    <label for="roleFilter" class="form-label">{{ t('map.node_role') }}</label>
                     <select class="form-select form-select-sm" id="roleFilter" name="roleFilter">
-                        <option value="">All Roles</option>
+                        <option value="">{{ t('common.all_roles') }}</option>
                         <option value="CLIENT">Client</option>
                         <option value="ROUTER">Router</option>
                         <option value="ROUTER_LATE">Router Late</option>
@@ -101,63 +101,63 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="channelFilter" class="form-label">Primary Channel</label>
+                    <label for="channelFilter" class="form-label">{{ t('common.primary_channel') }}</label>
                     <select class="form-select form-select-sm" id="channelFilter" name="channelFilter">
-                        <option value="">All Channels</option>
+                        <option value="">{{ t('common.all_channels') }}</option>
                         <!-- Options loaded dynamically -->
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="startDateTime" class="form-label">Start Date & Time</label>
+                    <label for="startDateTime" class="form-label">{{ t('common.start_date_time') }}</label>
                     <input type="datetime-local" class="form-control form-control-sm" id="startDateTime" name="startDateTime">
                 </div>
                 <div class="mb-3">
-                    <label for="endDateTime" class="form-label">End Date & Time</label>
+                    <label for="endDateTime" class="form-label">{{ t('common.end_date_time') }}</label>
                     <input type="datetime-local" class="form-control form-control-sm" id="endDateTime" name="endDateTime">
                 </div>
                 <div class="d-flex justify-content-end mb-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="clearDateRange">
-                        <i class="bi bi-x-circle"></i> Clear Dates
+                        <i class="bi bi-x-circle"></i> {{ t('map.clear_dates') }}
                     </button>
                 </div>
                 <div class="mb-3">
-                    <label for="minContacts" class="form-label">Min Contacts</label>
+                    <label for="minContacts" class="form-label">{{ t('map.min_contacts') }}</label>
                     <input type="number" class="form-control form-control-sm" id="minContacts" name="minContacts" value="1" min="1">
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm w-100">
-                    <i class="bi bi-funnel"></i> Apply Filters
+                    <i class="bi bi-funnel"></i> {{ t('common.apply_filters') }}
                 </button>
             </form>
         </div>
 
         <!-- Map Stats -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-bar-chart"></i> Statistics</h6>
+            <h6><i class="bi bi-bar-chart"></i> {{ t('common.statistics') }}</h6>
             <div id="mapStats" class="stats-content">
-                <div><strong>Nodes:</strong> <span id="statsNodes">0</span></div>
-                <div><strong>With Location:</strong> <span id="statsWithLocation">0</span></div>
-                <div><strong>RF Links:</strong> <span id="statsLinks">0</span></div>
-                <div><strong>Last Update:</strong> <span id="statsLastUpdate">--</span></div>
+                <div><strong>{{ t('map.nodes') }}:</strong> <span id="statsNodes">0</span></div>
+                <div><strong>{{ t('map.with_location') }}:</strong> <span id="statsWithLocation">0</span></div>
+                <div><strong>{{ t('map.rf_links') }}:</strong> <span id="statsLinks">0</span></div>
+                <div><strong>{{ t('common.last_update') }}:</strong> <span id="statsLastUpdate">--</span></div>
             </div>
         </div>
 
         <!-- Link visibility checkboxes -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-diagram-3"></i> Link Types</h6>
+            <h6><i class="bi bi-diagram-3"></i> {{ t('map.link_types') }}</h6>
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" id="tracerouteLinksCheckbox" checked>
-                <label class="form-check-label" for="tracerouteLinksCheckbox">Traceroute Links</label>
+                <label class="form-check-label" for="tracerouteLinksCheckbox">{{ t('map.traceroute_links') }}</label>
             </div>
             <div class="form-check mt-1">
                 <input class="form-check-input" type="checkbox" id="packetLinksCheckbox">
-                <label class="form-check-label" for="packetLinksCheckbox">Packet Links</label>
+                <label class="form-check-label" for="packetLinksCheckbox">{{ t('map.packet_links') }}</label>
             </div>
         </div>
 
         <!-- Hop depth selector (shown only when a node is selected) -->
         <div class="sidebar-section" id="hopDepthSection" style="display: none;">
-            <h6><i class="bi bi-stack"></i> Hop Depth</h6>
-            <div class="small text-muted mb-2">Choose how many RF hops from the selected node remain visible.</div>
+            <h6><i class="bi bi-stack"></i> {{ t('map.hop_depth') }}</h6>
+            <div class="small text-muted mb-2">{{ t('map.hop_depth_help') }}</div>
             <select class="form-select form-select-sm" id="hopDepthSelect">
                 <option value="1" selected>1 hop</option>
                 <option value="2">2 hops</option>
@@ -177,18 +177,18 @@
             {"type": "span", "class": "role-color-indicator", "style": "background-color: #17a2b8;", "content": "", "text": "Router Client"},
             {"type": "span", "class": "role-color-indicator", "style": "background-color: #e83e8c;", "content": "", "text": "Sensor"},
             {"type": "span", "class": "role-color-indicator", "style": "background-color: #dc3545;", "content": "", "text": "Unknown Role"},
-            {"type": "span", "class": "signal-indicator bg-success", "content": "", "text": "Excellent coverage"},
-            {"type": "span", "class": "signal-indicator bg-warning", "content": "", "text": "Good coverage"},
-            {"type": "span", "class": "signal-indicator bg-danger", "content": "", "text": "Limited coverage"},
-            {"type": "span", "class": "legend-line", "style": "border-top: 4px solid #0d6efd;", "content": "", "text": "Traceroute link"},
-            {"type": "span", "class": "legend-line", "style": "border-top: 4px dashed #0d6efd;", "content": "", "text": "Packet link"}
+            {"type": "span", "class": "signal-indicator bg-success", "content": "", "text": t('map.excellent_coverage')},
+            {"type": "span", "class": "signal-indicator bg-warning", "content": "", "text": t('map.good_coverage')},
+            {"type": "span", "class": "signal-indicator bg-danger", "content": "", "text": t('map.limited_coverage')},
+            {"type": "span", "class": "legend-line", "style": "border-top: 4px solid #0d6efd;", "content": "", "text": t('map.traceroute_link')},
+            {"type": "span", "class": "legend-line", "style": "border-top: 4px dashed #0d6efd;", "content": "", "text": t('map.packet_link')}
         ] %}
         {% call legend_section(map_legend_items) %}
             <div class="legend-item mt-2">
-                <small class="text-muted">Node colors indicate role types<br>
-                Click nodes for details<br>
-                RF links show radio connections<br>
-                Clusters group nearby nodes</small>
+                <small class="text-muted">{{ t('map.legend_help') }}<br>
+                {{ t('map.legend_help_2') }}<br>
+                {{ t('map.legend_help_3') }}<br>
+                {{ t('map.legend_help_4') }}</small>
             </div>
         {% endcall %}
     {% endcall %}

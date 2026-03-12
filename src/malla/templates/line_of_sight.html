@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import node_picker %}
 
-{% block title %}Line of Sight Analysis - Malla{% endblock %}
+{% block title %}{{ t('page.line_of_sight_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <!-- Leaflet CSS -->
@@ -144,31 +144,31 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
-        <h1><i class="bi bi-bezier"></i> Line of Sight Analysis</h1>
-        <p class="text-muted">Analyze RF line-of-sight and Fresnel zone clearance between two nodes using terrain elevation data</p>
+        <h1><i class="bi bi-bezier"></i> {{ t('page.line_of_sight_title') }}</h1>
+        <p class="text-muted">{{ t('line_of_sight.subtitle') }}</p>
     </div>
 </div>
 
 <!-- Node Selection -->
 <div class="card mb-4">
     <div class="card-body">
-        <h5 class="card-title mb-3"><i class="bi bi-sliders"></i> Node Selection</h5>
+        <h5 class="card-title mb-3"><i class="bi bi-sliders"></i> {{ t('line_of_sight.node_selection') }}</h5>
         <div class="row g-3">
             <div class="col-md-5">
-                {{ node_picker('from_node', field_id='fromNode', label='From Node',
+                {{ node_picker('from_node', field_id='fromNode', label=t('common.from_node'),
                               placeholder='Search by name, short name, or ID...',
                               selected_value=from_node_id or '',
                               required=true) }}
             </div>
             <div class="col-md-5">
-                {{ node_picker('to_node', field_id='toNode', label='To Node',
+                {{ node_picker('to_node', field_id='toNode', label=t('common.to_node'),
                               placeholder='Search by name, short name, or ID...',
                               selected_value=to_node_id or '',
                               required=true) }}
             </div>
             <div class="col-md-2 d-flex align-items-end">
                 <button id="analyzeBtn" class="btn btn-primary w-100" disabled>
-                    <i class="bi bi-play-fill"></i> Analyze
+                    <i class="bi bi-play-fill"></i> {{ t('line_of_sight.analyze') }}
                 </button>
             </div>
         </div>
@@ -184,17 +184,17 @@
 <div id="loadingState" class="card mb-4" style="display: none;">
     <div class="card-body text-center py-5">
         <div class="spinner-border text-primary mb-3" role="status">
-            <span class="visually-hidden">Loading elevation data...</span>
+            <span class="visually-hidden">{{ t('common.loading') }}</span>
         </div>
-        <h5>Fetching Terrain Elevation Data</h5>
-        <p class="text-muted mb-0">Querying DEM Net Elevation API for elevation profile...</p>
+        <h5>{{ t('line_of_sight.fetching_elevation') }}</h5>
+        <p class="text-muted mb-0">{{ t('line_of_sight.querying_elevation') }}</p>
     </div>
 </div>
 
 <!-- Error State -->
 <div id="errorState" class="alert alert-danger" style="display: none;">
     <i class="bi bi-exclamation-triangle"></i>
-    <strong>Error:</strong> <span id="errorMessage"></span>
+    <strong>{{ t('line_of_sight.error') }}</strong> <span id="errorMessage"></span>
 </div>
 
 <!-- Results -->
@@ -203,16 +203,16 @@
     <div class="row mb-4">
         <div class="col-lg-6">
             <div class="card info-section">
-                <h5 class="mb-3"><i class="bi bi-map"></i> Location Map</h5>
+                <h5 class="mb-3"><i class="bi bi-map"></i> {{ t('line_of_sight.location_map') }}</h5>
                 <div id="line-of-sight-map"></div>
                 <p class="text-muted small mt-2 mb-0">
-                    <i class="bi bi-info-circle"></i> Hover over the elevation chart to see the corresponding location on the map
+                    <i class="bi bi-info-circle"></i> {{ t('line_of_sight.hover_chart_help') }}
                 </p>
             </div>
         </div>
         <div class="col-lg-6">
             <div class="card info-section">
-                <h5 class="mb-3"><i class="bi bi-bar-chart-line"></i> Elevation Profile</h5>
+                <h5 class="mb-3"><i class="bi bi-bar-chart-line"></i> {{ t('line_of_sight.elevation_profile') }}</h5>
                 <div class="elevation-chart-container">
                     <canvas id="elevationChart"></canvas>
                 </div>

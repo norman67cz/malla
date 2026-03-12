@@ -4,13 +4,14 @@ Node-related routes for the Meshtastic Mesh Health Web UI
 
 import logging
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, request
 
 # Import from the new modular architecture
 from ..database.repositories import NodeRepository
 
 logger = logging.getLogger(__name__)
 node_bp = Blueprint("node", __name__)
+VALID_PROTOCOL_WINDOWS = {"last_hour", "last_day", "all"}
 
 
 @node_bp.route("/nodes")
@@ -30,6 +31,10 @@ def node_detail(node_id):
     """Node detail page showing comprehensive information about a specific node."""
     logger.info(f"Node detail route accessed for node {node_id}")
     try:
+        protocol_window = request.args.get("protocol_window", "all")
+        if protocol_window not in VALID_PROTOCOL_WINDOWS:
+            protocol_window = "all"
+
         # Handle both hex ID and integer node ID
         if isinstance(node_id, str) and node_id.startswith("!"):
             node_id_int = int(node_id[1:], 16)
@@ -42,7 +47,9 @@ def node_detail(node_id):
             node_id_int = int(node_id)
 
         # Get node details using the repository
-        node_details = NodeRepository.get_node_details(node_id_int)
+        node_details = NodeRepository.get_node_details(
+            node_id_int, protocol_window=protocol_window
+        )
         if not node_details:
             return "Node not found", 404
 

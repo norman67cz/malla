@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "components/sidebar_macros.html" import sidebar_container, selected_details_section, search_section, controls_section, stats_section, legend_section, sidebar_styles %}
 
+{% block title %}{{ t('page.network_graph_title') }} - Malla{% endblock %}
+
 {% block content %}
 <!-- Override the base template's container to make this page full-width/full-height -->
 </div> <!-- Close the base template's container -->
@@ -10,23 +12,23 @@
     <div class="graph-main">
         <div id="loadingSpinner" class="loading-overlay">
             <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+                <span class="visually-hidden">{{ t('common.loading') }}</span>
             </div>
-            <p class="mt-2 text-muted">Building network graph...</p>
+            <p class="mt-2 text-muted">{{ t('graph.loading') }}</p>
         </div>
         <div id="networkGraph" class="network-graph"></div>
         <div id="graphError" class="error-overlay" style="display: none;">
             <i class="bi bi-exclamation-triangle"></i>
-            <p class="mt-2">Error loading graph data</p>
+            <p class="mt-2">{{ t('graph.error_loading') }}</p>
         </div>
     </div>
 
     <!-- Sidebar -->
-    {% call sidebar_container("sidebar", "Network Graph", "bi bi-diagram-3", "toggleSidebar") %}
+    {% call sidebar_container("sidebar", t('page.network_graph_title'), "bi bi-diagram-3", "toggleSidebar") %}
         <!-- Selected Details -->
         <div class="sidebar-section" id="selectedDetails" style="display: none;">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0"><i class="bi bi-info-circle"></i> <span id="selectedDetailsTitle">Selection</span></h6>
+                <h6 class="mb-0"><i class="bi bi-info-circle"></i> <span id="selectedDetailsTitle">{{ t('graph.selection') }}</span></h6>
                 <button id="clearSelection" class="btn btn-sm btn-outline-secondary">
                     <i class="bi bi-x-lg"></i>
                 </button>
@@ -36,57 +38,57 @@
 
         <!-- Hover Details -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-eye"></i> Hover Details</h6>
+            <h6><i class="bi bi-eye"></i> {{ t('graph.hover_details') }}</h6>
             <div id="hoverDetails" class="hover-details">
-                <small class="text-muted">Hover over nodes or links for details</small>
+                <small class="text-muted">{{ t('graph.hover_help') }}</small>
             </div>
         </div>
 
         <!-- Hop Filter (shown when node is selected) -->
         <div class="sidebar-section" id="hopFilterSection" style="display: none;">
-            <h6><i class="bi bi-funnel"></i> Hop Distance Filter</h6>
+            <h6><i class="bi bi-funnel"></i> {{ t('graph.hop_distance_filter') }}</h6>
             <div class="mb-2">
-                <label for="hopDistance" class="form-label">Show nodes within <span id="hopDistanceValue">3</span> hops</label>
+                <label for="hopDistance" class="form-label">{{ t('graph.show_nodes_within') }} <span id="hopDistanceValue">3</span> hops</label>
                 <input type="range" class="form-range" id="hopDistance" min="1" max="10" value="3" step="1">
             </div>
             <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" id="enableHopFilter" checked>
                 <label class="form-check-label" for="enableHopFilter">
-                    Enable hop filter
+                    {{ t('graph.enable_hop_filter') }}
                 </label>
             </div>
             <div id="hopFilterStats" class="text-muted small" style="display: none;">
-                Showing <strong><span id="visibleNodeCount">0</span></strong> of <strong><span id="totalNodeCount">0</span></strong> nodes
+                {{ t('graph.showing_of_nodes') }} <strong><span id="visibleNodeCount">0</span></strong> {{ t('graph.of') }} <strong><span id="totalNodeCount">0</span></strong> nodes
             </div>
         </div>
 
         {{ search_section("nodeSearch", "clearSearch", "searchResults") }}
 
         {% set graph_controls = [
-            {"class": "btn-outline-secondary", "onclick": "centerGraph()", "icon": "bi bi-arrows-move", "text": "Center Graph"},
-            {"class": "btn-outline-secondary", "onclick": "resetZoom()", "icon": "bi bi-zoom-out", "text": "Reset Zoom"},
-            {"class": "btn-outline-primary", "onclick": "refreshGraph()", "icon": "bi bi-arrow-clockwise", "text": "Refresh"}
+            {"class": "btn-outline-secondary", "onclick": "centerGraph()", "icon": "bi bi-arrows-move", "text": t('graph.center_graph')},
+            {"class": "btn-outline-secondary", "onclick": "resetZoom()", "icon": "bi bi-zoom-out", "text": t('graph.reset_zoom')},
+            {"class": "btn-outline-primary", "onclick": "refreshGraph()", "icon": "bi bi-arrow-clockwise", "text": t('common.refresh')}
         ] %}
         {{ controls_section(graph_controls) }}
 
         <!-- Filters -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-funnel"></i> Filters</h6>
+            <h6><i class="bi bi-funnel"></i> {{ t('common.filters') }}</h6>
             <form id="filterForm">
                 <div class="mb-3">
-                    <label for="hours" class="form-label">Time Period</label>
+                    <label for="hours" class="form-label">{{ t('graph.time_period') }}</label>
                     <select class="form-select form-select-sm" id="hours" name="hours">
-                        <option value="1" {% if hours == 1 %}selected{% endif %}>Last Hour</option>
-                        <option value="6" {% if hours == 6 %}selected{% endif %}>Last 6 Hours</option>
-                        <option value="24" {% if hours == 24 %}selected{% endif %}>Last 24 Hours</option>
-                        <option value="72" {% if hours == 72 %}selected{% endif %}>Last 3 Days</option>
-                        <option value="168" {% if hours == 168 %}selected{% endif %}>Last Week</option>
+                        <option value="1" {% if hours == 1 %}selected{% endif %}>{{ t('graph.last_hour') }}</option>
+                        <option value="6" {% if hours == 6 %}selected{% endif %}>{{ t('graph.last_6_hours') }}</option>
+                        <option value="24" {% if hours == 24 %}selected{% endif %}>{{ t('graph.last_24_hours') }}</option>
+                        <option value="72" {% if hours == 72 %}selected{% endif %}>{{ t('graph.last_3_days') }}</option>
+                        <option value="168" {% if hours == 168 %}selected{% endif %}>{{ t('graph.last_week') }}</option>
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="min_snr" class="form-label">Minimum SNR (dB)</label>
+                    <label for="min_snr" class="form-label">{{ t('graph.minimum_snr') }}</label>
                     <select class="form-select form-select-sm" id="min_snr" name="min_snr">
-                        <option value="-200" {% if min_snr == -200 %}selected{% endif %}>No Limit</option>
+                        <option value="-200" {% if min_snr == -200 %}selected{% endif %}>{{ t('map.no_limit') }}</option>
                         <option value="-99" {% if min_snr == -99 %}selected{% endif %}>≥ -99 dB</option>
                         <option value="-40" {% if min_snr == -40 %}selected{% endif %}>≥ -40 dB</option>
                         <option value="-30" {% if min_snr == -30 %}selected{% endif %}>≥ -30 dB</option>
@@ -99,44 +101,51 @@
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="include_indirect" name="include_indirect" {% if include_indirect %}checked{% endif %}>
                         <label class="form-check-label" for="include_indirect">
-                            Multi-hop Connections
+                            {{ t('graph.multi_hop_connections') }}
                         </label>
                     </div>
                 </div>
                 <div class="mb-3">
-                    <label for="primary_channel" class="form-label">Primary Channel</label>
+                    <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
                     <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                        <option value="">All Channels</option>
+                        <option value="">{{ t('common.all_channels') }}</option>
                         <!-- Options will be loaded dynamically -->
                     </select>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm w-100">
-                    <i class="bi bi-arrow-clockwise"></i> Update Graph
+                    <i class="bi bi-arrow-clockwise"></i> {{ t('graph.update_graph') }}
                 </button>
             </form>
         </div>
 
         <!-- Graph Stats -->
         <div class="sidebar-section">
-            <h6><i class="bi bi-bar-chart"></i> Statistics</h6>
+            <h6><i class="bi bi-bar-chart"></i> {{ t('common.statistics') }}</h6>
             <div id="graphStats" class="stats-content">
-                <div><strong>Nodes:</strong> <span id="statsNodes">0</span></div>
-                <div><strong>Links:</strong> <span id="statsLinks">0</span></div>
-                <div><strong>Time Period:</strong> <span id="statsTimePeriod">24h</span></div>
-                <div><strong>Last Update:</strong> <span id="statsLastUpdate">--</span></div>
+                <div><strong>{{ t('map.nodes') }}:</strong> <span id="statsNodes">0</span></div>
+                <div><strong>{{ t('map.rf_links') }}:</strong> <span id="statsLinks">0</span></div>
+                <div><strong>{{ t('graph.time_period') }}:</strong> <span id="statsTimePeriod">24h</span></div>
+                <div><strong>{{ t('common.last_update') }}:</strong> <span id="statsLastUpdate">--</span></div>
             </div>
         </div>
 
         {% set legend_items = [
-            {"type": "icon", "class": "bi bi-circle-fill text-primary", "text": "Active nodes"},
-            {"type": "line", "class": "direct", "text": "Direct RF links"},
-            {"type": "line", "class": "indirect", "text": "Multi-hop paths"}
+            {"type": "icon", "class": "bi bi-circle-fill text-primary", "text": t('graph.active_nodes')},
+            {"type": "line", "class": "direct", "text": t('graph.direct_rf_links')},
+            {"type": "line", "class": "indirect", "text": t('graph.multi_hop_paths')}
         ] %}
         {% call legend_section(legend_items) %}
             <div class="legend-item mt-2">
-                <small class="text-muted">Node size = traffic volume<br>
-                Link thickness = signal strength<br>
-                Colors = SNR quality</small>
+                <small class="text-muted">{{ t('graph.node_size_traffic') }}<br>
+                {{ t('graph.link_thickness_signal') }}<br>
+                {{ t('graph.colors_snr') }}</small>
+            </div>
+            <div class="legend-item mt-2">
+                <small class="text-muted">
+                    <span style="color: #d73027;">{{ t('graph.red') }}</span> = {{ t('graph.red_desc') }}<br>
+                    <span style="color: #fdae61;">{{ t('graph.orange') }}</span> = {{ t('graph.orange_desc') }}<br>
+                    <span style="color: #1a9850;">{{ t('graph.green') }}</span> = {{ t('graph.green_desc') }}
+                </small>
             </div>
         {% endcall %}
     {% endcall %}

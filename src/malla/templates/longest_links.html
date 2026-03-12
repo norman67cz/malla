@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Longest Links Analysis - Malla{% endblock %}
+{% block title %}{{ t('page.longest_links_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -62,8 +62,8 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h1><i class="bi bi-rulers"></i> Longest Links Analysis</h1>
-        <p class="text-muted">Analyze the longest RF links in the mesh network based on geographic distance</p>
+        <h1><i class="bi bi-rulers"></i> {{ t('page.longest_links_title') }}</h1>
+        <p class="text-muted">{{ t('longest_links.subtitle') }}</p>
     </div>
 </div>
 
@@ -73,7 +73,7 @@
         <div class="card text-center">
             <div class="card-body">
                 <h4 id="total-links" class="text-primary">-</h4>
-                <small class="text-muted">Total Links Analyzed</small>
+                <small class="text-muted">{{ t('longest_links.total_links_analyzed') }}</small>
             </div>
         </div>
     </div>
@@ -81,7 +81,7 @@
         <div class="card text-center">
             <div class="card-body">
                 <h4 id="direct-links" class="text-success">-</h4>
-                <small class="text-muted">Direct RF Links</small>
+                <small class="text-muted">{{ t('longest_links.direct_rf_links') }}</small>
             </div>
         </div>
     </div>
@@ -89,7 +89,7 @@
         <div class="card text-center">
             <div class="card-body">
                 <h4 id="longest-direct" class="text-warning">-</h4>
-                <small class="text-muted">Longest Direct Link</small>
+                <small class="text-muted">{{ t('longest_links.longest_direct_link') }}</small>
             </div>
         </div>
     </div>
@@ -97,7 +97,7 @@
         <div class="card text-center">
             <div class="card-body">
                 <h4 id="longest-path" class="text-info">-</h4>
-                <small class="text-muted">Longest Path</small>
+                <small class="text-muted">{{ t('longest_links.longest_path') }}</small>
             </div>
         </div>
     </div>
@@ -108,12 +108,12 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h6><i class="bi bi-funnel"></i> Filter Options</h6>
+                <h6><i class="bi bi-funnel"></i> {{ t('longest_links.filter_options') }}</h6>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <label for="min-distance" class="form-label">Minimum Distance (km)</label>
+                        <label for="min-distance" class="form-label">{{ t('longest_links.minimum_distance') }}</label>
                         <input type="number" id="min-distance" class="form-control" value="1" min="0" step="0.1">
                     </div>
                     <div class="col-md-6">
@@ -123,7 +123,7 @@
                 </div>
                 <div class="row mt-3">
                     <div class="col-md-6">
-                        <label for="max-results" class="form-label">Max Results</label>
+                        <label for="max-results" class="form-label">{{ t('longest_links.max_results') }}</label>
                         <select id="max-results" class="form-select">
                             <option value="50">50</option>
                             <option value="100" selected>100</option>
@@ -133,7 +133,7 @@
                     </div>
                     <div class="col-md-6 d-flex align-items-end">
                         <button id="refresh-btn" class="btn btn-primary">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh Analysis
+                            <i class="bi bi-arrow-clockwise"></i> {{ t('longest_links.refresh_analysis') }}
                         </button>
                     </div>
                 </div>
@@ -143,12 +143,12 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h6><i class="bi bi-info-circle"></i> Analysis Info</h6>
+                <h6><i class="bi bi-info-circle"></i> {{ t('longest_links.analysis_info') }}</h6>
             </div>
             <div class="card-body">
-                <p class="mb-2"><strong>Direct Links:</strong> Single RF hops between two nodes</p>
-                <p class="mb-2"><strong>Indirect Links:</strong> Complete traceroute paths (sum of all hop distances)</p>
-                <p class="mb-0"><small class="text-muted">Distances calculated using GPS coordinates from position packets</small></p>
+                <p class="mb-2"><strong>{{ t('longest_links.direct_links_info') }}</strong> {{ t('longest_links.direct_links_text') }}</p>
+                <p class="mb-2"><strong>{{ t('longest_links.indirect_links_info') }}</strong> {{ t('longest_links.indirect_links_text') }}</p>
+                <p class="mb-0"><small class="text-muted">{{ t('longest_links.distance_info') }}</small></p>
             </div>
         </div>
     </div>

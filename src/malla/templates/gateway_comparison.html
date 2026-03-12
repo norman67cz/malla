@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Gateway Comparison - Malla{% endblock %}
+{% block title %}{{ t('page.gateway_compare_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -81,8 +81,8 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h1><i class="bi bi-router"></i> Gateway Comparison</h1>
-        <p class="text-muted">Compare signal quality between two gateways by analyzing their common received packets. Only packets with the same hop limit are compared to exclude retransmissions.</p>
+        <h1><i class="bi bi-router"></i> {{ t('page.gateway_compare_title') }}</h1>
+        <p class="text-muted">{{ t('gateway_compare.compare_intro') }}</p>
     </div>
 </div>
 
@@ -91,9 +91,9 @@
     <form method="GET" id="gatewayForm">
         <div class="row">
             <div class="col-md-5">
-                <label for="gateway1" class="form-label">Gateway 1</label>
+                <label for="gateway1" class="form-label">{{ t('gateway_compare.gateway_1') }}</label>
                 <select class="form-select" id="gateway1" name="gateway1" required>
-                    <option value="">Select first gateway...</option>
+                    <option value="">{{ t('gateway_compare.select_first_gateway') }}</option>
                     {% for gateway in available_gateways %}
                     <option value="{{ gateway.id }}" {% if gateway.id == gateway1_id %}selected{% endif %}>
                         {{ gateway.display_name }}
@@ -109,9 +109,9 @@
             </div>
 
             <div class="col-md-5">
-                <label for="gateway2" class="form-label">Gateway 2</label>
+                <label for="gateway2" class="form-label">{{ t('gateway_compare.gateway_2') }}</label>
                 <select class="form-select" id="gateway2" name="gateway2" required>
-                    <option value="">Select second gateway...</option>
+                    <option value="">{{ t('gateway_compare.select_second_gateway') }}</option>
                     {% for gateway in available_gateways %}
                     <option value="{{ gateway.id }}" {% if gateway.id == gateway2_id %}selected{% endif %}>
                         {{ gateway.display_name }}
@@ -124,19 +124,19 @@
         <!-- Optional Filters -->
         <div class="row mt-3">
             <div class="col-md-3">
-                <label for="start_time" class="form-label">Start Time</label>
+                <label for="start_time" class="form-label">{{ t('common.start_time') }}</label>
                 <input type="datetime-local" class="form-control" id="start_time" name="start_time"
                        value="{{ filters.start_time if filters.start_time }}">
             </div>
             <div class="col-md-3">
-                <label for="end_time" class="form-label">End Time</label>
+                <label for="end_time" class="form-label">{{ t('common.end_time') }}</label>
                 <input type="datetime-local" class="form-control" id="end_time" name="end_time"
                        value="{{ filters.end_time if filters.end_time }}">
             </div>
             <div class="col-md-3">
-                <label for="from_node" class="form-label">From Node</label>
+                <label for="from_node" class="form-label">{{ t('common.from_node') }}</label>
                 <select class="form-select" id="from_node" name="from_node">
-                    <option value="">All Nodes</option>
+                    <option value="">{{ t('packets.all_nodes') }}</option>
                     {% for node in available_nodes %}
                     <option value="{{ node.id }}" {{ 'selected' if filters.from_node == node.id|string }}>
                         {{ node.name }} ({{ node.packet_count }} packets)
@@ -146,7 +146,7 @@
             </div>
             <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search"></i> Compare Gateways
+                    <i class="bi bi-search"></i> {{ t('gateway_compare.compare_gateways') }}
                 </button>
             </div>
         </div>
@@ -163,7 +163,7 @@
 <!-- Comparison Results -->
 <div class="row">
     <div class="col-12">
-        <h2>Comparison Results</h2>
+        <h2>{{ t('gateway_compare.results') }}</h2>
         <p>
             Comparing <span class="gateway-badge gateway1-badge">{{ comparison_data.gateway1_name }}</span>
             vs <span class="gateway-badge gateway2-badge">{{ comparison_data.gateway2_name }}</span>
@@ -175,10 +175,10 @@
 <div class="row">
     <div class="col-md-6">
         <div class="stats-card">
-            <h5><i class="bi bi-bar-chart"></i> Signal Statistics</h5>
+            <h5><i class="bi bi-bar-chart"></i> {{ t('gateway_compare.signal_statistics') }}</h5>
 
             <div class="stat-row">
-                <span class="stat-label">Common Packets</span>
+                <span class="stat-label">{{ t('gateway_compare.common_packets') }}</span>
                 <span class="stat-value">{{ comparison_data.statistics.total_common_packets }}</span>
             </div>
 
@@ -204,7 +204,7 @@
 
     <div class="col-md-6">
         <div class="stats-card">
-            <h5><i class="bi bi-router"></i> Gateway Performance</h5>
+            <h5><i class="bi bi-router"></i> {{ t('gateway_compare.gateway_performance') }}</h5>
 
             {% if comparison_data.statistics.get('gateway1_rssi_avg') is not none %}
             <div class="stat-row">

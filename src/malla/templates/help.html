@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('help.title') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-8">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+                <div>
+                    <h1 class="mb-1"><i class="bi bi-question-circle"></i> {{ t('help.title') }}</h1>
+                    <p class="text-muted mb-0">{{ t('help.subtitle') }}</p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">{{ t('help.main_pages') }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-speedometer2"></i> {{ t('menu.dashboard') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.dashboard.desc') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-box"></i> {{ t('menu.packets') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.packets.desc') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-router"></i> {{ t('menu.nodes') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.nodes.desc') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-diagram-3"></i> {{ t('menu.traceroutes') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.traceroutes.desc') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-map"></i> {{ t('menu.map') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.map.desc') }}</p>
+                    </div>
+
+                    <div>
+                        <h6 class="mb-1"><i class="bi bi-diagram-2"></i> {{ t('menu.network_graph') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.network_graph.desc') }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">{{ t('help.tools') }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-graph-up"></i> {{ t('menu.hop_analysis') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.hop_analysis.desc') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-router-fill"></i> {{ t('menu.gateway_compare') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.gateway_compare.desc') }}</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="mb-1"><i class="bi bi-rulers"></i> {{ t('menu.longest_links') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.longest_links.desc') }}</p>
+                    </div>
+
+                    <div>
+                        <h6 class="mb-1"><i class="bi bi-bezier"></i> {{ t('menu.line_of_sight') }}</h6>
+                        <p class="text-muted mb-0">{{ t('help.line_of_sight.desc') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

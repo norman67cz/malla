@@ -89,20 +89,20 @@
         <div class="col">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="/">Home</a></li>
-                    <li class="breadcrumb-item"><a href="/packets">Packets</a></li>
+                    <li class="breadcrumb-item"><a href="/">{{ t('node_detail.home') }}</a></li>
+                    <li class="breadcrumb-item"><a href="/packets">{{ t('menu.packets') }}</a></li>
                     <li class="breadcrumb-item active">Packet #{{ packet.id }}</li>
                 </ol>
             </nav>
             <h1>
                 <i class="bi bi-envelope"></i> Packet #{{ packet.id }}
                 {% if packet.success %}
-                    <span class="badge bg-success">Success</span>
+                    <span class="badge bg-success">{{ t('packet_detail.success') }}</span>
                 {% else %}
-                    <span class="badge bg-danger">Failed</span>
+                    <span class="badge bg-danger">{{ t('packet_detail.failed') }}</span>
                 {% endif %}
             </h1>
-            <p class="text-muted">{{ packet.portnum_name or "Unknown Protocol" }} packet from {{ packet.from_node_name }} to {{ packet.to_node_name }}</p>
+            <p class="text-muted">{{ packet.portnum_name or t('packet_detail.unknown_protocol') }} packet from {{ packet.from_node_name }} to {{ packet.to_node_name }}</p>
         </div>
     </div>
 
@@ -112,7 +112,7 @@
             <div class="card card-metric">
                 <div class="card-body">
                     <div class="metric-value">{{ reception_count }}</div>
-                    <div class="metric-label">Total Receptions</div>
+                    <div class="metric-label">{{ t('packet_detail.total_receptions') }}</div>
                 </div>
             </div>
         </div>
@@ -120,7 +120,7 @@
             <div class="card card-metric">
                 <div class="card-body">
                     <div class="metric-value">{{ gateway_count }}</div>
-                    <div class="metric-label">Unique Gateways</div>
+                    <div class="metric-label">{{ t('packet_detail.unique_gateways') }}</div>
                 </div>
             </div>
         </div>
@@ -142,7 +142,7 @@
             <div class="card card-metric">
                 <div class="card-body">
                     <div class="metric-value">{{ packet.payload_length or 0 }}</div>
-                    <div class="metric-label">Payload Bytes</div>
+                    <div class="metric-label">{{ t('packet_detail.payload_bytes') }}</div>
                 </div>
             </div>
         </div>
@@ -153,7 +153,7 @@
         <div class="col-12">
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5><i class="bi bi-info-circle"></i> Packet Information</h5>
+                    <h5><i class="bi bi-info-circle"></i> {{ t('packet_detail.packet_information') }}</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">

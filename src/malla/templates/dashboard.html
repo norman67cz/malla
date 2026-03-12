@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Mesh Network Dashboard - {{ APP_NAME }}{% endblock %}
+{% block title %}{{ t('page.dashboard_title') }} - {{ APP_NAME }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -19,7 +19,7 @@
 
     <div class="row mb-4">
         <div class="col">
-            <h1 class="h2">Mesh Metrics</h1>
+            <h1 class="h2">{{ t('dashboard.mesh_metrics') }}</h1>
         </div>
     </div>
 
@@ -29,8 +29,8 @@
             <div class="card h-100">
                 <div class="card-body card-metric">
                     <div class="metric-value" id="totalNodesMetric">{{ stats.total_nodes }}</div>
-                    <div class="metric-label">Total Nodes</div>
-                    <small class="text-muted">Known mesh participants</small>
+                    <div class="metric-label">{{ t('dashboard.total_nodes') }}</div>
+                    <small class="text-muted">{{ t('dashboard.known_mesh_participants') }}</small>
                 </div>
             </div>
         </div>
@@ -38,10 +38,10 @@
             <div class="card h-100">
                 <div class="card-body card-metric">
                     <div class="metric-value text-success" id="activeNodesMetric">{{ stats.active_nodes_24h }}</div>
-                    <div class="metric-label">Active Nodes (24h)</div>
+                    <div class="metric-label">{{ t('dashboard.active_nodes_24h') }}</div>
                     {% set total_nodes_safe = stats.total_nodes if stats.total_nodes > 0 else 1 %}
                     {% set coverage_pct = (stats.active_nodes_24h / total_nodes_safe * 100)|int %}
-                    <small class="text-muted" id="coverageMetricLabel">{{ coverage_pct }}% network coverage</small>
+                    <small class="text-muted" id="coverageMetricLabel">{{ coverage_pct }}% {{ t('dashboard.network_coverage') }}</small>
                 </div>
             </div>
         </div>
@@ -49,8 +49,8 @@
             <div class="card h-100">
                 <div class="card-body card-metric">
                     <div class="metric-value text-warning" id="gatewayCountMetric">{{ gateway_count }}</div>
-                    <div class="metric-label">Gateway Diversity</div>
-                    <small class="text-muted">Data source reliability</small>
+                    <div class="metric-label">{{ t('dashboard.gateway_diversity') }}</div>
+                    <small class="text-muted">{{ t('dashboard.data_source_reliability') }}</small>
                 </div>
             </div>
         </div>
@@ -58,8 +58,8 @@
             <div class="card h-100">
                 <div class="card-body card-metric">
                     <div class="metric-value text-info" id="protocolDiversityMetric">{{ stats.packet_types|length }}</div>
-                    <div class="metric-label">Protocol Diversity</div>
-                    <small class="text-muted">Message types in use</small>
+                    <div class="metric-label">{{ t('dashboard.protocol_diversity') }}</div>
+                    <small class="text-muted">{{ t('dashboard.message_types_in_use') }}</small>
                 </div>
             </div>
         </div>
@@ -67,8 +67,8 @@
             <div class="card h-100">
                 <div class="card-body card-metric">
                     <div class="metric-value" id="totalMessagesMetric">{{ "{:,}".format(stats.total_packets) }}</div>
-                    <div class="metric-label">Total Messages</div>
-                    <small class="text-muted">Network activity</small>
+                    <div class="metric-label">{{ t('dashboard.total_messages') }}</div>
+                    <small class="text-muted">{{ t('dashboard.network_activity') }}</small>
                 </div>
             </div>
         </div>
@@ -77,8 +77,8 @@
                 <div class="card-body card-metric">
                     {% set success_class = 'text-success' if stats.success_rate >= 95 else 'text-warning' if stats.success_rate >= 85 else 'text-danger' %}
                     <div class="metric-value {{ success_class }}" id="successRateMetric">{{ stats.success_rate }}%</div>
-                    <div class="metric-label">Processing Success</div>
-                    <small class="text-muted">Message reliability</small>
+                    <div class="metric-label">{{ t('dashboard.processing_success') }}</div>
+                    <small class="text-muted">{{ t('dashboard.message_reliability') }}</small>
                 </div>
             </div>
         </div>
@@ -90,14 +90,14 @@
         <div class="col-md-8 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-graph-up-arrow"></i> Network Activity Trends (7 Days)</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-graph-up-arrow"></i> {{ t('dashboard.activity_trends') }}</h5>
                 </div>
                 <div class="card-body">
                     <div id="timeSeriesChartLoading" class="text-center py-4">
                         <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">{{ t('common.loading') }}</span>
                         </div>
-                        <p class="mt-2 text-muted">Loading chart data...</p>
+                        <p class="mt-2 text-muted">{{ t('common.loading_chart_data') }}</p>
                     </div>
                     <canvas id="timeSeriesChart" style="height: 300px; display: none;"></canvas>
                 </div>
@@ -108,11 +108,11 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-activity"></i> Network Health</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-activity"></i> {{ t('dashboard.network_health') }}</h5>
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
-                        <h6>Network Coverage</h6>
+                        <h6>{{ t('dashboard.network_coverage_label') }}</h6>
                         <div class="progress mb-2">
                             {% set total_nodes_safe = stats.total_nodes if stats.total_nodes > 0 else 1 %}
                             {% set activity_percentage = (stats.active_nodes_24h / total_nodes_safe * 100)|int %}
@@ -121,29 +121,29 @@
                                 {{ activity_percentage }}%
                             </div>
                         </div>
-                        <small class="text-muted" id="networkCoverageLabel">{{ stats.active_nodes_24h }} of {{ stats.total_nodes }} nodes active</small>
+                        <small class="text-muted" id="networkCoverageLabel">{{ stats.active_nodes_24h }} / {{ stats.total_nodes }} {{ t('dashboard.nodes_active') }}</small>
                     </div>
 
                     <div class="mb-3">
-                        <h6>Message Success Rate</h6>
+                        <h6>{{ t('dashboard.message_success_rate') }}</h6>
                         <div class="progress mb-2">
                             {% set success_bar_class = 'bg-success' if stats.success_rate >= 95 else 'bg-warning' if stats.success_rate >= 85 else 'bg-danger' %}
                             <div class="progress-bar {{ success_bar_class }}" id="successRateBar" style="width: {{ stats.success_rate }}%;">
                                 {{ stats.success_rate }}%
                             </div>
                         </div>
-                        <small class="text-muted">Packet processing reliability</small>
+                        <small class="text-muted">{{ t('dashboard.packet_processing_reliability') }}</small>
                     </div>
 
                     <div class="mb-3">
-                        <h6>Gateway Diversity</h6>
+                        <h6>{{ t('dashboard.gateway_diversity') }}</h6>
                         <div class="progress mb-2">
                             {% set gateway_diversity = (gateway_count / 10 * 100)|int if gateway_count <= 10 else 100 %}
                             <div class="progress-bar bg-primary" id="gatewayDiversityBar" style="width: {{ gateway_diversity }}%;">
                                 {{ gateway_count }} sources
                             </div>
                         </div>
-                        <small class="text-muted">Multiple data sources improve reliability</small>
+                        <small class="text-muted">{{ t('dashboard.multiple_sources_improve_reliability') }}</small>
                     </div>
 
                     <hr>
@@ -152,12 +152,12 @@
                         <div class="col-6">
                             <div class="border-end">
                                 <div class="fw-bold text-primary" id="recentActivityMetric">{{ stats.recent_packets }}</div>
-                                <small class="text-muted">Recent Activity</small>
+                                <small class="text-muted">{{ t('dashboard.recent_activity') }}</small>
                             </div>
                         </div>
                         <div class="col-6">
                                 <div class="fw-bold text-success" id="protocolTypesMetric">{{ stats.packet_types|length }}</div>
-                            <small class="text-muted">Protocol Types</small>
+                            <small class="text-muted">{{ t('dashboard.protocol_types') }}</small>
                         </div>
                     </div>
                 </div>
@@ -171,7 +171,7 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-people"></i> Node Activity Distribution</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-people"></i> {{ t('dashboard.node_activity_distribution') }}</h5>
                 </div>
                 <div class="card-body">
                     <div id="nodeActivityChartLoading" class="text-center py-4">
@@ -188,7 +188,7 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-router-fill"></i> Gateway Activity Distribution</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-router-fill"></i> {{ t('dashboard.gateway_activity_distribution') }}</h5>
                 </div>
                 <div class="card-body">
                     <div id="gatewayActivityChartLoading" class="text-center py-4">
@@ -205,7 +205,7 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-reception-4"></i> Signal Quality Distribution</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-reception-4"></i> {{ t('dashboard.signal_quality_distribution') }}</h5>
                 </div>
                 <div class="card-body">
                     <div id="signalDistributionChartLoading" class="text-center py-4">
@@ -225,7 +225,7 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-router"></i> Message Routing Patterns</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-router"></i> {{ t('dashboard.message_routing_patterns') }}</h5>
                 </div>
                 <div class="card-body">
                     <div id="hopDistributionChartLoading" class="text-center py-4">
@@ -242,20 +242,20 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-pie-chart"></i> Protocol Usage (24h)</h5>
+                    <h5 class="card-title mb-0"><i class="bi bi-pie-chart"></i> {{ t('dashboard.protocol_usage_24h') }}</h5>
                 </div>
                 <div class="card-body">
                     {% if stats.packet_types %}
                     <div id="packetTypesChartLoading" class="text-center py-4">
                         <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">{{ t('common.loading') }}</span>
                         </div>
                     </div>
                     <canvas id="packetTypesChart" style="height: 300px; display: none;"></canvas>
                     {% else %}
                     <div class="text-center text-muted py-4">
                         <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-                        <p class="mt-2">No packet data available</p>
+                        <p class="mt-2">{{ t('dashboard.no_packet_data') }}</p>
                     </div>
                     {% endif %}
                 </div>

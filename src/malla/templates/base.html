@@ -125,42 +125,42 @@
                     <!-- Dashboard -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">
-                            <i class="bi bi-speedometer2"></i> Dashboard
+                            <i class="bi bi-speedometer2"></i> {{ t('menu.dashboard') }}
                         </a>
                     </li>
 
                     <!-- Packets -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if 'packet' in request.endpoint }}" href="{{ url_for('packet.packets') }}">
-                            <i class="bi bi-box"></i> Packets
+                            <i class="bi bi-box"></i> {{ t('menu.packets') }}
                         </a>
                     </li>
 
                     <!-- Nodes -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if 'node' in request.endpoint }}" href="{{ url_for('node.nodes') }}">
-                            <i class="bi bi-router"></i> Nodes
+                            <i class="bi bi-router"></i> {{ t('menu.nodes') }}
                         </a>
                     </li>
 
                     <!-- Traceroutes (list) -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'traceroute.traceroute' }}" href="{{ url_for('traceroute.traceroute') }}">
-                            <i class="bi bi-diagram-3"></i> Traceroutes
+                            <i class="bi bi-diagram-3"></i> {{ t('menu.traceroutes') }}
                         </a>
                     </li>
 
                     <!-- Map -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'main.map_view' }}" href="{{ url_for('main.map_view') }}">
-                            <i class="bi bi-map"></i> Map
+                            <i class="bi bi-map"></i> {{ t('menu.map') }}
                         </a>
                     </li>
 
                     <!-- Network Graph -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'traceroute.traceroute_graph' }}" href="{{ url_for('traceroute.traceroute_graph') }}">
-                            <i class="bi bi-diagram-2"></i> Network Graph
+                            <i class="bi bi-diagram-2"></i> {{ t('menu.network_graph') }}
                         </a>
                     </li>
 
@@ -168,35 +168,58 @@
                     <li class="nav-item dropdown">
                         {% set tools_active = request.endpoint in ['traceroute.traceroute_hops', 'gateway.gateway_compare', 'main.longest_links', 'main.line_of_sight'] %}
                         <a class="nav-link dropdown-toggle {{ 'active' if tools_active }}" href="#" id="toolsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-tools"></i> Tools
+                            <i class="bi bi-tools"></i> {{ t('menu.tools') }}
                         </a>
                         <ul class="dropdown-menu">
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('traceroute.traceroute_hops') }}">
-                                    <i class="bi bi-graph-up"></i> Hop Analysis
+                                    <i class="bi bi-graph-up"></i> {{ t('menu.hop_analysis') }}
                                 </a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('gateway.gateway_compare') }}">
-                                    <i class="bi bi-router-fill"></i> Gateway Compare
+                                    <i class="bi bi-router-fill"></i> {{ t('menu.gateway_compare') }}
                                 </a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('main.longest_links') }}">
-                                    <i class="bi bi-rulers"></i> Longest Links
+                                    <i class="bi bi-rulers"></i> {{ t('menu.longest_links') }}
                                 </a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('main.line_of_sight') }}">
-                                    <i class="bi bi-bezier"></i> Line of Sight
+                                    <i class="bi bi-bezier"></i> {{ t('menu.line_of_sight') }}
                                 </a>
                             </li>
                         </ul>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'main.help_page' }}" href="{{ url_for('main.help_page') }}" aria-label="{{ t('menu.help') }}">
+                            ?
+                        </a>
                     </li>
                 </ul>
 
                 <!-- Timezone Toggle and Dark Mode Toggle -->
                 <div class="navbar-nav d-flex flex-row gap-2">
+                    <div class="nav-item dropdown">
+                        <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="{{ t('menu.language') }}">
+                            {{ current_lang|upper }}
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item {% if current_lang == 'en' %}active{% endif %}" href="{{ url_for('main.set_language', lang='en', next=request.full_path if request.query_string else request.path) }}">
+                                    EN
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if current_lang == 'cs' %}active{% endif %}" href="{{ url_for('main.set_language', lang='cs', next=request.full_path if request.query_string else request.path) }}">
+                                    CZ
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                     <button id="timezone-toggle" class="btn btn-outline-light btn-sm" type="button"
                             data-bs-toggle="tooltip" data-bs-placement="bottom"
                             title="Toggle timezone"

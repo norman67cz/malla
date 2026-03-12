@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import node_link, node_badge, gateway_link, protocol_badge, signal_indicator %}
 
-{% block title %}{{ node.node_name }} - Node Details{% endblock %}
+{% block title %}{{ node.node_name }} - {{ t('menu.nodes') }}{% endblock %}
 
 {% block extra_css %}
 <!-- Leaflet CSS -->
@@ -54,24 +54,24 @@
         <div class="col">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="/">Home</a></li>
-                    <li class="breadcrumb-item"><a href="/nodes">Nodes</a></li>
+                    <li class="breadcrumb-item"><a href="/">{{ t('node_detail.home') }}</a></li>
+                    <li class="breadcrumb-item"><a href="/nodes">{{ t('menu.nodes') }}</a></li>
                     <li class="breadcrumb-item active">{{ node.node_name }}</li>
                 </ol>
             </nav>
             <h1>
                 <i class="bi bi-router"></i> {{ node.node_name }}
                 {% if node.last_seen_relative == "Just now" or "minute" in node.last_seen_relative %}
-                    <span class="badge bg-success">Online</span>
+                    <span class="badge bg-success">{{ t('node_detail.online') }}</span>
                 {% elif "hour" in node.last_seen_relative %}
-                    <span class="badge bg-warning">Recent</span>
+                    <span class="badge bg-warning">{{ t('node_detail.recent') }}</span>
                 {% else %}
-                    <span class="badge bg-secondary">Offline</span>
+                    <span class="badge bg-secondary">{{ t('node_detail.offline') }}</span>
                 {% endif %}
             </h1>
             <p class="text-muted">
                 Node ID: {{ node.hex_id }} ({{ node.node_id }})
-                • Last seen: {{ node.last_seen_relative }}
+                • {{ t('node_detail.last_seen') }}: {{ node.last_seen_relative }}
             </p>
         </div>
     </div>
@@ -82,7 +82,7 @@
             <div class="card card-metric">
                 <div class="card-body">
                     <div class="metric-value">{{ node.total_packets }}</div>
-                    <div class="metric-label">Total Packets</div>
+                    <div class="metric-label">{{ t('node_detail.total_packets') }}</div>
                 </div>
             </div>
         </div>
@@ -90,7 +90,7 @@
             <div class="card card-metric">
                 <div class="card-body">
                     <div class="metric-value">{{ node.unique_destinations or 0 }}</div>
-                    <div class="metric-label">Destinations</div>
+                    <div class="metric-label">{{ t('node_detail.destinations') }}</div>
                 </div>
             </div>
         </div>
@@ -122,7 +122,7 @@
             <!-- Basic Information -->
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5><i class="bi bi-info-circle"></i> Node Information</h5>
+                    <h5><i class="bi bi-info-circle"></i> {{ t('node_detail.node_information') }}</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -342,12 +342,29 @@
             {% include "components/relay_node_analysis.html" %}
 
             <!-- Protocol Breakdown -->
-            {% if protocols %}
+            {% if node.total_packets %}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5><i class="bi bi-graph-up"></i> Protocol Usage</h5>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Protocol Usage</h5>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Protocol usage time filter">
+                            <a href="{{ url_for('node.node_detail', node_id=node.hex_id, protocol_window='last_hour') }}"
+                               class="btn {% if protocol_window == 'last_hour' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                last hour
+                            </a>
+                            <a href="{{ url_for('node.node_detail', node_id=node.hex_id, protocol_window='last_day') }}"
+                               class="btn {% if protocol_window == 'last_day' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                last day
+                            </a>
+                            <a href="{{ url_for('node.node_detail', node_id=node.hex_id, protocol_window='all') }}"
+                               class="btn {% if protocol_window == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                all
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
+                    {% if protocols %}
                     <div class="table-responsive">
                         <table class="table table-sm">
                             <thead>
@@ -367,7 +384,7 @@
                                     </td>
                                     <td>{{ protocol.count }}</td>
                                     <td>
-                                        {% set percentage = (protocol.count / node.total_packets * 100) %}
+                                        {% set percentage = (protocol.count / protocol_total_packets * 100) if protocol_total_packets else 0 %}
                                         {% set percentage_str = "%.1f"|format(percentage) %}
                                         {{ percentage_str }}%
                                         <div class="progress" style="height: 8px;">
@@ -393,6 +410,9 @@
                             </tbody>
                         </table>
                     </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No protocol data for the selected period.</p>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}
@@ -401,7 +421,13 @@
             {% if recent_packets or recent_reported_packets %}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5><i class="bi bi-clock-history"></i> Recent Packets</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history"></i> Recent Packets
+                        <i class="bi bi-info-circle text-muted ms-1"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="last 20 packets"></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <!-- Tab selector -->

@@ -2,7 +2,7 @@
 {% from "macros.html" import node_picker, gateway_picker %}
 {% from "components/table_layout_macros.html" import fullscreen_table_container, filter_section, table_controls_section, grouping_section, table_stats_section, table_layout_styles %}
 
-{% block title %}Packets - Malla{% endblock %}
+{% block title %}{{ t('page.packets_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/node-picker.css') }}">
@@ -14,40 +14,40 @@
 <!-- Override the base template's container to make this page full-width/full-height -->
 </div> <!-- Close the base template's container -->
 
-{% call fullscreen_table_container("packetsTable", "Packets", "bi bi-envelope", "toggleSidebar") %}
+{% call fullscreen_table_container("packetsTable", t('page.packets_title'), "bi bi-envelope", "toggleSidebar") %}
     <!-- Main table content -->
     <div id="packetsTable" class="modern-table-container"></div>
 {% endcall %}
 
 <!-- Sidebar content (will be injected into the sidebar) -->
 <div id="sidebarContent" style="display: none;">
-    {% call filter_section("filtersForm", "Packet Filters") %}
+    {% call filter_section("filtersForm", t('packets.packet_filters')) %}
         <div class="row g-3">
             <div class="col-12">
-                <label for="start_time" class="form-label">Start Time</label>
+                <label for="start_time" class="form-label">{{ t('common.start_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="start_time" name="start_time">
             </div>
             <div class="col-12">
-                <label for="end_time" class="form-label">End Time</label>
+                <label for="end_time" class="form-label">{{ t('common.end_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="end_time" name="end_time">
             </div>
             <div class="col-12">
                 {{ node_picker(
                     field_name="from_node",
-                    label="From Node",
+                    label=t('common.from_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All nodes",
+                    placeholder=t('packets.all_nodes'),
                     include_broadcast=true
                 ) }}
             </div>
             <div class="col-12">
                 {{ node_picker(
                     field_name="to_node",
-                    label="To Node",
+                    label=t('common.to_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All destination nodes",
+                    placeholder=t('packets.all_destination_nodes'),
                     include_broadcast=true
                 ) }}
             </div>
@@ -57,7 +57,7 @@
                     label="Exclude From Node",
                     selected_value="",
                     selected_display="",
-                    placeholder="No exclusions",
+                    placeholder=t('packets.no_exclusions'),
                     include_broadcast=true
                 ) }}
             </div>
@@ -67,31 +67,31 @@
                     label="Exclude To Node",
                     selected_value="",
                     selected_display="",
-                    placeholder="No exclusions",
+                    placeholder=t('packets.no_exclusions'),
                     include_broadcast=true
                 ) }}
             </div>
             <div class="col-12">
                 {{ gateway_picker(
                     field_name="gateway_id",
-                    label="Gateway (Receiver)",
+                    label=t('packets.gateway_receiver'),
                     selected_value="",
                     selected_display="",
-                    placeholder="All gateways"
+                    placeholder=t('packets.all_gateways')
                 ) }}
             </div>
             <div class="col-12">
-                <label for="portnum" class="form-label">Packet Type</label>
+                <label for="portnum" class="form-label">{{ t('common.packet_type') }}</label>
                 <select class="form-select form-select-sm" id="portnum" name="portnum">
-                    <option value="">All Types</option>
+                    <option value="">{{ t('common.all_types') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
             <div class="col-12">
-                <label for="hop_count" class="form-label">Hop Count</label>
+                <label for="hop_count" class="form-label">{{ t('common.hop_count') }}</label>
                 <select class="form-select form-select-sm" id="hop_count" name="hop_count">
-                    <option value="">Any Hops</option>
-                    <option value="0">Direct (0 hops)</option>
+                    <option value="">{{ t('common.any_hops') }}</option>
+                    <option value="0">{{ t('packets.direct_0_hops') }}</option>
                     <option value="1">1 hop</option>
                     <option value="2">2 hops</option>
                     <option value="3">3 hops</option>
@@ -99,7 +99,7 @@
                 </select>
             </div>
             <div class="col-12">
-                <label for="min_rssi" class="form-label">Min RSSI</label>
+                <label for="min_rssi" class="form-label">{{ t('common.min_rssi') }}</label>
                 <input type="number" class="form-control form-control-sm" id="min_rssi" name="min_rssi" placeholder="-120">
             </div>
             <!-- Exclude self-reported gateway messages -->
@@ -107,34 +107,34 @@
                 <div class="form-check d-flex align-items-center">
                     <input class="form-check-input me-2" type="checkbox" id="exclude_self" name="exclude_self">
                     <label class="form-check-label mb-0" for="exclude_self">
-                        Exclude gateway self messages
+                        {{ t('packets.exclude_gateway_self_messages') }}
                     </label>
                 </div>
             </div>
             <div class="col-12">
-                <label for="primary_channel" class="form-label">Primary Channel</label>
+                <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
                 <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                    <option value="">All Channels</option>
+                    <option value="">{{ t('common.all_channels') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
         </div>
     {% endcall %}
 
-    {{ grouping_section("group_packets", "Group by Packet ID", "Group packets with the same mesh packet ID") }}
+    {{ grouping_section("group_packets", t('common.group_by_packet_id'), t('packets.group_packets_same_id')) }}
 
     {% set table_controls = [
-        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": "Apply Filters", "type": "button"},
-        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": "Clear Filters", "type": "button"},
-        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": "Refresh", "type": "button"},
+        {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": t('common.apply_filters'), "type": "button"},
+        {"class": "btn-outline-secondary", "id": "clearFilters", "icon": "bi bi-x-circle", "text": t('common.clear_filters'), "type": "button"},
+        {"class": "btn-outline-info", "id": "refreshTable", "icon": "bi bi-arrow-clockwise", "text": t('common.refresh'), "type": "button"},
     ] %}
     {{ table_controls_section(table_controls) }}
 
     {% set stats_items = [
-        {"label": "Total Packets", "id": "statsTotal", "default": "0"},
-        {"label": "Filtered", "id": "statsFiltered", "default": "0"},
-        {"label": "Grouped", "id": "statsGrouped", "default": "0"},
-        {"label": "Last Update", "id": "statsLastUpdate", "default": "--"}
+        {"label": t('packets.total_packets'), "id": "statsTotal", "default": "0"},
+        {"label": t('common.filtered'), "id": "statsFiltered", "default": "0"},
+        {"label": t('common.grouped'), "id": "statsGrouped", "default": "0"},
+        {"label": t('common.last_update'), "id": "statsLastUpdate", "default": "--"}
     ] %}
     {{ table_stats_section("tableStats", stats_items) }}
 </div>
