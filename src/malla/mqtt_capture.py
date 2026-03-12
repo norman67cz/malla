@@ -34,7 +34,6 @@ import base64
 import hashlib
 import logging
 import socket
-import sqlite3
 import threading
 import time
 from typing import Any
@@ -56,12 +55,14 @@ from paho.mqtt.enums import CallbackAPIVersion
 # Configuration (centralised via malla.config)
 # ---------------------------------------------------------------------------
 from malla.config import get_config  # Import here to avoid circular import issues
+from malla.database.connection import get_db_connection
 
 # Load the singleton configuration once at module import time.  This ensures the
 # capture tool honours the same YAML + optional environment override mechanism
 # as the web-UI and the rest of the application stack.
 
 _cfg = get_config()
+DATABASE_BACKEND: str = _cfg.database_backend.lower()
 
 # MQTT Broker details
 MQTT_BROKER_ADDRESS: str = _cfg.mqtt_broker_address
@@ -322,88 +323,118 @@ def try_decrypt_mesh_packet(
 
 # --- Database Functions ---
 def init_database() -> None:
-    """Initialize SQLite database with required tables."""
-    conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-    conn.row_factory = sqlite3.Row
+    """Initialize the configured database with required tables."""
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Configure SQLite for better concurrency
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.execute("PRAGMA busy_timeout=30000")
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA cache_size=10000")
-    cursor.execute("PRAGMA temp_store=MEMORY")
-
     # Table for packet history
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS packet_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp REAL NOT NULL,
-            topic TEXT NOT NULL,
-            from_node_id INTEGER,
-            to_node_id INTEGER,
-            portnum INTEGER,
-            portnum_name TEXT,
-            gateway_id TEXT,
-            channel_id TEXT,
-            mesh_packet_id INTEGER,
-            rssi INTEGER,
-            snr REAL,
-            hop_limit INTEGER,
-            hop_start INTEGER,
-            payload_length INTEGER,
-            raw_payload BLOB,
-            processed_successfully BOOLEAN DEFAULT TRUE,
-            message_type TEXT,
-            raw_service_envelope BLOB,
-            parsing_error TEXT
+    if DATABASE_BACKEND == "postgres":
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS packet_history (
+                id BIGSERIAL PRIMARY KEY,
+                timestamp DOUBLE PRECISION NOT NULL,
+                topic TEXT NOT NULL,
+                from_node_id BIGINT,
+                to_node_id BIGINT,
+                portnum BIGINT,
+                portnum_name TEXT,
+                gateway_id TEXT,
+                channel_id TEXT,
+                mesh_packet_id BIGINT,
+                rssi BIGINT,
+                snr DOUBLE PRECISION,
+                hop_limit BIGINT,
+                hop_start BIGINT,
+                payload_length BIGINT,
+                raw_payload BYTEA,
+                processed_successfully BOOLEAN DEFAULT TRUE,
+                message_type TEXT,
+                raw_service_envelope BYTEA,
+                parsing_error TEXT,
+                via_mqtt BOOLEAN,
+                want_ack BOOLEAN,
+                priority BIGINT,
+                delayed BIGINT,
+                channel_index BIGINT,
+                rx_time BIGINT,
+                pki_encrypted BOOLEAN,
+                next_hop BIGINT,
+                relay_node BIGINT,
+                tx_after BIGINT
+            )
+        """
         )
-    """)
+    else:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS packet_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL NOT NULL,
+                topic TEXT NOT NULL,
+                from_node_id INTEGER,
+                to_node_id INTEGER,
+                portnum INTEGER,
+                portnum_name TEXT,
+                gateway_id TEXT,
+                channel_id TEXT,
+                mesh_packet_id INTEGER,
+                rssi INTEGER,
+                snr REAL,
+                hop_limit INTEGER,
+                hop_start INTEGER,
+                payload_length INTEGER,
+                raw_payload BLOB,
+                processed_successfully BOOLEAN DEFAULT TRUE,
+                message_type TEXT,
+                raw_service_envelope BLOB,
+                parsing_error TEXT
+            )
+        """
+        )
 
-    # Add mesh_packet_id column if it doesn't exist (for existing databases)
-    try:
-        cursor.execute("ALTER TABLE packet_history ADD COLUMN mesh_packet_id INTEGER")
-        logging.info("Added mesh_packet_id column to packet_history table")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e).lower():
-            logging.debug("mesh_packet_id column already exists")
-        else:
-            logging.warning(f"Could not add mesh_packet_id column: {e}")
-
-    # Add new MeshPacket fields if they don't exist (for existing databases)
     new_columns = [
+        ("mesh_packet_id", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
         ("via_mqtt", "BOOLEAN"),
         ("want_ack", "BOOLEAN"),
-        ("priority", "INTEGER"),
-        ("delayed", "INTEGER"),
-        ("channel_index", "INTEGER"),
-        ("rx_time", "INTEGER"),
+        ("priority", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
+        ("delayed", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
+        ("channel_index", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
+        ("rx_time", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
         ("pki_encrypted", "BOOLEAN"),
-        ("next_hop", "INTEGER"),
-        ("relay_node", "INTEGER"),
-        ("tx_after", "INTEGER"),
+        ("next_hop", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
+        ("relay_node", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
+        ("tx_after", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
         ("message_type", "TEXT"),
-        ("raw_service_envelope", "BLOB"),
+        (
+            "raw_service_envelope",
+            "BLOB" if DATABASE_BACKEND == "sqlite" else "BYTEA",
+        ),
         ("parsing_error", "TEXT"),
     ]
 
     for column_name, column_type in new_columns:
         try:
-            cursor.execute(
-                f"ALTER TABLE packet_history ADD COLUMN {column_name} {column_type}"
-            )
-            logging.info(f"Added {column_name} column to packet_history table")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower():
+            if DATABASE_BACKEND == "postgres":
+                cursor.execute(
+                    f"ALTER TABLE packet_history ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                )
+            else:
+                cursor.execute(
+                    f"ALTER TABLE packet_history ADD COLUMN {column_name} {column_type}"
+                )
+            logging.debug(f"Ensured {column_name} column exists on packet_history")
+        except Exception as e:  # noqa: BLE001
+            if DATABASE_BACKEND == "sqlite" and "duplicate column name" in str(e).lower():
                 logging.debug(f"{column_name} column already exists")
             else:
                 logging.warning(f"Could not add {column_name} column: {e}")
 
     # Table for node information cache
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS node_info (
-            node_id INTEGER PRIMARY KEY,
+            node_id BIGINT PRIMARY KEY,
             hex_id TEXT,
             long_name TEXT,
             short_name TEXT,
@@ -411,13 +442,14 @@ def init_database() -> None:
             role TEXT,
             primary_channel TEXT,
             lora_modem_preset TEXT,
-            lora_modem_preset_updated_at REAL,
+            lora_modem_preset_updated_at DOUBLE PRECISION,
             is_licensed BOOLEAN,
             mac_address TEXT,
-            first_seen REAL NOT NULL,
-            last_updated REAL NOT NULL
+            first_seen DOUBLE PRECISION NOT NULL,
+            last_updated DOUBLE PRECISION NOT NULL
         )
-    """)
+    """
+    )
 
     # Composite indexes for /api/nodes aggregation queries (96% faster than single-column indexes)
     # These covering indexes allow SQLite to perform aggregations using only the index
@@ -458,16 +490,24 @@ def init_database() -> None:
     legacy_columns = [
         ("primary_channel", "TEXT"),
         ("lora_modem_preset", "TEXT"),
-        ("lora_modem_preset_updated_at", "REAL"),
+        (
+            "lora_modem_preset_updated_at",
+            "REAL" if DATABASE_BACKEND == "sqlite" else "DOUBLE PRECISION",
+        ),
     ]
     for column_name, column_type in legacy_columns:
         try:
-            cursor.execute(
-                f"ALTER TABLE node_info ADD COLUMN {column_name} {column_type}"
-            )
-            logging.info(f"Added {column_name} column to node_info table")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower():
+            if DATABASE_BACKEND == "postgres":
+                cursor.execute(
+                    f"ALTER TABLE node_info ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                )
+            else:
+                cursor.execute(
+                    f"ALTER TABLE node_info ADD COLUMN {column_name} {column_type}"
+                )
+            logging.debug(f"Ensured {column_name} column exists on node_info")
+        except Exception as e:  # noqa: BLE001
+            if DATABASE_BACKEND == "sqlite" and "duplicate column name" in str(e).lower():
                 logging.debug(f"{column_name} column already exists")
             else:
                 logging.warning(f"Could not add {column_name} column: {e}")
@@ -548,15 +588,14 @@ def init_database() -> None:
 
     conn.commit()
     conn.close()
-    logging.info(f"Database initialized: {DATABASE_FILE}")
+    logging.info(f"Database initialized: {DATABASE_FILE} ({DATABASE_BACKEND})")
 
 
 def load_node_cache() -> None:
     """Load node information from database into memory cache."""
     global node_cache
     with db_lock:
-        conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -665,8 +704,7 @@ def update_node_cache(
 
     # Update database using INSERT OR REPLACE to handle existing nodes
     with db_lock:
-        conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
         # Get existing values from database if node exists
@@ -914,8 +952,7 @@ def log_packet_to_database(
     tx_after = getattr(mesh_packet, "tx_after", None) if mesh_packet else None
 
     with db_lock:
-        conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
         cursor.execute(
@@ -970,8 +1007,7 @@ def get_packet_history(
 ) -> list[dict[str, Any]]:
     """Get recent packet history from ..database."""
     with db_lock:
-        conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
         query = "SELECT * FROM packet_history WHERE 1=1"
@@ -1009,8 +1045,7 @@ def cleanup_old_data() -> None:
     nodes_deleted = 0
 
     with db_lock:
-        conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
         try:
@@ -1072,8 +1107,7 @@ def cleanup_worker() -> None:
 def get_node_statistics() -> dict[str, Any]:
     """Get statistics about known nodes."""
     with db_lock:
-        conn = sqlite3.connect(DATABASE_FILE, timeout=30.0)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cursor = conn.cursor()
 
         # Total nodes

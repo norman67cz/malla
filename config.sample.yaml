@@ -17,8 +17,17 @@ home_markdown: |
 # Secret key used by Flask for session signing (change for production!)
 secret_key: "dev-secret-key-change-in-production"
 
+# Database backend to use. Supported values:
+#   - "sqlite"   (current production default)
+#   - "postgres" (planned migration target)
+# database_backend: "sqlite"
+
 # SQLite database file path (relative or absolute)
 database_file: "meshtastic_history.db"
+
+# PostgreSQL DSN used when database_backend is set to "postgres"
+# Example:
+# postgres_dsn: "postgresql://malla:change-me@127.0.0.1:5432/malla"
 
 # Host interface and port for the web server
 host: "0.0.0.0"

@@ -21,6 +21,7 @@ if command -v rsync >/dev/null 2>&1; then
         --compress \
         --delete \
         --exclude ".git/" \
+        --exclude ".env" \
         --exclude ".venv/" \
         --exclude ".pytest_cache/" \
         --exclude "__pycache__/" \
@@ -31,6 +32,7 @@ if command -v rsync >/dev/null 2>&1; then
 elif command -v tar >/dev/null 2>&1; then
     tar \
         --exclude=".git" \
+        --exclude=".env" \
         --exclude=".venv" \
         --exclude=".pytest_cache" \
         --exclude="__pycache__" \

@@ -15,14 +15,19 @@ services:
     environment:
       - MALLA_HOST=0.0.0.0
       - MALLA_PORT=5008
+      - MALLA_DATABASE_BACKEND=${MALLA_DATABASE_BACKEND:-sqlite}
       - MALLA_DATABASE_FILE=/app/data/meshtastic_history.db
+      - MALLA_POSTGRES_DSN=${MALLA_POSTGRES_DSN:-}
       - MALLA_NAME=${MALLA_NAME:-Malla}
       - MALLA_SECRET_KEY=${MALLA_SECRET_KEY:-dev-secret-key-change-in-production}
       - MALLA_DEBUG=${MALLA_DEBUG:-false}
     volumes:
       - malla_data:/app/data
+      - /var/run/postgresql:/var/run/postgresql
       # Optional: mount your own config file (uncomment if you have one)
       # - ./config.yaml:/app/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     depends_on:
       - malla-capture
@@ -34,7 +39,9 @@ services:
     # build: .
     command: ["/app/.venv/bin/malla-capture"]
     environment:
+      - MALLA_DATABASE_BACKEND=${MALLA_DATABASE_BACKEND:-sqlite}
       - MALLA_DATABASE_FILE=/app/data/meshtastic_history.db
+      - MALLA_POSTGRES_DSN=${MALLA_POSTGRES_DSN:-}
       # MQTT Configuration - set these in your .env file
       - MALLA_MQTT_BROKER_ADDRESS=${MALLA_MQTT_BROKER_ADDRESS}
       - MALLA_MQTT_PORT=${MALLA_MQTT_PORT:-1883}
@@ -45,8 +52,11 @@ services:
       - MALLA_DEFAULT_CHANNEL_KEY=${MALLA_DEFAULT_CHANNEL_KEY:-}
     volumes:
       - malla_data:/app/data
+      - /var/run/postgresql:/var/run/postgresql
       # Optional: mount your own config file (uncomment if you have one)
       # - ./config.yaml:/app/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
 volumes:

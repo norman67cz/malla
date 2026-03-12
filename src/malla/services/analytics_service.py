@@ -128,7 +128,7 @@ class AnalyticsService:
         query = f"""
             SELECT
                 COUNT(*) as total_packets,
-                SUM(CASE WHEN processed_successfully = 1 THEN 1 ELSE 0 END) as successful_packets,
+                SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) as successful_packets,
                 AVG(CASE WHEN payload_length IS NOT NULL AND payload_length > 0 THEN payload_length END) as avg_payload_size
             FROM packet_history
             WHERE {where_clause}
@@ -332,7 +332,7 @@ class AnalyticsService:
             SELECT
                 strftime('%H', datetime(timestamp, 'unixepoch')) AS hour,
                 COUNT(*) AS total_packets,
-                SUM(CASE WHEN processed_successfully = 1 THEN 1 ELSE 0 END) AS successful_packets
+                SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) AS successful_packets
             FROM packet_history
             WHERE {where_clause}
             GROUP BY hour
@@ -496,7 +496,7 @@ class AnalyticsService:
                 SELECT
                     COALESCE(gateway_id, 'Unknown') as gateway_id,
                     COUNT(*) as total_packets,
-                    SUM(CASE WHEN processed_successfully = 1 THEN 1 ELSE 0 END) as successful_packets
+                    SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) as successful_packets
                 FROM packet_history
                 WHERE {where_clause}
                 GROUP BY gateway_id

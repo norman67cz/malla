@@ -151,7 +151,7 @@ class NodeService:
                 raw_payload
             FROM packet_history
             WHERE portnum_name = 'TRACEROUTE_APP'
-            AND processed_successfully = 1
+            AND processed_successfully IS TRUE
             AND raw_payload IS NOT NULL
             AND timestamp >= ?
             AND timestamp <= ?

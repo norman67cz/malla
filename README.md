@@ -259,6 +259,63 @@ The Gunicorn configuration automatically:
 
 ### Data Persistence
 
+Data is automatically stored in a Docker volume (`malla_data`) and persists across container restarts. No manual volume setup is required when using `docker-compose`.
+
+### Switching Database Backend
+
+Malla now supports switching a running Docker deployment from SQLite to PostgreSQL on the target host.
+
+Before switching:
+- deploy a version of the application that already includes PostgreSQL support
+- make sure PostgreSQL packages are installed on the host
+- keep the existing SQLite volume unchanged so rollback remains possible
+
+**Preview the PostgreSQL switch without making changes:**
+```bash
+DB_PASSWORD='your-strong-password' ./scripts/switch_to_postgres.sh --dry-run
+```
+
+**Perform the PostgreSQL switch on the server:**
+```bash
+DB_PASSWORD='your-strong-password' ./scripts/switch_to_postgres.sh
+```
+
+The script will:
+- create the PostgreSQL user and database if needed
+- adjust local PostgreSQL auth for password-based access over the mounted Unix socket
+- create a consistent snapshot of the SQLite database
+- migrate data into PostgreSQL
+- update `.env` to `MALLA_DATABASE_BACKEND=postgres`
+- rebuild and restart the Docker services
+- verify `/`, `/api/stats`, and `/api/analytics`
+
+Optional environment overrides:
+- `DB_NAME`
+- `DB_USER`
+- `POSTGRES_DSN`
+- `SQLITE_DB_PATH`
+- `SNAPSHOT_PATH`
+- `CAPTURE_CONTAINER`
+- `WEB_URL`
+- `ENV_FILE`
+
+**Rollback preview back to SQLite:**
+```bash
+./scripts/switch_to_sqlite.sh --dry-run
+```
+
+**Rollback to SQLite:**
+```bash
+./scripts/switch_to_sqlite.sh
+```
+
+The rollback script updates `.env` back to:
+- `MALLA_DATABASE_BACKEND=sqlite`
+- `MALLA_DATABASE_FILE=/app/data/meshtastic_history.db`
+- empty `MALLA_POSTGRES_DSN`
+
+and then rebuilds and verifies the services again.
+
 ## Development takeover workflow
 
 For taking ownership of this repository and working against a remote Docker host on `10.5.0.71`, use this baseline flow:
@@ -301,7 +358,6 @@ For taking ownership of this repository and working against a remote Docker host
     up -d --build
   ```
 - On the first deploy, if the remote `.env` file does not exist, the script creates it from `env.example` and stops so you can fill in the production values before rerunning the deploy.
-Data is automatically stored in a Docker volume (`malla_data`) and persists across container restarts. No manual volume setup is required when using `docker-compose`.
 
 ## Configuration Options
 

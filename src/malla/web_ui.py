@@ -110,12 +110,17 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
     # compatibility with the existing code base. Over time we should migrate
     # direct usages to the nested ``APP_CONFIG`` object instead.
     app.config["SECRET_KEY"] = cfg.secret_key
+    app.config["DATABASE_BACKEND"] = cfg.database_backend
     app.config["DATABASE_FILE"] = cfg.database_file
+    app.config["POSTGRES_DSN"] = cfg.postgres_dsn
 
     # Ensure helper modules relying on env-var fallback pick up the correct DB
     # path in contexts where they cannot access Flask's app.config (e.g.
     # standalone scripts).  This is primarily relevant for the test suite.
+    os.environ["MALLA_DATABASE_BACKEND"] = str(cfg.database_backend)
     os.environ["MALLA_DATABASE_FILE"] = str(cfg.database_file)
+    if cfg.postgres_dsn:
+        os.environ["MALLA_POSTGRES_DSN"] = str(cfg.postgres_dsn)
 
     # ---------------------------------------------------------------------
 

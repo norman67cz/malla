@@ -26,7 +26,9 @@ class AppConfig:
 
     # Flask/server settings
     secret_key: str = "dev-secret-key-change-in-production"
+    database_backend: str = "sqlite"
     database_file: str = "meshtastic_history.db"
+    postgres_dsn: str | None = None
     host: str = "0.0.0.0"
     port: int = 5008
     debug: bool = False

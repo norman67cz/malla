@@ -64,9 +64,9 @@ class DashboardRepository:
                     COUNT(CASE WHEN timestamp > ? THEN 1 END) as recent_packets,
                     AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN rssi END) as avg_rssi,
                     AVG(CASE WHEN snr IS NOT NULL THEN snr END) as avg_snr,
-                    SUM(CASE WHEN processed_successfully = 1 THEN 1 ELSE 0 END) as successful_packets,
+                    SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) as successful_packets,
                     CASE WHEN COUNT(*) > 0
-                         THEN ROUND(SUM(CASE WHEN processed_successfully = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)
+                         THEN ROUND(SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)
                          ELSE 0 END as success_rate
                 FROM packet_history
                 WHERE timestamp > ?{gateway_filter}
@@ -2817,7 +2817,7 @@ class TracerouteRepository:
                 params.append(filters["primary_channel"])
 
             if filters.get("processed_successfully_only"):
-                where_conditions.append("processed_successfully = 1")
+                where_conditions.append("processed_successfully IS TRUE")
 
             # Check if route_node filtering is needed
             route_node_filter = filters.get("route_node")
