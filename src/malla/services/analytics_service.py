@@ -24,7 +24,7 @@ class AnalyticsService:
     _CACHE: dict[
         tuple[str | None, int | None, int | None], tuple[float, dict[str, Any]]
     ] = {}
-    _CACHE_TTL_SEC: int = 60  # one minute cache window
+    _CACHE_TTL_SEC: int = 120  # two minute cache window
 
     @staticmethod
     def get_analytics_data(

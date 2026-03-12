@@ -35,6 +35,9 @@ from ..utils.traceroute_utils import parse_traceroute_payload
 logger = logging.getLogger(__name__)
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
+_STATS_CACHE: dict[str | None, tuple[float, dict[str, Any]]] = {}
+_STATS_CACHE_TTL_SEC = 30
+
 
 @api_bp.route("/stats")
 def api_stats():
@@ -42,11 +45,17 @@ def api_stats():
     logger.info("API stats endpoint accessed")
     try:
         gateway_id = request.args.get("gateway_id")
+        now_ts = time.time()
+        cached = _STATS_CACHE.get(gateway_id)
+        if cached and (now_ts - cached[0] < _STATS_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
+
         stats = DashboardRepository.get_stats(gateway_id=gateway_id)
         from ..services.gateway_service import GatewayService
 
         gateway_stats = GatewayService.get_gateway_statistics(hours=24)
         stats["gateway_count"] = gateway_stats.get("total_gateways", 0)
+        _STATS_CACHE[gateway_id] = (now_ts, stats)
         return safe_jsonify(stats)
     except Exception as e:
         logger.error(f"Error in API stats: {e}")
@@ -717,7 +726,7 @@ def api_traceroute_analytics():
     """API endpoint for traceroute analytics."""
     logger.info("API traceroute analytics endpoint accessed")
     try:
-        hours = request.args.get("hours", 24, type=int)
+        hours = request.args.get("hours", 72, type=int)
         data = TracerouteService.get_traceroute_analysis(hours=hours)
         return jsonify(data)
     except Exception as e:
@@ -749,7 +758,7 @@ def api_traceroute_details(packet_id):
 def api_locations():
     """
     API endpoint for node location data with network topology.
-    Returns up to 14 days of data for client-side filtering.
+    Returns up to 3 days of data for client-side filtering.
     """
     import time
 
@@ -759,11 +768,11 @@ def api_locations():
         # Build filters from request parameters
         filters = {}
 
-        # Always limit to last 14 days for performance
+        # Always limit to last 3 days to keep map queries bounded
         from datetime import datetime, timedelta
 
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=14)
+        start_time = end_time - timedelta(days=3)
         filters["start_time"] = start_time.timestamp()
         filters["end_time"] = end_time.timestamp()
 
@@ -786,7 +795,7 @@ def api_locations():
         # 1. Get network topology data (used by both get_node_locations and get_traceroute_links)
         from ..services.traceroute_service import TracerouteService
 
-        hours = 24  # Default to 24 hours for network analysis
+        hours = 72  # Default to 3 days for network analysis
         time_diff = filters["end_time"] - filters["start_time"]
         hours = max(1, min(168, int(time_diff / 3600)))  # Between 1 and 168 hours
 
@@ -828,7 +837,7 @@ def api_locations():
                 "packet_links": packet_links,
                 "total_count": len(locations) if isinstance(locations, list) else 0,
                 "filters_applied": filters,
-                "data_period_days": 14,
+                "data_period_days": 3,
             }
         )
     except Exception as e:
@@ -1323,7 +1332,7 @@ def api_traceroute_graph():
     logger.info("API traceroute graph endpoint accessed")
     try:
         # Get parameters
-        hours = request.args.get("hours", 24, type=int)
+        hours = request.args.get("hours", 72, type=int)
         min_snr = request.args.get("min_snr", -30.0, type=float)
         include_indirect = request.args.get("include_indirect", False, type=bool)
 
@@ -1332,7 +1341,7 @@ def api_traceroute_graph():
 
         # Validate parameters
         if hours < 1 or hours > 168:  # Max 7 days
-            hours = 24
+            hours = 72
         # Allow -200 as special "no limit" value, otherwise validate normal range
         if min_snr < -200 or min_snr > 20:
             min_snr = -200.0

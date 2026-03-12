@@ -81,9 +81,7 @@ class LocationService:
                 from ..services.traceroute_service import TracerouteService
 
                 # Extract time parameters from filters for network analysis
-                hours = (
-                    24  # Default to 24 hours – sufficient for map neighbour analysis
-                )
+                hours = 72  # Default to 3 days for map neighbour analysis
                 if filters.get("start_time") and filters.get("end_time"):
                     # Calculate hours from time range
                     time_diff = filters["end_time"] - filters["start_time"]
@@ -334,7 +332,7 @@ class LocationService:
                 from ..services.traceroute_service import TracerouteService
 
                 # Extract time parameters from filters for network analysis
-                hours = 24  # Default to 24 hours for links
+                hours = 72  # Default to 3 days for links
                 if filters.get("start_time") and filters.get("end_time"):
                     # Calculate hours from time range
                     time_diff = filters["end_time"] - filters["start_time"]

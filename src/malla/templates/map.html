@@ -80,8 +80,8 @@
                         <option value="">{{ t('map.no_limit') }}</option>
                         <option value="1">1 Hour</option>
                         <option value="6">6 Hours</option>
-                        <option value="24" selected>24 Hours</option>
-                        <option value="72">3 Days</option>
+                        <option value="24">24 Hours</option>
+                        <option value="72" selected>3 Days</option>
                         <option value="168">1 Week</option>
                     </select>
                 </div>
@@ -674,8 +674,8 @@ let lightTileLayer, darkTileLayer, currentTileLayer;
 
 // Initialize the map
 function initMap() {
-    // Create map centered on a default location (will be updated when data loads)
-    map = L.map('map').setView([40.0, -95.0], 4);
+    // Create map centered on the Czech Republic until node data is loaded
+    map = L.map('map').setView([49.8175, 15.4730], 7);
 
     // Create light and dark tile layers
     lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {

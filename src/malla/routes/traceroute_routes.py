@@ -63,13 +63,13 @@ def traceroute_graph():
     logger.info("Traceroute graph route accessed")
     try:
         # Get filter parameters
-        hours = request.args.get("hours", 24, type=int)
+        hours = request.args.get("hours", 72, type=int)
         min_snr = request.args.get("min_snr", -200.0, type=float)
         include_indirect = request.args.get("include_indirect", False, type=bool)
 
         # Validate parameters
         if hours < 1 or hours > 168:  # Max 7 days
-            hours = 24
+            hours = 72
         # Allow -200 as special "no limit" value, otherwise validate normal range
         if min_snr < -200 or min_snr > 20:
             min_snr = -200.0
