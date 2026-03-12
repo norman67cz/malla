@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 packet_bp = Blueprint("packet", __name__)
 
 
+@packet_bp.route("/packets/live")
+def live_packets():
+    """Live packet log page showing the latest received packets."""
+    try:
+        return render_template("live_packets.html")
+    except Exception as e:
+        logger.error(f"Error in live packets route: {e}")
+        return f"Live packets error: {e}", 500
+
+
 def get_packet_details(packet_id: int) -> dict[str, Any] | None:
     """Get comprehensive details for a specific packet including all receptions."""
     logger.info(f"Getting packet details for packet {packet_id}")

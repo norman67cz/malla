@@ -5,6 +5,7 @@ API routes for the Meshtastic Mesh Health Web UI
 import json
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -198,6 +199,97 @@ def api_packets():
     except Exception as e:
         logger.error(f"Error in API packets: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/packets/live")
+def api_live_packets():
+    """API endpoint for the latest packet log entries."""
+    logger.info("API live packets endpoint accessed")
+    try:
+        limit = request.args.get("limit", 50, type=int)
+        limit = max(1, min(limit, 200))
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                id,
+                timestamp,
+                from_node_id,
+                to_node_id,
+                portnum_name,
+                gateway_id,
+                rssi,
+                snr,
+                hop_start,
+                hop_limit,
+                processed_successfully,
+                via_mqtt
+            FROM packet_history
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        node_ids: set[int] = set()
+        for row in rows:
+            if row["from_node_id"] is not None:
+                node_ids.add(row["from_node_id"])
+            if row["to_node_id"] not in (None, 4294967295):
+                node_ids.add(row["to_node_id"])
+
+        node_names = get_bulk_node_names(list(node_ids)) if node_ids else {}
+
+        live_packets: list[dict[str, Any]] = []
+        for row in rows:
+            hop_count = (
+                row["hop_start"] - row["hop_limit"]
+                if row["hop_start"] is not None and row["hop_limit"] is not None
+                else None
+            )
+            timestamp_dt = datetime.fromtimestamp(row["timestamp"], UTC)
+
+            from_node_id = row["from_node_id"]
+            to_node_id = row["to_node_id"]
+
+            if to_node_id == 4294967295:
+                to_node_name = "Broadcast"
+            elif to_node_id is not None:
+                to_node_name = node_names.get(to_node_id, f"!{to_node_id:08x}")
+            else:
+                to_node_name = "Unknown"
+
+            live_packets.append(
+                {
+                    "id": row["id"],
+                    "timestamp": row["timestamp"],
+                    "timestamp_str": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "from_node_id": from_node_id,
+                    "from_node_name": (
+                        node_names.get(from_node_id, f"!{from_node_id:08x}")
+                        if from_node_id is not None
+                        else "Unknown"
+                    ),
+                    "to_node_id": to_node_id,
+                    "to_node_name": to_node_name,
+                    "portnum_name": row["portnum_name"] or "Unknown",
+                    "gateway_id": row["gateway_id"],
+                    "rssi": row["rssi"],
+                    "snr": row["snr"],
+                    "hop_count": hop_count,
+                    "processed_successfully": bool(row["processed_successfully"]),
+                    "via_mqtt": bool(row["via_mqtt"]),
+                }
+            )
+
+        return safe_jsonify({"packets": live_packets, "count": len(live_packets)})
+    except Exception as e:
+        logger.error(f"Error in API live packets: {e}")
+        return jsonify({"error": str(e), "packets": [], "count": 0}), 500
 
 
 @api_bp.route("/nodes")

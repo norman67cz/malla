@@ -136,6 +136,12 @@
                         </a>
                     </li>
 
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'packet.live_packets' }}" href="{{ url_for('packet.live_packets') }}">
+                            <i class="bi bi-activity"></i> {{ t('menu.live_log') }}
+                        </a>
+                    </li>
+
                     <!-- Nodes -->
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if 'node' in request.endpoint }}" href="{{ url_for('node.nodes') }}">

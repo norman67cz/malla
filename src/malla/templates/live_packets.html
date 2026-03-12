@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('page.live_log_title') }} - Malla{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-3 align-items-center">
+        <div class="col-md-8">
+            <h1 class="h3 mb-1"><i class="bi bi-activity"></i> {{ t('page.live_log_title') }}</h1>
+            <p class="text-muted mb-0">{{ t('live_log.subtitle') }}</p>
+        </div>
+        <div class="col-md-4 text-md-end">
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2" id="refreshState">
+                {{ t('live_log.auto_refresh_on') }}
+            </span>
+            <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate">--</span></span>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0">{{ t('live_log.latest_packets') }}</h5>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleRefresh">
+                    {{ t('live_log.pause') }}
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" id="refreshNow">
+                    {{ t('common.refresh') }}
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>{{ t('common.time') }}</th>
+                            <th>{{ t('common.from') }}</th>
+                            <th>{{ t('common.to') }}</th>
+                            <th>{{ t('common.protocol') }}</th>
+                            <th>{{ t('common.gateway') }}</th>
+                            <th>RSSI</th>
+                            <th>SNR</th>
+                            <th>{{ t('common.hops') }}</th>
+                            <th>{{ t('common.status') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="livePacketsTable">
+                        <tr>
+                            <td colspan="10" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tableBody = document.getElementById('livePacketsTable');
+    const lastUpdate = document.getElementById('lastUpdate');
+    const toggleRefreshBtn = document.getElementById('toggleRefresh');
+    const refreshNowBtn = document.getElementById('refreshNow');
+    const refreshState = document.getElementById('refreshState');
+
+    let autoRefreshEnabled = true;
+    let refreshTimer = null;
+
+    function renderPackets(packets) {
+        if (!packets.length) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-muted">{{ t('common.no_data_available') }}</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tableBody.innerHTML = packets.map(packet => {
+            const statusBadge = packet.processed_successfully
+                ? '<span class="badge bg-success">{{ t("packet_detail.success") }}</span>'
+                : '<span class="badge bg-danger">{{ t("packet_detail.failed") }}</span>';
+            const fromNode = packet.from_node_id
+                ? `<a href="/node/${packet.from_node_id}" class="text-decoration-none">${packet.from_node_name}</a>`
+                : packet.from_node_name;
+            const toNode = packet.to_node_id && packet.to_node_id !== 4294967295
+                ? `<a href="/node/${packet.to_node_id}" class="text-decoration-none">${packet.to_node_name}</a>`
+                : packet.to_node_name;
+
+            return `
+                <tr>
+                    <td><a href="/packet/${packet.id}" class="font-monospace text-decoration-none">${packet.id}</a></td>
+                    <td><small>${packet.timestamp_str}</small></td>
+                    <td>${fromNode}</td>
+                    <td>${toNode}</td>
+                    <td><span class="badge bg-secondary">${packet.portnum_name}</span></td>
+                    <td>${packet.gateway_id || '-'}</td>
+                    <td>${packet.rssi !== null ? `${packet.rssi} dBm` : '-'}</td>
+                    <td>${packet.snr !== null ? `${packet.snr} dB` : '-'}</td>
+                    <td>${packet.hop_count !== null ? packet.hop_count : '-'}</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function loadPackets() {
+        try {
+            const response = await fetch('/api/packets/live?limit=50');
+            const data = await response.json();
+
+            if (data.error) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="10" class="text-center py-4 text-danger">${data.error}</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            renderPackets(data.packets || []);
+            lastUpdate.textContent = new Date().toLocaleTimeString();
+        } catch (error) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-danger">${error.message}</td>
+                </tr>
+            `;
+        }
+    }
+
+    function startAutoRefresh() {
+        clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+            if (autoRefreshEnabled) {
+                loadPackets();
+            }
+        }, 1000);
+    }
+
+    toggleRefreshBtn.addEventListener('click', function() {
+        autoRefreshEnabled = !autoRefreshEnabled;
+        toggleRefreshBtn.textContent = autoRefreshEnabled ? '{{ t("live_log.pause") }}' : '{{ t("live_log.resume") }}';
+        refreshState.textContent = autoRefreshEnabled ? '{{ t("live_log.auto_refresh_on") }}' : '{{ t("live_log.auto_refresh_off") }}';
+        refreshState.className = autoRefreshEnabled
+            ? 'badge bg-success-subtle text-success-emphasis border border-success-subtle me-2'
+            : 'badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle me-2';
+    });
+
+    refreshNowBtn.addEventListener('click', loadPackets);
+
+    loadPackets();
+    startAutoRefresh();
+});
+</script>
+{% endblock %}
