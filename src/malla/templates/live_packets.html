@@ -23,7 +23,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
+<!-- Override the base template's container to make this page full-width -->
+</div> <!-- Close the base template's container -->
+
+<div class="container-fluid mt-4 px-4">
     <div class="row mb-3 align-items-center">
         <div class="col-md-8">
             <h1 class="h3 mb-1"><i class="bi bi-activity"></i> {{ t('page.live_log_title') }}</h1>
