@@ -218,8 +218,10 @@ def api_live_packets():
                 timestamp,
                 from_node_id,
                 to_node_id,
+                mesh_packet_id,
                 portnum_name,
                 gateway_id,
+                payload_length,
                 rssi,
                 snr,
                 hop_start,
@@ -244,6 +246,38 @@ def api_live_packets():
 
         node_names = get_bulk_node_names(list(node_ids)) if node_ids else {}
 
+        mesh_packet_ids = [
+            row["mesh_packet_id"] for row in rows if row["mesh_packet_id"] is not None
+        ]
+        receptions_by_mesh_id: dict[int, dict[str, Any]] = {}
+        if mesh_packet_ids:
+            placeholders = ",".join("?" for _ in mesh_packet_ids)
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                f"""
+                SELECT
+                    mesh_packet_id,
+                    COUNT(*) AS reception_count,
+                    GROUP_CONCAT(DISTINCT gateway_id) AS gateways
+                FROM packet_history
+                WHERE mesh_packet_id IN ({placeholders})
+                GROUP BY mesh_packet_id
+                """,
+                mesh_packet_ids,
+            )
+            for reception_row in cursor.fetchall():
+                gateways_raw = reception_row["gateways"] or ""
+                receptions_by_mesh_id[reception_row["mesh_packet_id"]] = {
+                    "reception_count": reception_row["reception_count"],
+                    "gateways": [
+                        gateway.strip()
+                        for gateway in gateways_raw.split(",")
+                        if gateway and gateway.strip()
+                    ],
+                }
+            conn.close()
+
         live_packets: list[dict[str, Any]] = []
         for row in rows:
             hop_count = (
@@ -255,6 +289,8 @@ def api_live_packets():
 
             from_node_id = row["from_node_id"]
             to_node_id = row["to_node_id"]
+            mesh_packet_id = row["mesh_packet_id"]
+            reception_info = receptions_by_mesh_id.get(mesh_packet_id)
 
             if to_node_id == 4294967295:
                 to_node_name = "Broadcast"
@@ -268,6 +304,7 @@ def api_live_packets():
                     "id": row["id"],
                     "timestamp": row["timestamp"],
                     "timestamp_str": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    "mesh_packet_id": mesh_packet_id,
                     "from_node_id": from_node_id,
                     "from_node_name": (
                         node_names.get(from_node_id, f"!{from_node_id:08x}")
@@ -278,11 +315,21 @@ def api_live_packets():
                     "to_node_name": to_node_name,
                     "portnum_name": row["portnum_name"] or "Unknown",
                     "gateway_id": row["gateway_id"],
+                    "payload_length": row["payload_length"],
                     "rssi": row["rssi"],
                     "snr": row["snr"],
                     "hop_count": hop_count,
                     "processed_successfully": bool(row["processed_successfully"]),
                     "via_mqtt": bool(row["via_mqtt"]),
+                    "reception_count": (
+                        reception_info["reception_count"] if reception_info else 1
+                    ),
+                    "reception_gateways": (
+                        reception_info["gateways"]
+                        if reception_info
+                        else ([row["gateway_id"]] if row["gateway_id"] else [])
+                    ),
+                    "detail_url": f"/packet/{row['id']}",
                 }
             )
 

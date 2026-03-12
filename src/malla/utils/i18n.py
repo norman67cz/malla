@@ -64,6 +64,7 @@ TRANSLATIONS = {
         "common.protocol": "Protocol",
         "common.hops": "Hops",
         "common.status": "Status",
+        "common.detail": "Detail",
         "common.start_time": "Start Time",
         "common.end_time": "End Time",
         "common.start_date_time": "Start Date & Time",
@@ -275,6 +276,8 @@ TRANSLATIONS = {
         "live_log.resume": "Resume",
         "live_log.auto_refresh_on": "Auto-refresh on",
         "live_log.auto_refresh_off": "Auto-refresh paused",
+        "live_log.receptions": "Receptions",
+        "live_log.size": "Size",
     },
     "cs": {
         "page.dashboard_title": "Přehled mesh sítě",
@@ -336,6 +339,7 @@ TRANSLATIONS = {
         "common.protocol": "Protokol",
         "common.hops": "Hopy",
         "common.status": "Stav",
+        "common.detail": "Detail",
         "common.start_time": "Čas od",
         "common.end_time": "Čas do",
         "common.start_date_time": "Datum a čas od",
@@ -547,6 +551,8 @@ TRANSLATIONS = {
         "live_log.resume": "Pokračovat",
         "live_log.auto_refresh_on": "Auto-obnova zapnuta",
         "live_log.auto_refresh_off": "Auto-obnova pozastavena",
+        "live_log.receptions": "Receptions",
+        "live_log.size": "Velikost",
     },
 }
 

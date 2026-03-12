@@ -2,6 +2,26 @@
 
 {% block title %}{{ t('page.live_log_title') }} - Malla{% endblock %}
 
+{% block extra_css %}
+<style>
+    .live-log-status {
+        min-width: 11rem;
+        text-align: center;
+    }
+
+    .live-log-last-update {
+        display: inline-block;
+        min-width: 8rem;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    .live-log-header-meta {
+        white-space: nowrap;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="row mb-3 align-items-center">
@@ -9,11 +29,11 @@
             <h1 class="h3 mb-1"><i class="bi bi-activity"></i> {{ t('page.live_log_title') }}</h1>
             <p class="text-muted mb-0">{{ t('live_log.subtitle') }}</p>
         </div>
-        <div class="col-md-4 text-md-end">
-            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2" id="refreshState">
+        <div class="col-md-4 text-md-end live-log-header-meta">
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
                 {{ t('live_log.auto_refresh_on') }}
             </span>
-            <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate">--</span></span>
+            <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
         </div>
     </div>
 
@@ -40,6 +60,8 @@
                             <th>{{ t('common.to') }}</th>
                             <th>{{ t('common.protocol') }}</th>
                             <th>{{ t('common.gateway') }}</th>
+                            <th>{{ t('live_log.receptions') }}</th>
+                            <th>{{ t('live_log.size') }}</th>
                             <th>RSSI</th>
                             <th>SNR</th>
                             <th>{{ t('common.hops') }}</th>
@@ -48,7 +70,7 @@
                     </thead>
                     <tbody id="livePacketsTable">
                         <tr>
-                            <td colspan="10" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
+                            <td colspan="12" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -74,7 +96,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!packets.length) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="10" class="text-center py-4 text-muted">{{ t('common.no_data_available') }}</td>
+                    <td colspan="12" class="text-center py-4 text-muted">{{ t('common.no_data_available') }}</td>
                 </tr>
             `;
             return;
@@ -91,6 +113,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? `<a href="/node/${packet.to_node_id}" class="text-decoration-none">${packet.to_node_name}</a>`
                 : packet.to_node_name;
 
+            const receptions = packet.reception_gateways && packet.reception_gateways.length
+                ? packet.reception_gateways.map(gw => `<code>${gw}</code>`).join(', ')
+                : '-';
+
             return `
                 <tr>
                     <td><a href="/packet/${packet.id}" class="font-monospace text-decoration-none">${packet.id}</a></td>
@@ -99,6 +125,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td>${toNode}</td>
                     <td><span class="badge bg-secondary">${packet.portnum_name}</span></td>
                     <td>${packet.gateway_id || '-'}</td>
+                    <td>
+                        <div><strong>${packet.reception_count}x</strong></div>
+                        <div class="small text-muted">${receptions}</div>
+                        <div><a href="${packet.detail_url}" class="small text-decoration-none">{{ t("common.detail") }}</a></div>
+                    </td>
+                    <td>${packet.payload_length !== null ? `${packet.payload_length} B` : '-'}</td>
                     <td>${packet.rssi !== null ? `${packet.rssi} dBm` : '-'}</td>
                     <td>${packet.snr !== null ? `${packet.snr} dB` : '-'}</td>
                     <td>${packet.hop_count !== null ? packet.hop_count : '-'}</td>
@@ -116,7 +148,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.error) {
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="10" class="text-center py-4 text-danger">${data.error}</td>
+                        <td colspan="12" class="text-center py-4 text-danger">${data.error}</td>
                     </tr>
                 `;
                 return;
@@ -127,7 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="10" class="text-center py-4 text-danger">${error.message}</td>
+                    <td colspan="12" class="text-center py-4 text-danger">${error.message}</td>
                 </tr>
             `;
         }
