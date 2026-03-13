@@ -7,8 +7,6 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from ..database.repositories import NodeRepository
-
 logger = logging.getLogger(__name__)
 
 # NOTE: Lightweight, in-process cache so that repeated calls in a short period
@@ -390,30 +388,71 @@ class AnalyticsService:
         filters: dict, since_timestamp: float
     ) -> list[dict[str, Any]]:
         """Get top active nodes by packet count."""
-        # Get node data sorted by activity
-        node_data = NodeRepository.get_nodes(
-            limit=20, order_by="packet_count_24h", order_dir="desc"
+        from ..database.connection import get_db_connection
+
+        where_conditions: list[str] = [
+            "ph.from_node_id IS NOT NULL",
+            "ph.timestamp >= ?",
+        ]
+        params: list[Any] = [since_timestamp]
+
+        if filters.get("gateway_id"):
+            where_conditions.append("ph.gateway_id = ?")
+            params.append(filters["gateway_id"])
+
+        if filters.get("from_node"):
+            where_conditions.append("ph.from_node_id = ?")
+            params.append(filters["from_node"])
+
+        if filters.get("hop_count") is not None:
+            where_conditions.append("(ph.hop_start - ph.hop_limit) = ?")
+            params.append(filters["hop_count"])
+
+        where_clause = " AND ".join(where_conditions)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT
+                ph.from_node_id AS node_id,
+                ni.long_name,
+                ni.short_name,
+                ni.hw_model,
+                COUNT(*) AS packet_count,
+                AVG(CASE WHEN ph.rssi IS NOT NULL THEN ph.rssi END) AS avg_rssi,
+                AVG(CASE WHEN ph.snr IS NOT NULL THEN ph.snr END) AS avg_snr,
+                MAX(ph.timestamp) AS last_seen
+            FROM packet_history ph
+            LEFT JOIN node_info ni ON ni.node_id = ph.from_node_id
+            WHERE {where_clause}
+            GROUP BY ph.from_node_id, ni.long_name, ni.short_name, ni.hw_model
+            ORDER BY packet_count DESC, last_seen DESC
+            LIMIT 10
+            """,
+            params,
         )
+        rows = cursor.fetchall()
+        conn.close()
 
-        # Format for display
-        top_nodes = []
-        for node in node_data["nodes"]:
-            if node.get("packet_count_24h", 0) > 0:
-                top_nodes.append(
-                    {
-                        "node_id": node["node_id"],
-                        "display_name": node.get("long_name")
-                        or node.get("short_name")
-                        or f"!{node['node_id']:08x}",
-                        "packet_count": node.get("packet_count_24h", 0),
-                        "avg_rssi": node.get("avg_rssi"),
-                        "avg_snr": node.get("avg_snr"),
-                        "last_seen": node.get("last_packet_time"),
-                        "hw_model": node.get("hw_model"),
-                    }
-                )
+        top_nodes: list[dict[str, Any]] = []
+        for row in rows:
+            node_id = row["node_id"]
+            long_name = row["long_name"]
+            short_name = row["short_name"]
+            top_nodes.append(
+                {
+                    "node_id": node_id,
+                    "display_name": long_name or short_name or f"!{node_id:08x}",
+                    "packet_count": row["packet_count"] or 0,
+                    "avg_rssi": row["avg_rssi"],
+                    "avg_snr": row["avg_snr"],
+                    "last_seen": row["last_seen"],
+                    "hw_model": row["hw_model"],
+                }
+            )
 
-        return top_nodes[:10]  # Return top 10
+        return top_nodes
 
     @staticmethod
     def _get_packet_type_distribution(

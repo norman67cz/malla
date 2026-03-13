@@ -517,20 +517,14 @@ async function refreshDashboardData() {
     dashboardRefreshInFlight = true;
 
     try {
-        const [statsResponse, analyticsResponse] = await Promise.all([
-            fetch('/api/stats'),
-            fetch('/api/analytics')
-        ]);
-
-        if (!statsResponse.ok) {
-            throw new Error(`Stats HTTP error! status: ${statsResponse.status}`);
-        }
-        if (!analyticsResponse.ok) {
-            throw new Error(`Analytics HTTP error! status: ${analyticsResponse.status}`);
+        const dashboardResponse = await fetch('/api/dashboard-data');
+        if (!dashboardResponse.ok) {
+            throw new Error(`Dashboard HTTP error! status: ${dashboardResponse.status}`);
         }
 
-        const statsData = await statsResponse.json();
-        analyticsData = await analyticsResponse.json();
+        const dashboardData = await dashboardResponse.json();
+        const statsData = dashboardData.stats || {};
+        analyticsData = dashboardData.analytics || null;
 
         updateDashboardStats(statsData);
         renderAnalyticsData();

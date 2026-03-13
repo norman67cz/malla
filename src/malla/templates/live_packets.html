@@ -86,6 +86,7 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const LIVE_LOG_REFRESH_INTERVAL_MS = 3000;
     const tableBody = document.getElementById('livePacketsTable');
     const lastUpdate = document.getElementById('lastUpdate');
     const toggleRefreshBtn = document.getElementById('toggleRefresh');
@@ -93,6 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const refreshState = document.getElementById('refreshState');
 
     let autoRefreshEnabled = true;
+    let isLoading = false;
     let refreshTimer = null;
 
     function renderPackets(packets) {
@@ -144,6 +146,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function loadPackets() {
+        if (isLoading) {
+            return;
+        }
+
+        isLoading = true;
         try {
             const response = await fetch('/api/packets/live?limit=50');
             const data = await response.json();
@@ -165,6 +172,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td colspan="12" class="text-center py-4 text-danger">${error.message}</td>
                 </tr>
             `;
+        } finally {
+            isLoading = false;
         }
     }
 
@@ -174,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (autoRefreshEnabled) {
                 loadPackets();
             }
-        }, 1000);
+        }, LIVE_LOG_REFRESH_INTERVAL_MS);
     }
 
     toggleRefreshBtn.addEventListener('click', function() {

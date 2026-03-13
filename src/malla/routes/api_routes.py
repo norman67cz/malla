@@ -37,6 +37,90 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 _STATS_CACHE: dict[str | None, tuple[float, dict[str, Any]]] = {}
 _STATS_CACHE_TTL_SEC = 30
+_DASHBOARD_PAYLOAD_CACHE: dict[
+    tuple[str | None, int | None, int | None], tuple[float, dict[str, Any]]
+] = {}
+_DASHBOARD_PAYLOAD_CACHE_TTL_SEC = 30
+_MAP_GRAPH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_MAP_GRAPH_CACHE_TTL_SEC = 30
+_LIVE_PACKETS_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
+_LIVE_PACKETS_CACHE_TTL_SEC = 2.5
+_LIVE_PACKET_RECEPTIONS_LOOKBACK_ROWS = 5000
+_TABLE_ENDPOINT_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_TABLE_ENDPOINT_CACHE_TTL_SEC = 10
+
+
+def _get_table_cache_key(endpoint: str) -> str:
+    args = tuple(sorted((key, value) for key, value in request.args.items()))
+    return f"{endpoint}:{args}"
+
+
+def _get_map_graph_cache_key(kind: str, payload: dict[str, Any]) -> str:
+    return f"{kind}:{json.dumps(payload, sort_keys=True, default=str)}"
+
+
+def _get_dashboard_payload(
+    gateway_id: str | None = None,
+    from_node: int | None = None,
+    hop_count: int | None = None,
+) -> dict[str, Any]:
+    cache_key = (gateway_id, from_node, hop_count)
+    now_ts = time.time()
+    cached = _DASHBOARD_PAYLOAD_CACHE.get(cache_key)
+    if cached and (now_ts - cached[0] < _DASHBOARD_PAYLOAD_CACHE_TTL_SEC):
+        return cached[1]
+
+    stats = DashboardRepository.get_stats(gateway_id=gateway_id)
+    from ..services.gateway_service import GatewayService
+
+    gateway_stats = GatewayService.get_gateway_statistics(hours=24)
+    stats["gateway_count"] = gateway_stats.get("total_gateways", 0)
+    _STATS_CACHE[gateway_id] = (now_ts, stats)
+
+    analytics = AnalyticsService.get_analytics_data(
+        gateway_id=gateway_id,
+        from_node=from_node,
+        hop_count=hop_count,
+    )
+
+    payload = {
+        "stats": stats,
+        "analytics": analytics,
+    }
+    _DASHBOARD_PAYLOAD_CACHE[cache_key] = (now_ts, payload)
+    return payload
+
+
+def _get_traceroute_graph_payload(
+    *,
+    hours: int,
+    min_snr: float,
+    include_indirect: bool,
+    extra_filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    filters = dict(extra_filters or {})
+    cache_key = _get_map_graph_cache_key(
+        "graph",
+        {
+            "hours": hours,
+            "min_snr": min_snr,
+            "include_indirect": include_indirect,
+            "filters": filters,
+        },
+    )
+    now_ts = time.time()
+    cached = _MAP_GRAPH_CACHE.get(cache_key)
+    if cached and (now_ts - cached[0] < _MAP_GRAPH_CACHE_TTL_SEC):
+        return cached[1]
+
+    payload = TracerouteService.get_network_graph_data(
+        hours=hours,
+        min_snr=min_snr,
+        include_indirect=include_indirect,
+        filters=filters if filters else None,
+    )
+    _MAP_GRAPH_CACHE[cache_key] = (now_ts, payload)
+    return payload
 
 
 @api_bp.route("/stats")
@@ -50,13 +134,7 @@ def api_stats():
         if cached and (now_ts - cached[0] < _STATS_CACHE_TTL_SEC):
             return safe_jsonify(cached[1])
 
-        stats = DashboardRepository.get_stats(gateway_id=gateway_id)
-        from ..services.gateway_service import GatewayService
-
-        gateway_stats = GatewayService.get_gateway_statistics(hours=24)
-        stats["gateway_count"] = gateway_stats.get("total_gateways", 0)
-        _STATS_CACHE[gateway_id] = (now_ts, stats)
-        return safe_jsonify(stats)
+        return safe_jsonify(_get_dashboard_payload(gateway_id=gateway_id)["stats"])
     except Exception as e:
         logger.error(f"Error in API stats: {e}")
         return jsonify({"error": str(e)}), 500
@@ -113,6 +191,26 @@ def api_analytics():
         return safe_jsonify(analytics_data)
     except Exception as e:
         logger.error(f"Error in API analytics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/dashboard-data")
+def api_dashboard_data():
+    """API endpoint for a combined dashboard payload."""
+    logger.info("API dashboard-data endpoint accessed")
+    try:
+        gateway_id = request.args.get("gateway_id")
+        from_node = request.args.get("from_node", type=int)
+        hop_count = request.args.get("hop_count", type=int)
+        return safe_jsonify(
+            _get_dashboard_payload(
+                gateway_id=gateway_id,
+                from_node=from_node,
+                hop_count=hop_count,
+            )
+        )
+    except Exception as e:
+        logger.error(f"Error in API dashboard-data: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -213,10 +311,14 @@ def api_packets():
 @api_bp.route("/packets/live")
 def api_live_packets():
     """API endpoint for the latest packet log entries."""
-    logger.info("API live packets endpoint accessed")
+    logger.debug("API live packets endpoint accessed")
     try:
         limit = request.args.get("limit", 50, type=int)
         limit = max(1, min(limit, 200))
+        now_ts = time.time()
+        cached = _LIVE_PACKETS_CACHE.get(limit)
+        if cached and (now_ts - cached[0] < _LIVE_PACKETS_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -244,7 +346,6 @@ def api_live_packets():
             (limit,),
         )
         rows = cursor.fetchall()
-        conn.close()
 
         node_ids: set[int] = set()
         for row in rows:
@@ -255,14 +356,21 @@ def api_live_packets():
 
         node_names = get_bulk_node_names(list(node_ids)) if node_ids else {}
 
-        mesh_packet_ids = [
-            row["mesh_packet_id"] for row in rows if row["mesh_packet_id"] is not None
-        ]
+        mesh_packet_ids = list(
+            {
+                row["mesh_packet_id"]
+                for row in rows
+                if row["mesh_packet_id"] is not None
+            }
+        )
         receptions_by_mesh_id: dict[int, dict[str, Any]] = {}
         if mesh_packet_ids:
             placeholders = ",".join("?" for _ in mesh_packet_ids)
-            conn = get_db_connection()
-            cursor = conn.cursor()
+            oldest_visible_packet_id = min(row["id"] for row in rows)
+            reception_window_start_id = max(
+                1,
+                oldest_visible_packet_id - _LIVE_PACKET_RECEPTIONS_LOOKBACK_ROWS,
+            )
             cursor.execute(
                 f"""
                 SELECT
@@ -270,10 +378,11 @@ def api_live_packets():
                     COUNT(*) AS reception_count,
                     GROUP_CONCAT(DISTINCT gateway_id) AS gateways
                 FROM packet_history
-                WHERE mesh_packet_id IN ({placeholders})
+                WHERE id >= ?
+                  AND mesh_packet_id IN ({placeholders})
                 GROUP BY mesh_packet_id
                 """,
-                mesh_packet_ids,
+                [reception_window_start_id, *mesh_packet_ids],
             )
             for reception_row in cursor.fetchall():
                 gateways_raw = reception_row["gateways"] or ""
@@ -285,7 +394,7 @@ def api_live_packets():
                         if gateway and gateway.strip()
                     ],
                 }
-            conn.close()
+        conn.close()
 
         live_packets: list[dict[str, Any]] = []
         for row in rows:
@@ -342,7 +451,9 @@ def api_live_packets():
                 }
             )
 
-        return safe_jsonify({"packets": live_packets, "count": len(live_packets)})
+        payload = {"packets": live_packets, "count": len(live_packets)}
+        _LIVE_PACKETS_CACHE[limit] = (now_ts, payload)
+        return safe_jsonify(payload)
     except Exception as e:
         logger.error(f"Error in API live packets: {e}")
         return jsonify({"error": str(e), "packets": [], "count": 0}), 500
@@ -788,13 +899,17 @@ def api_locations():
         if request.args.get("search"):
             filters["search"] = request.args.get("search")
 
+        cache_key = _get_map_graph_cache_key("locations", filters)
+        now_ts = time.time()
+        cached = _MAP_GRAPH_CACHE.get(cache_key)
+        if cached and (now_ts - cached[0] < _MAP_GRAPH_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
+
         # ------------------------------------------------------------------
         # OPTIMIZATION: Call expensive operations ONCE and pass results down
         # ------------------------------------------------------------------
 
         # 1. Get network topology data (used by both get_node_locations and get_traceroute_links)
-        from ..services.traceroute_service import TracerouteService
-
         hours = 72  # Default to 3 days for network analysis
         time_diff = filters["end_time"] - filters["start_time"]
         hours = max(1, min(168, int(time_diff / 3600)))  # Between 1 and 168 hours
@@ -807,11 +922,11 @@ def api_locations():
         if filters.get("gateway_id"):
             network_filters["gateway_id"] = filters["gateway_id"]
 
-        network_data = TracerouteService.get_network_graph_data(
+        network_data = _get_traceroute_graph_payload(
             hours=hours,
+            min_snr=-200.0,
             include_indirect=False,
-            filters=network_filters,
-            limit_packets=2000,
+            extra_filters=network_filters,
         )
 
         # 2. Get packet links (used by get_node_locations and returned in response)
@@ -830,16 +945,16 @@ def api_locations():
         duration = time.time() - start_time_perf
         logger.info(f"/api/locations completed in {duration:.3f}s")
 
-        return safe_jsonify(
-            {
-                "locations": locations,
-                "traceroute_links": traceroute_links,
-                "packet_links": packet_links,
-                "total_count": len(locations) if isinstance(locations, list) else 0,
-                "filters_applied": filters,
-                "data_period_days": 3,
-            }
-        )
+        payload = {
+            "locations": locations,
+            "traceroute_links": traceroute_links,
+            "packet_links": packet_links,
+            "total_count": len(locations) if isinstance(locations, list) else 0,
+            "filters_applied": filters,
+            "data_period_days": 3,
+        }
+        _MAP_GRAPH_CACHE[cache_key] = (now_ts, payload)
+        return safe_jsonify(payload)
     except Exception as e:
         logger.error(f"Error in API locations: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1352,11 +1467,11 @@ def api_traceroute_graph():
             extra_filters["primary_channel"] = primary_channel
 
         # Get graph data from service
-        graph_data = TracerouteService.get_network_graph_data(
+        graph_data = _get_traceroute_graph_payload(
             hours=hours,
             min_snr=min_snr,
             include_indirect=include_indirect,
-            filters=extra_filters if extra_filters else None,
+            extra_filters=extra_filters if extra_filters else None,
         )
 
         return safe_jsonify(graph_data)
@@ -1371,6 +1486,12 @@ def api_packets_data():
     """Modern table endpoint for packets with structured JSON response."""
     logger.info("API packets modern endpoint accessed")
     try:
+        cache_key = _get_table_cache_key("packets_data")
+        now_ts = time.time()
+        cached = _TABLE_ENDPOINT_CACHE.get(cache_key)
+        if cached and (now_ts - cached[0] < _TABLE_ENDPOINT_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
+
         # Get parameters
         page = request.args.get("page", type=int, default=1)
         limit = request.args.get("limit", type=int, default=100)
@@ -1654,7 +1775,8 @@ def api_packets_data():
             "total_pages": (result["total_count"] + limit - 1) // limit,
         }
 
-        return jsonify(response)
+        _TABLE_ENDPOINT_CACHE[cache_key] = (now_ts, response)
+        return safe_jsonify(response)
     except Exception as e:
         logger.error(f"Error in API packets modern: {e}")
         return jsonify({"error": str(e), "data": [], "total_count": 0}), 500
@@ -1665,6 +1787,12 @@ def api_nodes_data():
     """Modern table endpoint for nodes with structured JSON response."""
     logger.info("API nodes modern endpoint accessed")
     try:
+        cache_key = _get_table_cache_key("nodes_data")
+        now_ts = time.time()
+        cached = _TABLE_ENDPOINT_CACHE.get(cache_key)
+        if cached and (now_ts - cached[0] < _TABLE_ENDPOINT_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
+
         # Get parameters
         page = request.args.get("page", type=int, default=1)
         limit = request.args.get("limit", type=int, default=100)
@@ -1738,7 +1866,8 @@ def api_nodes_data():
             "total_pages": (result["total_count"] + limit - 1) // limit,
         }
 
-        return jsonify(response)
+        _TABLE_ENDPOINT_CACHE[cache_key] = (now_ts, response)
+        return safe_jsonify(response)
     except Exception as e:
         logger.error(f"Error in API nodes modern: {e}")
         return jsonify({"error": str(e), "data": [], "total_count": 0}), 500

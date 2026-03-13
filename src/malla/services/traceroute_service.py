@@ -10,6 +10,7 @@ This service provides comprehensive traceroute analysis functionality including:
 
 import logging
 import math
+import json
 import time
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 class TracerouteService:
     """Service for traceroute analysis and management."""
+
+    _NETWORK_GRAPH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+    _NETWORK_GRAPH_CACHE_TTL_SEC = 30
 
     @staticmethod
     def get_traceroutes(
@@ -981,6 +985,33 @@ class TracerouteService:
             # Build filters for traceroute data
             if filters is None:
                 filters = {}
+            else:
+                filters = dict(filters)
+
+            cache_key = json.dumps(
+                {
+                    "hours": hours,
+                    "min_snr": min_snr,
+                    "include_indirect": include_indirect,
+                    "filters": filters,
+                    "limit_packets": limit_packets,
+                },
+                sort_keys=True,
+                default=str,
+            )
+            now_ts = time.time()
+            cached = TracerouteService._NETWORK_GRAPH_CACHE.get(cache_key)
+            if (
+                cached
+                and now_ts - cached[0] < TracerouteService._NETWORK_GRAPH_CACHE_TTL_SEC
+            ):
+                logger.info(
+                    "Returning cached network graph data for hours=%s min_snr=%s include_indirect=%s",
+                    hours,
+                    min_snr,
+                    include_indirect,
+                )
+                return cached[1]
 
             # Use provided time filters or calculate from hours parameter
             if not filters.get("start_time") and not filters.get("end_time"):
@@ -1241,7 +1272,7 @@ class TracerouteService:
 
                 processed_nodes.append(node_info)
 
-            return {
+            result = {
                 "nodes": processed_nodes,
                 "links": processed_links,
                 "indirect_connections": processed_indirect,
@@ -1252,6 +1283,8 @@ class TracerouteService:
                     "include_indirect": include_indirect,
                 },
             }
+            TracerouteService._NETWORK_GRAPH_CACHE[cache_key] = (now_ts, result)
+            return result
 
         except Exception as e:
             logger.error(f"Error building network graph data: {e}")
