@@ -171,6 +171,7 @@ def _get_postgres_connection(dsn: str | None):
         try:
             _ensure_postgres_schema_migrations(wrapper.cursor())
         except Exception as e:  # noqa: BLE001
+            wrapper.rollback()
             logger.warning(f"Schema migration check failed: {e}")
 
         return wrapper
@@ -252,6 +253,23 @@ def _ensure_sqlite_schema_migrations(cursor: sqlite3.Cursor, db_path: str) -> No
 def _ensure_postgres_schema_migrations(cursor) -> None:
     migration_key = ("postgres", "schema_compat")
     if migration_key in _SCHEMA_MIGRATIONS_DONE:
+        return
+
+    cursor.execute(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name IN ('node_info', 'packet_history')
+        """
+    )
+    existing_tables = {row["table_name"] for row in cursor.fetchall()}
+
+    # Fresh PostgreSQL installs start with an empty schema. The actual table
+    # bootstrap is owned by mqtt_capture.init_database(); skip compatibility
+    # migrations until the core tables exist.
+    if "node_info" not in existing_tables or "packet_history" not in existing_tables:
+        cursor.connection.commit()
         return
 
     cursor.execute(
