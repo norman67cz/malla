@@ -830,6 +830,12 @@ function searchNodes(query) {
     displaySearchResults(results);
 }
 
+function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+}
+
 function displaySearchResults(results) {
     const container = document.getElementById('searchResults');
 
@@ -842,8 +848,8 @@ function displaySearchResults(results) {
         const nodeIdHex = node.id.toString(16).padStart(8, '0');
         return `
             <div class="search-result-item" onclick="selectSearchResult(${index})">
-                <div><strong>${node.name}</strong></div>
-                <small class="text-muted">!${nodeIdHex} • ${node.connections} connections</small>
+                <div><strong>${escapeHtml(node.name)}</strong></div>
+                <small class="text-muted">!${nodeIdHex} • ${escapeHtml(node.connections)} connections</small>
             </div>
         `;
     }).join('');
@@ -1136,10 +1142,11 @@ function clearSearchResults() {
 
 function showSelectedNodeDetails(node) {
     const nodeIdHex = node.id.toString(16).padStart(8, '0');
+    const escapedNodeName = escapeHtml(node.name);
     const content = `
         <div class="row">
             <div class="col-12">
-                <h6>${node.name}</h6>
+                <h6>${escapedNodeName}</h6>
                 <p class="text-muted">Node ID: !${nodeIdHex}</p>
                 <div class="alert alert-info py-2 px-2 small mb-2">
                     <i class="bi bi-lightbulb"></i> Click another node to show paths between them
@@ -1202,7 +1209,7 @@ function showPathComparisonDetails() {
         `;
 
         pathsData.paths.forEach((path, idx) => {
-            const pathNames = path.map(nodeId => getNodeNameById(nodeId)).join(' → ');
+            const pathNames = path.map(nodeId => escapeHtml(getNodeNameById(nodeId))).join(' → ');
             pathsHtml += `<div class="mb-2 p-2 bg-light rounded"><strong>${idx + 1}.</strong> ${pathNames}</div>`;
         });
 
@@ -1214,14 +1221,14 @@ function showPathComparisonDetails() {
             <div class="d-flex align-items-center mb-2">
                 <span class="badge bg-primary me-2">1</span>
                 <div>
-                    <strong>${selectedNode.name}</strong><br>
+                    <strong>${escapeHtml(selectedNode.name)}</strong><br>
                     <small class="text-muted">!${node1IdHex}</small>
                 </div>
             </div>
             <div class="d-flex align-items-center">
                 <span class="badge bg-success me-2">2</span>
                 <div>
-                    <strong>${comparisonNode.name}</strong><br>
+                    <strong>${escapeHtml(comparisonNode.name)}</strong><br>
                     <small class="text-muted">!${node2IdHex}</small>
                 </div>
             </div>
@@ -1392,11 +1399,13 @@ function highlightPathsBetweenNodes() {
 function showSelectedLinkDetails(link) {
     const sourceNode = currentGraph.nodes.find(n => n.id === link.source.id || n.id === link.source);
     const targetNode = currentGraph.nodes.find(n => n.id === link.target.id || n.id === link.target);
+    const sourceName = sourceNode ? escapeHtml(sourceNode.name) : escapeHtml(link.source);
+    const targetName = targetNode ? escapeHtml(targetNode.name) : escapeHtml(link.target);
 
     const content = `
         <div class="row">
             <div class="col-12">
-                <h6>${sourceNode ? sourceNode.name : link.source} ↔ ${targetNode ? targetNode.name : link.target}</h6>
+                <h6>${sourceName} ↔ ${targetName}</h6>
                 <p class="text-muted">${link.type === 'direct' ? 'Direct RF Link' : 'Multi-hop Connection'}</p>
             </div>
         </div>
@@ -1450,7 +1459,7 @@ function showNodeHoverDetails(node) {
                 if (allPaths.length === 1) {
                     // Single path
                     const path = allPaths[0];
-                    const pathNames = path.map(nodeId => getNodeNameById(nodeId)).join(' → ');
+                    const pathNames = path.map(nodeId => escapeHtml(getNodeNameById(nodeId))).join(' → ');
                     pathInfo += `<div class="small text-muted" style="max-height: 150px; overflow-y: auto;">${pathNames}</div>`;
                 } else {
                     // Multiple paths
@@ -1458,7 +1467,7 @@ function showNodeHoverDetails(node) {
                     pathInfo += `<div class="small text-muted" style="max-height: 150px; overflow-y: auto;">`;
 
                     allPaths.forEach((path, idx) => {
-                        const pathNames = path.map(nodeId => getNodeNameById(nodeId)).join(' → ');
+                        const pathNames = path.map(nodeId => escapeHtml(getNodeNameById(nodeId))).join(' → ');
                         pathInfo += `<div class="mb-1">${idx + 1}. ${pathNames}</div>`;
                     });
 
@@ -1469,7 +1478,7 @@ function showNodeHoverDetails(node) {
     }
 
     const content = `
-        <div><strong>${node.name}</strong></div>
+        <div><strong>${escapeHtml(node.name)}</strong></div>
         <div class="text-muted">!${nodeIdHex}</div>
         <hr class="my-2">
         ${pathInfo}
@@ -1487,10 +1496,12 @@ function showNodeHoverDetails(node) {
 function showLinkHoverDetails(link) {
     const sourceNode = currentGraph.nodes.find(n => n.id === link.source.id || n.id === link.source);
     const targetNode = currentGraph.nodes.find(n => n.id === link.target.id || n.id === link.target);
+    const sourceName = sourceNode ? escapeHtml(sourceNode.name) : escapeHtml(link.source);
+    const targetName = targetNode ? escapeHtml(targetNode.name) : escapeHtml(link.target);
 
     const content = `
         <div><strong>Link</strong></div>
-        <div class="text-muted">${sourceNode ? sourceNode.name : link.source} ↔ ${targetNode ? targetNode.name : link.target}</div>
+        <div class="text-muted">${sourceName} ↔ ${targetName}</div>
         <hr class="my-2">
         <div><strong>Type:</strong> ${link.type === 'direct' ? 'Direct RF' : 'Multi-hop'}</div>
         <div><strong>Avg SNR:</strong> ${link.avg_snr} dB</div>

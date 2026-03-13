@@ -990,6 +990,12 @@ function showAllNodes() {
     document.getElementById('searchResultsCount').style.display = 'none';
 }
 
+function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+}
+
 // Display node list (unified for search results and full list)
 function displayNodeList(nodes, isSearchResults = false) {
     const container = document.getElementById('nodeList');
@@ -1013,13 +1019,16 @@ function displayNodeList(nodes, isSearchResults = false) {
         const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
         const ageClass = getAgeClass(ageHours);
         const roleColor = getRoleColor(node.role);
+        const displayName = escapeHtml(node.display_name);
+        const role = node.role ? escapeHtml(formatRole(node.role)) : '';
+        const hwModel = node.hw_model ? escapeHtml(node.hw_model) : '';
 
         return `
             <div class="node-list-item" onclick="selectNodeFromList(${node.node_id})">
-                <div><strong>${node.display_name}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>` : ''}</div>
+                <div><strong>${displayName}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${role}</span>` : ''}</div>
                 <small class="text-muted">!${nodeIdHex}</small><br>
                 <span class="age-indicator ${ageClass}">${formatAge(ageHours)}</span>
-                ${node.hw_model ? `<small class="text-secondary ms-2">${node.hw_model}</small>` : ''}
+                ${node.hw_model ? `<small class="text-secondary ms-2">${hwModel}</small>` : ''}
             </div>
         `;
     }).join('');
@@ -1070,13 +1079,17 @@ function showSelectedNodeDetails(node) {
     const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
     const ageClass = getAgeClass(ageHours);
     const roleColor = getRoleColor(node.role);
+    const displayName = escapeHtml(node.display_name);
+    const shortName = node.short_name ? escapeHtml(node.short_name) : '';
+    const role = node.role ? escapeHtml(node.role) : '';
+    const hwModel = node.hw_model ? escapeHtml(node.hw_model) : '';
 
     const content = `
         <div class="row">
             <div class="col-12">
-                <h6>${node.display_name}</h6>
+                <h6>${displayName}</h6>
                 <p class="text-muted">Node ID: !${nodeIdHex}</p>
-                ${node.short_name ? `<p class="text-muted">Short: ${node.short_name}</p>` : ''}
+                ${node.short_name ? `<p class="text-muted">Short: ${shortName}</p>` : ''}
             </div>
         </div>
         <div class="row">
@@ -1093,7 +1106,7 @@ function showSelectedNodeDetails(node) {
         <div class="row mt-2">
             <div class="col-6">
                 <strong>Role:</strong><br>
-                <span class="badge" style="background-color: ${roleColor};">${node.role}</span>
+                <span class="badge" style="background-color: ${roleColor};">${role}</span>
             </div>
             ${node.altitude ? `
             <div class="col-6">
@@ -1114,7 +1127,7 @@ function showSelectedNodeDetails(node) {
         <div class="row mt-2">
             <div class="col-12">
                 <strong>Hardware:</strong><br>
-                <span class="text-secondary">${node.hw_model}</span>
+                <span class="text-secondary">${hwModel}</span>
             </div>
         </div>
         ` : ''}
@@ -1187,13 +1200,16 @@ function updateNodeList() {
         const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
         const ageClass = getAgeClass(ageHours);
         const roleColor = getRoleColor(node.role);
+        const displayName = escapeHtml(node.display_name);
+        const role = node.role ? escapeHtml(formatRole(node.role)) : '';
+        const hwModel = node.hw_model ? escapeHtml(node.hw_model) : '';
 
         return `
             <div class="node-list-item" onclick="selectNodeFromList(${node.node_id})">
-                <div><strong>${node.display_name}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>` : ''}</div>
+                <div><strong>${displayName}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${role}</span>` : ''}</div>
                 <small class="text-muted">!${nodeIdHex}</small><br>
                 <span class="age-indicator ${ageClass}">${formatAge(ageHours)}</span>
-                ${node.hw_model ? `<small class="text-secondary ms-2">${node.hw_model}</small>` : ''}
+                ${node.hw_model ? `<small class="text-secondary ms-2">${hwModel}</small>` : ''}
             </div>
         `;
     }).join('');

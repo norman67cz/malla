@@ -304,6 +304,12 @@ function displayNodeList(nodes, isSearchResults = false) {
     const container = document.getElementById('nodeList');
     const nodeCount = document.getElementById('nodeCount');
 
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    }
+
     if (!isSearchResults) {
         nodeCount.textContent = nodes.length;
     }
@@ -324,7 +330,7 @@ function displayNodeList(nodes, isSearchResults = false) {
     container.innerHTML = sortedNodes.map(node => {
         const nodeId = node.node_id || node.id;
         const nodeIdHex = nodeId ? nodeId.toString(16).padStart(8, '0') : '';
-        const displayName = node.display_name || node.name || `Node ${nodeIdHex}`;
+        const displayName = escapeHtml(node.display_name || node.name || `Node ${nodeIdHex}`);
 
         // Handle different node data structures
         let ageInfo = '';
@@ -342,13 +348,13 @@ function displayNodeList(nodes, isSearchResults = false) {
 
         if (node.role) {
             const roleColor = getRoleColor(node.role);
-            roleInfo = ` <span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>`;
+            roleInfo = ` <span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${escapeHtml(formatRole(node.role))}</span>`;
         }
 
         if (node.hw_model) {
-            hwInfo = `<small class="text-secondary ms-2">${node.hw_model}</small>`;
+            hwInfo = `<small class="text-secondary ms-2">${escapeHtml(node.hw_model)}</small>`;
         } else if (node.connections !== undefined) {
-            hwInfo = `<small class="text-secondary ms-2">${node.connections} connections</small>`;
+            hwInfo = `<small class="text-secondary ms-2">${escapeHtml(node.connections)} connections</small>`;
         }
 
         return `

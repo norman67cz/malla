@@ -1734,7 +1734,10 @@ class NodeRepository:
             FROM packet_history p
             WHERE p.from_node_id = ? AND p.gateway_id IS NOT NULL
             GROUP BY p.gateway_id
-            ORDER BY (direct_packet_count > 0) DESC, packet_count DESC
+            ORDER BY
+                CASE WHEN COUNT(CASE WHEN (p.hop_start - p.hop_limit) = 0 THEN 1 END) > 0
+                    THEN 1 ELSE 0 END DESC,
+                packet_count DESC
             LIMIT 15
             """
 
