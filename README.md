@@ -18,4 +18,5 @@ Made by codex:
 
 ## Uninstall
   sudo ./scripts/uninstall_malla_instance.sh --force
-
+  PURGE_POSTGRES=1 sudo ./scripts/uninstall_malla_instance.sh --force
+  PURGE_POSTGRES=1 PURGE_PACKAGES=1 sudo ./scripts/uninstall_malla_instance.sh --force
