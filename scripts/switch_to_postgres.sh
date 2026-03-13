@@ -82,6 +82,20 @@ run_cmd() {
     "$@"
 }
 
+write_build_commit_file() {
+    local commit
+
+    commit="$(git -C "$COMPOSE_PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+    [ -n "$commit" ] || commit="unknown"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "DRY-RUN: would write BUILD_COMMIT=$commit"
+        return
+    fi
+
+    printf '%s\n' "$commit" > "$COMPOSE_PROJECT_DIR/BUILD_COMMIT"
+}
+
 ensure_pg_hba_local_password_auth() {
     local hba_file
 
@@ -268,6 +282,7 @@ main() {
         --truncate
 
     update_env_file
+    write_build_commit_file
 
     log "Rebuilding and restarting application with PostgreSQL backend"
     run_cmd docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --build

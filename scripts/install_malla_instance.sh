@@ -53,6 +53,18 @@ run_as_target_user() {
     sudo -u "$RUN_AS_USER" "$@"
 }
 
+write_build_commit_file() {
+    local commit_file="$INSTALL_DIR/BUILD_COMMIT"
+    local build_commit
+
+    build_commit="$(run_as_target_user git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+    [ -n "$build_commit" ] || build_commit="unknown"
+
+    log "Writing build commit metadata to $commit_file"
+    printf '%s\n' "$build_commit" >"$commit_file"
+    chown "$RUN_AS_USER":"$RUN_AS_USER" "$commit_file"
+}
+
 require_root() {
     [ "$(id -u)" -eq 0 ] || fail "Run this script as root or via sudo"
 }
@@ -220,6 +232,7 @@ maybe_edit_env() {
 }
 
 start_application() {
+    write_build_commit_file
     log "Starting Malla with Docker Compose"
     cd "$INSTALL_DIR"
     docker compose \

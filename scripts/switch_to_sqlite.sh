@@ -65,6 +65,20 @@ run_cmd() {
     "$@"
 }
 
+write_build_commit_file() {
+    local commit
+
+    commit="$(git -C "$COMPOSE_PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+    [ -n "$commit" ] || commit="unknown"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "DRY-RUN: would write BUILD_COMMIT=$commit"
+        return
+    fi
+
+    printf '%s\n' "$commit" > "$COMPOSE_PROJECT_DIR/BUILD_COMMIT"
+}
+
 detect_sqlite_db_path() {
     if [ -n "$SQLITE_DB_PATH" ]; then
         [ -f "$SQLITE_DB_PATH" ] || fail "SQLITE_DB_PATH does not exist: $SQLITE_DB_PATH"
@@ -153,6 +167,7 @@ main() {
     log "Using SQLite path: $SQLITE_DB_PATH"
 
     update_env_file
+    write_build_commit_file
 
     log "Rebuilding and restarting application with SQLite backend"
     run_cmd docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --build

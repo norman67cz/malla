@@ -16,6 +16,11 @@ Made by codex:
   sudo ./scripts/install_malla_instance.sh sqlite
   sudo ./scripts/install_malla_instance.sh postgres
 
+## Deploy Notes
+  if you refresh manually with git pull + docker compose, write the current short commit first:
+  printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
+  this file is used by the footer to show the deployed commit hash
+
 ## Uninstall
   sudo ./scripts/uninstall_malla_instance.sh --force
   PURGE_POSTGRES=1 sudo ./scripts/uninstall_malla_instance.sh --force

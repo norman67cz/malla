@@ -63,6 +63,7 @@ MALLA_DEFAULT_CHANNEL_KEY=
 For a production-style Docker start:
 
 ```bash
+printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
@@ -107,6 +108,7 @@ If the repository already exists on the target server and `.env` is already conf
 ```bash
 cd /opt/malla
 git pull --ff-only
+printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
@@ -124,6 +126,10 @@ make deploy-remote
 ```
 
 `make deploy-remote` preserves the remote `.env`.
+
+Important:
+- the footer shows the deployed commit hash from the `BUILD_COMMIT` file
+- if you deploy with your own refresh script, generate `BUILD_COMMIT` before `docker compose up -d --build`
 
 ## 7. Optional: switch the running instance to PostgreSQL
 
