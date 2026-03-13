@@ -236,6 +236,7 @@ verify_postgres_growth() {
 main() {
     parse_args "$@"
     require_command docker
+    require_command uv
     require_command python3
     require_command psql
     require_command curl
@@ -261,7 +262,7 @@ main() {
     fi
 
     log "Migrating SQLite snapshot to PostgreSQL"
-    run_cmd python3 "$PROJECT_ROOT/scripts/migrate_sqlite_to_postgres.py" \
+    run_cmd uv run python "$PROJECT_ROOT/scripts/migrate_sqlite_to_postgres.py" \
         --sqlite-path "$SNAPSHOT_PATH" \
         --postgres-dsn "$POSTGRES_DSN" \
         --truncate
