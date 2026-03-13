@@ -130,6 +130,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let isLoading = false;
     let refreshTimer = null;
 
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    }
+
     function renderPackets(packets) {
         if (!packets.length) {
             tableBody.innerHTML = `
@@ -144,25 +150,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const statusBadge = packet.processed_successfully
                 ? '<span class="badge bg-success">{{ t("packet_detail.success") }}</span>'
                 : '<span class="badge bg-danger">{{ t("packet_detail.failed") }}</span>';
+            const fromNodeName = escapeHtml(packet.from_node_name || '');
+            const toNodeName = escapeHtml(packet.to_node_name || '');
+            const gatewayId = escapeHtml(packet.gateway_id || '-');
+            const portnumName = escapeHtml(packet.portnum_name || '');
+            const timestampStr = escapeHtml(packet.timestamp_str || '');
             const fromNode = packet.from_node_id
-                ? `<a href="/node/${packet.from_node_id}" class="text-decoration-none">${packet.from_node_name}</a>`
-                : packet.from_node_name;
+                ? `<a href="/node/${packet.from_node_id}" class="text-decoration-none">${fromNodeName}</a>`
+                : fromNodeName;
             const toNode = packet.to_node_id && packet.to_node_id !== 4294967295
-                ? `<a href="/node/${packet.to_node_id}" class="text-decoration-none">${packet.to_node_name}</a>`
-                : packet.to_node_name;
+                ? `<a href="/node/${packet.to_node_id}" class="text-decoration-none">${toNodeName}</a>`
+                : toNodeName;
 
             const receptions = packet.reception_gateways && packet.reception_gateways.length
-                ? packet.reception_gateways.map(gw => `<code>${gw}</code>`).join(', ')
+                ? packet.reception_gateways.map(gw => `<code>${escapeHtml(gw)}</code>`).join(', ')
                 : '-';
 
             return `
                 <tr>
                     <td><a href="/packet/${packet.id}" class="font-monospace text-decoration-none">${packet.id}</a></td>
-                    <td><small>${packet.timestamp_str}</small></td>
+                    <td><small>${timestampStr}</small></td>
                     <td>${fromNode}</td>
                     <td>${toNode}</td>
-                    <td><span class="badge bg-secondary">${packet.portnum_name}</span></td>
-                    <td>${packet.gateway_id || '-'}</td>
+                    <td><span class="badge bg-secondary">${portnumName}</span></td>
+                    <td>${gatewayId}</td>
                     <td>
                         <div><strong>${packet.reception_count}x</strong></div>
                         <div class="small text-muted">${receptions}</div>

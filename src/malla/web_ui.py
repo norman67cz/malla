@@ -7,11 +7,14 @@ This is the main entry point for the web UI component.
 """
 
 import atexit
+import html
 import json
 import logging
 import os
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, session
 
@@ -79,6 +82,98 @@ def make_json_safe(obj):
     else:
         # Return as-is for JSON-serializable types (str, int, float, bool, None)
         return obj
+
+
+class _HtmlAllowlistSanitizer(HTMLParser):
+    """Small allowlist sanitizer for Markdown-rendered HTML."""
+
+    allowed_tags = {
+        "a",
+        "p",
+        "br",
+        "strong",
+        "em",
+        "ul",
+        "ol",
+        "li",
+        "code",
+        "pre",
+        "blockquote",
+        "hr",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+    }
+    allowed_attrs = {
+        "a": {"href", "title"},
+    }
+    void_tags = {"br", "hr"}
+    allowed_schemes = {"http", "https", "mailto"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.parts: list[str] = []
+
+    def _sanitize_href(self, href: str) -> str | None:
+        parsed = urlparse(href)
+        if not parsed.scheme:
+            return href
+        if parsed.scheme.lower() in self.allowed_schemes:
+            return href
+        return None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag not in self.allowed_tags:
+            return
+
+        clean_attrs: list[str] = []
+        allowed_attrs = self.allowed_attrs.get(tag, set())
+        attr_dict = {name: value for name, value in attrs if name in allowed_attrs}
+
+        if tag == "a":
+            href = attr_dict.get("href")
+            if href:
+                safe_href = self._sanitize_href(href)
+                if safe_href:
+                    clean_attrs.append(f'href="{html.escape(safe_href, quote=True)}"')
+                    clean_attrs.append('rel="noopener noreferrer"')
+            title = attr_dict.get("title")
+            if title:
+                clean_attrs.append(f'title="{html.escape(title, quote=True)}"')
+        else:
+            for name, value in attr_dict.items():
+                if value is not None:
+                    clean_attrs.append(f'{name}="{html.escape(value, quote=True)}"')
+
+        attrs_rendered = f" {' '.join(clean_attrs)}" if clean_attrs else ""
+        self.parts.append(f"<{tag}{attrs_rendered}>")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.allowed_tags and tag not in self.void_tags:
+            self.parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(html.escape(data))
+
+    def handle_entityref(self, name: str) -> None:
+        self.parts.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.parts.append(f"&#{name};")
+
+    def get_html(self) -> str:
+        return "".join(self.parts)
+
+
+def sanitize_markdown_html(rendered_html: str) -> str:
+    """Sanitize HTML produced from dashboard markdown using a strict allowlist."""
+    sanitizer = _HtmlAllowlistSanitizer()
+    sanitizer.feed(rendered_html)
+    sanitizer.close()
+    return sanitizer.get_html()
 
 
 def create_app(cfg: AppConfig | None = None):  # noqa: D401
@@ -228,10 +323,11 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
             return ""
         if _markdown is None:
             logger.warning("markdown package not installed – returning raw text")
-            return text
+            return html.escape(text)
         from markupsafe import Markup
 
-        return Markup(_markdown.markdown(text))
+        rendered = _markdown.markdown(text)
+        return Markup(sanitize_markdown_html(rendered))
 
     @app.context_processor
     def inject_config():

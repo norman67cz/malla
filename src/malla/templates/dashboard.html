@@ -895,11 +895,17 @@ function populateTopNodesTable(topNodes) {
 
     tbody.innerHTML = '';
 
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    }
+
     topNodes.slice(0, 10).forEach(node => {
         const row = document.createElement('tr');
 
         // Node name with link
-        const nodeName = node.display_name || `!${node.node_id.toString(16).padStart(8, '0')}`;
+        const nodeName = escapeHtml(node.display_name || `!${node.node_id.toString(16).padStart(8, '0')}`);
         const nodeLink = `/node/${node.node_id}`;
 
         // Signal quality indicator
