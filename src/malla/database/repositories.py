@@ -2228,6 +2228,7 @@ class NodeRepository:
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            day_ago_ts = int(time.time()) - 86400
 
             # Single optimized query for tooltip data
             query = """
@@ -2250,21 +2251,100 @@ class NodeRepository:
                         MAX(timestamp) as last_packet,
                         COUNT(DISTINCT gateway_id) as gateway_count
                     FROM packet_history
-                    WHERE timestamp >= (strftime('%s', 'now') - 86400)
+                    WHERE timestamp >= ?
                       AND from_node_id = ?
                     GROUP BY from_node_id
                 ) stats ON ni.node_id = stats.node_id
                 WHERE ni.node_id = ?
             """
 
-            cursor.execute(query, (node_id, node_id))
+            cursor.execute(query, (day_ago_ts, node_id, node_id))
             node_row = cursor.fetchone()
+
+            if node_row:
+                conn.close()
+                return dict(node_row)
+
+            # Fallback for relay/route nodes that are visible in traceroutes but have no node_info row.
+            stats_query = """
+                SELECT
+                    MAX(CASE WHEN from_node_id = ? THEN timestamp END) as last_packet,
+                    SUM(CASE WHEN from_node_id = ? AND timestamp >= ? THEN 1 ELSE 0 END) as packet_count_24h,
+                    COUNT(DISTINCT CASE WHEN from_node_id = ? AND timestamp >= ? THEN gateway_id END) as gateway_count_24h,
+                    MAX(
+                        CASE
+                            WHEN from_node_id = ? OR to_node_id = ? OR relay_node = ? OR next_hop = ?
+                            THEN timestamp
+                        END
+                    ) as seen_timestamp
+                FROM packet_history
+                WHERE from_node_id = ? OR to_node_id = ? OR relay_node = ? OR next_hop = ?
+            """
+            cursor.execute(
+                stats_query,
+                (
+                    node_id,
+                    node_id,
+                    day_ago_ts,
+                    node_id,
+                    day_ago_ts,
+                    node_id,
+                    node_id,
+                    node_id,
+                    node_id,
+                    node_id,
+                    node_id,
+                    node_id,
+                    node_id,
+                ),
+            )
+            stats_row = cursor.fetchone()
             conn.close()
 
-            if not node_row:
-                return None
+            packet_count_24h = 0
+            gateway_count_24h = 0
+            last_packet_str = None
+            seen_timestamp = None
 
-            return dict(node_row)
+            if stats_row:
+                packet_count_24h = stats_row["packet_count_24h"] or 0
+                gateway_count_24h = stats_row["gateway_count_24h"] or 0
+                last_packet = stats_row["last_packet"]
+                seen_timestamp = stats_row["seen_timestamp"]
+                if last_packet:
+                    last_packet_str = datetime.fromtimestamp(
+                        float(last_packet), tz=UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+            # Return a generic tooltip payload instead of failing with 404.
+            # This keeps traceroute relay nodes hoverable even if they were never
+            # advertised via node_info.
+            if seen_timestamp or packet_count_24h > 0 or gateway_count_24h > 0:
+                return {
+                    "node_id": node_id,
+                    "long_name": None,
+                    "short_name": None,
+                    "hw_model": None,
+                    "hex_id": f"!{node_id:08x}",
+                    "role": None,
+                    "primary_channel": None,
+                    "last_packet_str": last_packet_str,
+                    "packet_count_24h": packet_count_24h,
+                    "gateway_count_24h": gateway_count_24h,
+                }
+
+            return {
+                "node_id": node_id,
+                "long_name": None,
+                "short_name": None,
+                "hw_model": None,
+                "hex_id": f"!{node_id:08x}",
+                "role": None,
+                "primary_channel": None,
+                "last_packet_str": None,
+                "packet_count_24h": 0,
+                "gateway_count_24h": 0,
+            }
 
         except Exception as e:
             logger.error(f"Error getting basic node info for {node_id}: {e}")
