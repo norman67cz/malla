@@ -296,7 +296,7 @@ def _ensure_postgres_schema_migrations(cursor) -> None:
     # without an attached sequence/default. Ensure inserts continue to work.
     cursor.execute(
         """
-        SELECT column_default
+        SELECT column_default, is_identity
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'packet_history'
@@ -305,7 +305,10 @@ def _ensure_postgres_schema_migrations(cursor) -> None:
     )
     id_default_row = cursor.fetchone()
     id_default = id_default_row["column_default"] if id_default_row else None
-    if not id_default or "nextval(" not in str(id_default):
+    is_identity = (
+        str(id_default_row["is_identity"]).upper() == "YES" if id_default_row else False
+    )
+    if not is_identity and (not id_default or "nextval(" not in str(id_default)):
         cursor.execute(
             "CREATE SEQUENCE IF NOT EXISTS packet_history_id_seq OWNED BY packet_history.id"
         )
