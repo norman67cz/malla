@@ -41,6 +41,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def get_build_commit(package_dir: Path) -> str:
+    """Return the deployed build commit from env or a build metadata file."""
+    commit = os.getenv("MALLA_GIT_COMMIT", "").strip()
+    if commit:
+        return commit
+
+    commit_file = package_dir.parent.parent / "BUILD_COMMIT"
+    try:
+        file_commit = commit_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
+
+    return file_commit or "unknown"
+
+
 def make_json_safe(obj):
     """
     Recursively convert an object to be JSON-serializable by handling bytes objects.
@@ -227,6 +242,7 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
             "APP_NAME": cfg.name,
             "APP_CONFIG": cfg,
             "DATABASE_FILE": cfg.database_file,
+            "BUILD_COMMIT": get_build_commit(package_dir),
             "current_lang": current_lang,
             "t": lambda key: translate(key, current_lang),
         }

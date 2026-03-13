@@ -6,6 +6,7 @@ DEPLOY_HOST="${DEPLOY_HOST:-10.5.0.71}"
 DEPLOY_USER="${DEPLOY_USER:-}"
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/malla}"
 SSH_TARGET="${DEPLOY_USER:+${DEPLOY_USER}@}${DEPLOY_HOST}"
+BUILD_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)"
 
 if ! command -v ssh >/dev/null 2>&1; then
     echo "ssh is required"
@@ -45,6 +46,8 @@ else
     echo "Either rsync or tar is required for deployment"
     exit 1
 fi
+
+ssh "$SSH_TARGET" "printf '%s\n' '$BUILD_COMMIT' > '$DEPLOY_PATH/BUILD_COMMIT'"
 
 echo "Rebuilding containers on ${SSH_TARGET}"
 ssh "$SSH_TARGET" "

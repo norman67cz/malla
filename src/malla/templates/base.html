@@ -55,6 +55,14 @@
             text-align: center;
         }
 
+        .footer-meta {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
         /* Node tooltip styles */
         .node-link {
             position: relative;
@@ -251,13 +259,10 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <small>Powered by <a href="https://github.com/norman67cz/malla">Malla</a></small>
-                </div>
-                <div class="col-md-6">
-                    <small>Version 2026.03.13</small>
-                </div>
+            <div class="footer-meta">
+                <small>Powered by <a href="https://github.com/norman67cz/malla">Malla</a></small>
+                <small>Version 2026.03.13</small>
+                <small>Commit {{ BUILD_COMMIT }}</small>
             </div>
         </div>
     </footer>
