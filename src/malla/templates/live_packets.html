@@ -1,9 +1,26 @@
 {% extends "base.html" %}
+{% from "components/table_layout_macros.html" import table_layout_styles %}
 
 {% block title %}{{ t('page.live_log_title') }} - Malla{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
+{{ table_layout_styles() }}
 <style>
+    .live-log-layout .table-sidebar,
+    .live-log-layout #toggleSidebar {
+        display: none !important;
+    }
+
+    .live-log-layout .table-main {
+        width: 100%;
+    }
+
+    .live-log-layout .table-content {
+        padding: 0;
+        overflow: auto;
+    }
+
     .live-log-status {
         min-width: 11rem;
         text-align: center;
@@ -19,6 +36,21 @@
     .live-log-header-meta {
         white-space: nowrap;
     }
+
+    .live-log-toolbar {
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .live-log-toolbar h5 {
+        margin: 0;
+    }
+
+    @media (max-width: 768px) {
+        .live-log-toolbar {
+            padding: 0.75rem 1rem;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -26,57 +58,58 @@
 <!-- Override the base template's container to make this page full-width -->
 </div> <!-- Close the base template's container -->
 
-<div class="container-fluid mt-4 px-4">
-    <div class="row mb-3 align-items-center">
-        <div class="col-md-8">
-            <h1 class="h3 mb-1"><i class="bi bi-activity"></i> {{ t('page.live_log_title') }}</h1>
-            <p class="text-muted mb-0">{{ t('live_log.subtitle') }}</p>
-        </div>
-        <div class="col-md-4 text-md-end live-log-header-meta">
-            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
-                {{ t('live_log.auto_refresh_on') }}
-            </span>
-            <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h5 class="mb-0">{{ t('live_log.latest_packets') }}</h5>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleRefresh">
-                    {{ t('live_log.pause') }}
-                </button>
-                <button type="button" class="btn btn-sm btn-primary" id="refreshNow">
-                    {{ t('common.refresh') }}
-                </button>
+<div class="live-log-layout">
+    <div class="table-container">
+        <div class="table-main">
+            <div class="table-header">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center">
+                        <h2><i class="bi bi-activity"></i> {{ t('page.live_log_title') }}</h2>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 ms-md-auto live-log-header-meta">
+                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
+                            {{ t('live_log.auto_refresh_on') }}
+                        </span>
+                        <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleRefresh">
+                                {{ t('live_log.pause') }}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-primary" id="refreshNow">
+                                {{ t('common.refresh') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0 align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>{{ t('common.time') }}</th>
-                            <th>{{ t('common.from') }}</th>
-                            <th>{{ t('common.to') }}</th>
-                            <th>{{ t('common.protocol') }}</th>
-                            <th>{{ t('common.gateway') }}</th>
-                            <th>{{ t('live_log.receptions') }}</th>
-                            <th>{{ t('live_log.size') }}</th>
-                            <th>RSSI</th>
-                            <th>SNR</th>
-                            <th>{{ t('common.hops') }}</th>
-                            <th>{{ t('common.status') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody id="livePacketsTable">
-                        <tr>
-                            <td colspan="12" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="table-content">
+                <div class="modern-table-container">
+                    <div class="table-responsive">
+                        <table class="modern-table mb-0 align-middle">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>{{ t('common.time') }}</th>
+                                    <th>{{ t('common.from') }}</th>
+                                    <th>{{ t('common.to') }}</th>
+                                    <th>{{ t('common.protocol') }}</th>
+                                    <th>{{ t('common.gateway') }}</th>
+                                    <th>{{ t('live_log.receptions') }}</th>
+                                    <th>{{ t('live_log.size') }}</th>
+                                    <th>RSSI</th>
+                                    <th>SNR</th>
+                                    <th>{{ t('common.hops') }}</th>
+                                    <th>{{ t('common.status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody id="livePacketsTable">
+                                <tr>
+                                    <td colspan="12" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
