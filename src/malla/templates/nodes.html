@@ -107,6 +107,37 @@
 <script src="{{ url_for('static', filename='js/modern-table.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    function fallbackCopyToClipboard(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (error) {
+            copied = false;
+        }
+
+        document.body.removeChild(textarea);
+        return copied;
+    }
+
+    async function copyToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+
+        return fallbackCopyToClipboard(text);
+    }
+
     // Move sidebar content into the actual sidebar FIRST
     const sidebarContent = document.getElementById('sidebarContent');
     const sidebarContainer = document.querySelector('.sidebar-content');
@@ -385,11 +416,38 @@ document.addEventListener('DOMContentLoaded', function() {
     const applyFiltersBtn = document.getElementById('applyFilters');
     const clearFiltersBtn = document.getElementById('clearFilters');
     const refreshBtn = document.getElementById('refreshTable');
+    const shareBtn = document.getElementById('shareFilters');
 
     applyFiltersBtn.addEventListener('click', () => controller.applyCurrentFilters());
     clearFiltersBtn.addEventListener('click', () => controller.clearFilters());
     refreshBtn.addEventListener('click', () => {
         table.refresh();
+    });
+    shareBtn.addEventListener('click', async () => {
+        controller.applyCurrentFilters();
+        const shareUrl = window.location.href;
+        const originalHtml = shareBtn.innerHTML;
+
+        try {
+            const copied = await copyToClipboard(shareUrl);
+            if (!copied) {
+                throw new Error('Clipboard access unavailable');
+            }
+            shareBtn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+            shareBtn.classList.remove('btn-outline-success');
+            shareBtn.classList.add('btn-success');
+        } catch (error) {
+            console.error('Failed to copy share URL:', error);
+            shareBtn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Copy failed';
+            shareBtn.classList.remove('btn-outline-success');
+            shareBtn.classList.add('btn-danger');
+        }
+
+        setTimeout(() => {
+            shareBtn.innerHTML = originalHtml;
+            shareBtn.classList.remove('btn-success', 'btn-danger');
+            shareBtn.classList.add('btn-outline-success');
+        }, 1800);
     });
 
     // Initialize tooltips after table loads
