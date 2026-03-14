@@ -1873,6 +1873,49 @@ def api_nodes_data():
         return jsonify({"error": str(e), "data": [], "total_count": 0}), 500
 
 
+@api_bp.route("/statistic/data", methods=["GET"])
+def api_statistic_data():
+    """Modern table endpoint for per-node packet type statistics."""
+    logger.info("API statistic endpoint accessed")
+    try:
+        cache_key = _get_table_cache_key("statistic_data")
+        now_ts = time.time()
+        cached = _TABLE_ENDPOINT_CACHE.get(cache_key)
+        if cached and (now_ts - cached[0] < _TABLE_ENDPOINT_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
+
+        page = request.args.get("page", type=int, default=1)
+        limit = request.args.get("limit", type=int, default=100)
+        search = request.args.get("search", default="")
+        sort_by = request.args.get("sort_by", default="node_name")
+        sort_order = request.args.get("sort_order", default="asc")
+        period = request.args.get("period", default="1d")
+        offset = (page - 1) * limit
+
+        result = NodeRepository.get_packet_type_statistics(
+            period=period,
+            limit=limit,
+            offset=offset,
+            order_by=sort_by,
+            order_dir=sort_order,
+            search=search,
+        )
+
+        response = {
+            "data": result["rows"],
+            "total_count": result["total_count"],
+            "page": page,
+            "limit": limit,
+            "period": result["period"],
+            "total_pages": (result["total_count"] + limit - 1) // limit,
+        }
+        _TABLE_ENDPOINT_CACHE[cache_key] = (now_ts, response)
+        return safe_jsonify(response)
+    except Exception as e:
+        logger.error(f"Error in API statistic data: {e}")
+        return jsonify({"error": str(e), "data": [], "total_count": 0}), 500
+
+
 @api_bp.route("/traceroute/data", methods=["GET"])
 def api_traceroute_data():
     """Modern table endpoint for traceroutes with structured JSON response."""

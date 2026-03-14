@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% from "components/table_layout_macros.html" import table_layout_styles %}
+
+{% block title %}{{ t('page.statistic_title') }} - Malla{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
+{{ table_layout_styles() }}
+<style>
+    .statistic-layout .table-sidebar,
+    .statistic-layout #toggleSidebar {
+        display: none !important;
+    }
+
+    .statistic-layout .table-main {
+        width: 100%;
+    }
+
+    .statistic-layout .table-content {
+        padding: 0;
+        overflow: auto;
+    }
+
+    .statistic-header-controls {
+        white-space: nowrap;
+    }
+
+    .statistic-period-buttons .btn {
+        min-width: 5.5rem;
+    }
+
+    .statistic-node-link {
+        font-weight: 500;
+    }
+
+    .statistic-count {
+        font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 768px) {
+        .statistic-period-buttons .btn {
+            min-width: 0;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+</div> <!-- Close the base template's container -->
+
+<div class="statistic-layout">
+    <div class="table-container">
+        <div class="table-main">
+            <div class="table-header">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <h2 class="mb-0"><i class="bi bi-table"></i> {{ t('page.statistic_title') }}</h2>
+                        <span class="text-muted small" id="statisticPeriodLabel">1 day</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 ms-md-auto statistic-header-controls">
+                        <div class="btn-group btn-group-sm statistic-period-buttons" role="group" aria-label="Time period">
+                            <button type="button" class="btn btn-outline-primary" data-period="1h">1 hour</button>
+                            <button type="button" class="btn btn-primary" data-period="1d">1 day</button>
+                            <button type="button" class="btn btn-outline-primary" data-period="7d">7 days</button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshStatisticTable">
+                            {{ t('common.refresh') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="table-content">
+                <div id="statisticTable"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modern-table.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const periodButtons = document.querySelectorAll('[data-period]');
+    const periodLabel = document.getElementById('statisticPeriodLabel');
+    const refreshButton = document.getElementById('refreshStatisticTable');
+    const periodLabels = {
+        '1h': '1 hour',
+        '1d': '1 day',
+        '7d': '7 days'
+    };
+
+    const table = new ModernTable('statisticTable', {
+        endpoint: '/api/statistic/data',
+        enableSearch: true,
+        enablePagination: true,
+        pageSize: 100,
+        deferInitialLoad: true,
+        defaultSort: { column: 'node_name', direction: 'asc' },
+        filters: {
+            period: '1d'
+        },
+        columns: [
+            {
+                key: 'node_name',
+                title: 'Node',
+                sortable: true,
+                render: (value, row) => {
+                    const display = value || `!${Number(row.node_id).toString(16).padStart(8, '0')}`;
+                    return `<a href="/node/${row.node_id}" class="text-decoration-none statistic-node-link">${display}</a>`;
+                }
+            },
+            { key: 'telemetry', title: 'Telemetry', sortable: true, render: renderCount },
+            { key: 'position', title: 'Position', sortable: true, render: renderCount },
+            { key: 'nodeinfo', title: 'NodeInfo', sortable: true, render: renderCount },
+            { key: 'traceroute', title: 'Traceroute', sortable: true, render: renderCount },
+            { key: 'textmessage', title: 'TextMessage', sortable: true, render: renderCount },
+            { key: 'mapreport', title: 'MapReport', sortable: true, render: renderCount },
+            { key: 'routing', title: 'Routing', sortable: true, render: renderCount },
+            { key: 'neighborinfo', title: 'NeighborInfo', sortable: true, render: renderCount },
+            { key: 'admin', title: 'Admin', sortable: true, render: renderCount },
+            { key: 'waypoint', title: 'Waypoint', sortable: true, render: renderCount },
+            { key: 'unknown', title: 'Unknown', sortable: true, render: renderCount }
+        ]
+    });
+
+    function renderCount(value) {
+        const count = Number(value) || 0;
+        return `<span class="statistic-count">${count}</span>`;
+    }
+
+    function setPeriod(period) {
+        const normalized = periodLabels[period] ? period : '1d';
+        table.setFilters({ period: normalized });
+        periodLabel.textContent = periodLabels[normalized];
+
+        periodButtons.forEach(button => {
+            const isActive = button.dataset.period === normalized;
+            button.className = isActive ? 'btn btn-primary' : 'btn btn-outline-primary';
+        });
+    }
+
+    periodButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            setPeriod(this.dataset.period);
+        });
+    });
+
+    refreshButton.addEventListener('click', function() {
+        table.refresh();
+    });
+
+    setPeriod('1d');
+});
+</script>
+{% endblock %}

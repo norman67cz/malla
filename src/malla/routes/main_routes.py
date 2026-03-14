@@ -94,6 +94,16 @@ def help_page():
         return f"Help error: {e}", 500
 
 
+@main_bp.route("/statistic")
+def statistic_page():
+    """Per-node packet type statistics page."""
+    try:
+        return render_template("statistic.html")
+    except Exception as e:
+        logger.error(f"Error in statistic route: {e}")
+        return f"Statistic error: {e}", 500
+
+
 @main_bp.route("/set-language/<lang>")
 def set_language(lang: str):
     """Store the selected UI language in the session and return back."""

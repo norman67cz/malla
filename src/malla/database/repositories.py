@@ -918,6 +918,149 @@ class NodeRepository:
     """Repository for node operations."""
 
     @staticmethod
+    def get_packet_type_statistics(
+        period: str = "1d",
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "node_name",
+        order_dir: str = "asc",
+        search: str | None = None,
+    ) -> dict[str, Any]:
+        """Get per-node packet type counts for a selected time period."""
+        period_map = {
+            "1h": 3600,
+            "1d": 24 * 3600,
+            "7d": 7 * 24 * 3600,
+        }
+        seconds = period_map.get(period, period_map["1d"])
+        since_ts = time.time() - seconds
+
+        order_map = {
+            "node_name": "node_name",
+            "telemetry": "telemetry",
+            "position": "position",
+            "nodeinfo": "nodeinfo",
+            "traceroute": "traceroute",
+            "textmessage": "textmessage",
+            "mapreport": "mapreport",
+            "routing": "routing",
+            "neighborinfo": "neighborinfo",
+            "admin": "admin",
+            "waypoint": "waypoint",
+            "unknown": "unknown",
+        }
+        order_column = order_map.get(order_by, "node_name")
+        order_direction = "DESC" if str(order_dir).lower() == "desc" else "ASC"
+
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            where_conditions = [
+                "p.timestamp >= ?",
+                "p.from_node_id IS NOT NULL",
+            ]
+            params: list[Any] = [since_ts]
+
+            if search:
+                search_param = f"%{search.strip()}%"
+                where_conditions.append(
+                    "("
+                    "ni.long_name LIKE ? OR "
+                    "ni.short_name LIKE ? OR "
+                    "CAST(p.from_node_id AS TEXT) LIKE ? OR "
+                    "printf('!%08x', p.from_node_id) LIKE ?"
+                    ")"
+                )
+                params.extend(
+                    [search_param, search_param, search_param, search_param]
+                )
+
+            where_clause = " AND ".join(where_conditions)
+
+            base_cte = f"""
+                WITH aggregated_nodes AS (
+                    SELECT
+                        p.from_node_id AS node_id,
+                        COALESCE(
+                            ni.long_name,
+                            ni.short_name,
+                            printf('!%08x', p.from_node_id)
+                        ) AS node_name,
+                        SUM(CASE WHEN p.portnum_name = 'TELEMETRY_APP' THEN 1 ELSE 0 END) AS telemetry,
+                        SUM(CASE WHEN p.portnum_name = 'POSITION_APP' THEN 1 ELSE 0 END) AS position,
+                        SUM(CASE WHEN p.portnum_name = 'NODEINFO_APP' THEN 1 ELSE 0 END) AS nodeinfo,
+                        SUM(CASE WHEN p.portnum_name = 'TRACEROUTE_APP' THEN 1 ELSE 0 END) AS traceroute,
+                        SUM(CASE WHEN p.portnum_name = 'TEXT_MESSAGE_APP' THEN 1 ELSE 0 END) AS textmessage,
+                        SUM(CASE WHEN p.portnum_name = 'MAP_REPORT_APP' THEN 1 ELSE 0 END) AS mapreport,
+                        SUM(CASE WHEN p.portnum_name = 'ROUTING_APP' THEN 1 ELSE 0 END) AS routing,
+                        SUM(CASE WHEN p.portnum_name = 'NEIGHBORINFO_APP' THEN 1 ELSE 0 END) AS neighborinfo,
+                        SUM(CASE WHEN p.portnum_name = 'ADMIN_APP' THEN 1 ELSE 0 END) AS admin,
+                        SUM(CASE WHEN p.portnum_name = 'WAYPOINT_APP' THEN 1 ELSE 0 END) AS waypoint,
+                        SUM(
+                            CASE
+                                WHEN p.portnum_name IS NULL OR p.portnum_name = 'UNKNOWN_APP' OR p.portnum_name NOT IN (
+                                    'TELEMETRY_APP',
+                                    'POSITION_APP',
+                                    'NODEINFO_APP',
+                                    'TRACEROUTE_APP',
+                                    'TEXT_MESSAGE_APP',
+                                    'MAP_REPORT_APP',
+                                    'ROUTING_APP',
+                                    'NEIGHBORINFO_APP',
+                                    'ADMIN_APP',
+                                    'WAYPOINT_APP'
+                                ) THEN 1
+                                ELSE 0
+                            END
+                        ) AS unknown
+                    FROM packet_history p
+                    LEFT JOIN node_info ni ON ni.node_id = p.from_node_id
+                    WHERE {where_clause}
+                    GROUP BY p.from_node_id, ni.long_name, ni.short_name
+                )
+            """
+
+            count_query = base_cte + " SELECT COUNT(*) AS total_count FROM aggregated_nodes"
+            cursor.execute(count_query, params)
+            total_count = cursor.fetchone()["total_count"] or 0
+
+            data_query = (
+                base_cte
+                + f"""
+                SELECT
+                    node_id,
+                    node_name,
+                    telemetry,
+                    position,
+                    nodeinfo,
+                    traceroute,
+                    textmessage,
+                    mapreport,
+                    routing,
+                    neighborinfo,
+                    admin,
+                    waypoint,
+                    unknown
+                FROM aggregated_nodes
+                ORDER BY {order_column} {order_direction}, node_name ASC
+                LIMIT ? OFFSET ?
+                """
+            )
+            cursor.execute(data_query, [*params, limit, offset])
+            rows = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+
+            return {
+                "rows": rows,
+                "total_count": total_count,
+                "period": period,
+            }
+        except Exception as e:
+            logger.error(f"Error getting packet type statistics: {e}")
+            raise
+
+    @staticmethod
     def get_nodes(
         limit: int = 100,
         offset: int = 0,
