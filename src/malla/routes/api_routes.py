@@ -932,6 +932,9 @@ def api_locations():
         # 2. Get packet links (used by get_node_locations and returned in response)
         packet_links = LocationService.get_packet_links(filters)
 
+        # 2b. Get NeighborInfo links as a separate optional layer
+        neighborinfo_links = LocationService.get_neighborinfo_links(filters)
+
         # 3. Get enhanced location data, passing pre-computed data
         locations = LocationService.get_node_locations(
             filters, network_data=network_data, packet_links=packet_links
@@ -949,6 +952,7 @@ def api_locations():
             "locations": locations,
             "traceroute_links": traceroute_links,
             "packet_links": packet_links,
+            "neighborinfo_links": neighborinfo_links,
             "total_count": len(locations) if isinstance(locations, list) else 0,
             "filters_applied": filters,
             "data_period_days": 3,

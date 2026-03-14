@@ -8,6 +8,8 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from meshtastic import mesh_pb2
+
 from ..database.repositories import LocationRepository
 
 logger = logging.getLogger(__name__)
@@ -1020,4 +1022,158 @@ class LocationService:
 
         except Exception as e:
             logger.error("Error getting packet links: %s", e)
+            return []
+
+    @staticmethod
+    def get_neighborinfo_links(
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build map links from the latest NEIGHBORINFO_APP reported by each node."""
+        if filters is None:
+            filters = {}
+
+        logger.info(
+            "Getting NeighborInfo-based links for map visualisation with filters: %s",
+            filters,
+        )
+
+        try:
+            from ..database.connection import get_db_connection
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            where_clauses = [
+                "ph.portnum_name = 'NEIGHBORINFO_APP'",
+                "ph.raw_payload IS NOT NULL",
+                "ph.from_node_id IS NOT NULL",
+            ]
+            params: list[Any] = []
+
+            if filters.get("start_time") is not None:
+                where_clauses.append("ph.timestamp >= ?")
+                params.append(filters["start_time"])
+            if filters.get("end_time") is not None:
+                where_clauses.append("ph.timestamp <= ?")
+                params.append(filters["end_time"])
+
+            where_sql = " AND ".join(where_clauses)
+            query = f"""
+                SELECT ph.from_node_id, ph.timestamp, ph.raw_payload
+                FROM packet_history ph
+                INNER JOIN (
+                    SELECT from_node_id, MAX(timestamp) AS max_timestamp
+                    FROM packet_history ph2
+                    WHERE {where_sql.replace('ph.', 'ph2.')}
+                    GROUP BY from_node_id
+                ) latest
+                    ON latest.from_node_id = ph.from_node_id
+                   AND latest.max_timestamp = ph.timestamp
+                WHERE {where_sql}
+            """
+            cursor.execute(query, params * 2)
+            rows = [dict(r) for r in cursor.fetchall()]
+            conn.close()
+
+            now_ts = datetime.now().timestamp()
+            link_map: dict[tuple[int, int], dict[str, Any]] = {}
+
+            for row in rows:
+                from_node_id = row["from_node_id"]
+                if from_node_id is None or not row["raw_payload"]:
+                    continue
+
+                try:
+                    neighbor_info = mesh_pb2.NeighborInfo()
+                    neighbor_info.ParseFromString(row["raw_payload"])
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(
+                        "Skipping invalid NEIGHBORINFO_APP for node %s: %s",
+                        from_node_id,
+                        exc,
+                    )
+                    continue
+
+                for neighbor in neighbor_info.neighbors:
+                    neighbor_id = getattr(neighbor, "node_id", 0)
+                    if not neighbor_id or neighbor_id == from_node_id:
+                        continue
+
+                    key = (
+                        (from_node_id, neighbor_id)
+                        if from_node_id < neighbor_id
+                        else (neighbor_id, from_node_id)
+                    )
+
+                    age_hours = (
+                        (now_ts - row["timestamp"]) / 3600.0
+                        if row["timestamp"]
+                        else None
+                    )
+                    last_seen_str = (
+                        datetime.fromtimestamp(row["timestamp"], UTC).strftime(
+                            "%Y-%m-%d %H:%M:%S UTC"
+                        )
+                        if row["timestamp"]
+                        else None
+                    )
+
+                    payload = {
+                        "from_node_id": key[0],
+                        "to_node_id": key[1],
+                        "success_rate": 100,
+                        "avg_snr": float(neighbor.snr)
+                        if getattr(neighbor, "snr", None) is not None
+                        else None,
+                        "avg_rssi": None,
+                        "age_hours": round(age_hours, 2) if age_hours is not None else None,
+                        "last_seen": row["timestamp"],
+                        "last_seen_str": last_seen_str,
+                        "is_bidirectional": False,
+                        "total_hops_seen": 1,
+                        "report_count": 1,
+                        "last_packet_id": row.get("id"),
+                        "neighbor_last_rx_time": (
+                            neighbor.last_rx_time
+                            if getattr(neighbor, "last_rx_time", 0)
+                            else None
+                        ),
+                        "neighbor_broadcast_interval_secs": (
+                            neighbor.node_broadcast_interval_secs
+                            if getattr(neighbor, "node_broadcast_interval_secs", 0)
+                            else None
+                        ),
+                    }
+
+                    if key in link_map:
+                        existing = link_map[key]
+                        existing["report_count"] += 1
+                        existing["is_bidirectional"] = True
+                        existing["total_hops_seen"] = existing["report_count"]
+                        if payload["avg_snr"] is not None:
+                            if existing["avg_snr"] is None:
+                                existing["avg_snr"] = payload["avg_snr"]
+                            else:
+                                existing["avg_snr"] = (
+                                    existing["avg_snr"] + payload["avg_snr"]
+                                ) / 2.0
+                        if row["timestamp"] and (
+                            existing.get("last_seen") is None
+                            or row["timestamp"] > existing["last_seen"]
+                        ):
+                            existing["last_seen"] = row["timestamp"]
+                            existing["last_seen_str"] = last_seen_str
+                            existing["age_hours"] = payload["age_hours"]
+                            existing["neighbor_last_rx_time"] = payload[
+                                "neighbor_last_rx_time"
+                            ]
+                            existing["neighbor_broadcast_interval_secs"] = payload[
+                                "neighbor_broadcast_interval_secs"
+                            ]
+                    else:
+                        link_map[key] = payload
+
+            return list(link_map.values())
+        except Exception as e:
+            logger.error(f"Error getting NeighborInfo links: {e}")
             return []
