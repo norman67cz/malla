@@ -10,6 +10,7 @@ from typing import Any
 
 from meshtastic import mesh_pb2
 
+from ..database.connection import get_db_connection
 from ..database.repositories import LocationRepository
 
 logger = logging.getLogger(__name__)
@@ -1177,3 +1178,36 @@ class LocationService:
         except Exception as e:
             logger.error(f"Error getting NeighborInfo links: {e}")
             return []
+
+    @staticmethod
+    def get_mobile_bts_sites() -> list[dict[str, Any]]:
+        """Return imported Czech public mobile BTS sites for the map layer."""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT
+                    operator,
+                    radio,
+                    band_mhz,
+                    frequency_window,
+                    district_code,
+                    location_text,
+                    latitude,
+                    longitude,
+                    cell_count,
+                    latest_seen_date,
+                    source,
+                    source_url
+                FROM mobile_bts_sites
+                ORDER BY operator, band_mhz, location_text
+                """
+            )
+            rows = cursor.fetchall()
+            return [dict(row.items()) for row in rows]
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Failed to get mobile BTS sites: {e}")
+            return []
+        finally:
+            conn.close()

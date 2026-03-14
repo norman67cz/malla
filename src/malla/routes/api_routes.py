@@ -935,6 +935,9 @@ def api_locations():
         # 2b. Get NeighborInfo links as a separate optional layer
         neighborinfo_links = LocationService.get_neighborinfo_links(filters)
 
+        # 2c. Get imported public mobile BTS sites for 800/900 MHz bands
+        mobile_bts_sites = LocationService.get_mobile_bts_sites()
+
         # 3. Get enhanced location data, passing pre-computed data
         locations = LocationService.get_node_locations(
             filters, network_data=network_data, packet_links=packet_links
@@ -953,6 +956,7 @@ def api_locations():
             "traceroute_links": traceroute_links,
             "packet_links": packet_links,
             "neighborinfo_links": neighborinfo_links,
+            "mobile_bts_sites": mobile_bts_sites,
             "total_count": len(locations) if isinstance(locations, list) else 0,
             "filters_applied": filters,
             "data_period_days": 3,

@@ -488,6 +488,53 @@ def init_database() -> None:
     cursor.execute("DROP INDEX IF EXISTS idx_packet_from_node")
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_node_hex_id ON node_info(hex_id)")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mobile_bts_sites (
+            id BIGSERIAL PRIMARY KEY,
+            site_key TEXT NOT NULL UNIQUE,
+            operator TEXT NOT NULL,
+            radio TEXT NOT NULL,
+            band_mhz BIGINT NOT NULL,
+            frequency_window TEXT NOT NULL,
+            district_code TEXT,
+            location_text TEXT NOT NULL,
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            cell_count BIGINT NOT NULL DEFAULT 1,
+            latest_seen_date TEXT,
+            source TEXT NOT NULL,
+            source_url TEXT,
+            imported_at DOUBLE PRECISION NOT NULL
+        )
+    """
+        if DATABASE_BACKEND == "postgres"
+        else """
+        CREATE TABLE IF NOT EXISTS mobile_bts_sites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_key TEXT NOT NULL UNIQUE,
+            operator TEXT NOT NULL,
+            radio TEXT NOT NULL,
+            band_mhz INTEGER NOT NULL,
+            frequency_window TEXT NOT NULL,
+            district_code TEXT,
+            location_text TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            cell_count INTEGER NOT NULL DEFAULT 1,
+            latest_seen_date TEXT,
+            source TEXT NOT NULL,
+            source_url TEXT,
+            imported_at REAL NOT NULL
+        )
+    """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mobile_bts_window ON mobile_bts_sites(frequency_window)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mobile_bts_operator ON mobile_bts_sites(operator)"
+    )
 
     # Ensure newer node metadata columns exist for legacy databases
     legacy_columns = [

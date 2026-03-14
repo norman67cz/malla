@@ -156,6 +156,10 @@
                 <input class="form-check-input" type="checkbox" id="neighborInfoLinksCheckbox">
                 <label class="form-check-label" for="neighborInfoLinksCheckbox">{{ t('map.neighborinfo_links') }}</label>
             </div>
+            <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" id="mobileBtsCheckbox">
+                <label class="form-check-label" for="mobileBtsCheckbox">{{ t('map.mobile_bts_sites') }}</label>
+            </div>
         </div>
 
         <!-- Hop depth selector (shown only when a node is selected) -->
@@ -426,18 +430,22 @@ let markerClusterGroup;
 let tracerouteLinks = [];
 let packetLinks = [];
 let neighborInfoLinks = [];
+let mobileBtsMarkers = [];
 let nodeData = [];
 let tracerouteLinkData = [];
 let packetLinkData = [];
 let neighborInfoLinkData = [];
+let mobileBtsData = [];
 let allNodeData = [];
 let allTracerouteLinks = [];
 let allPacketLinks = [];
 let allNeighborInfoLinks = [];
+let allMobileBtsData = [];
 let selectedNodeId = null;
 let showTracerouteLinks = true;
 let showPacketLinks = false;
 let showNeighborInfoLinks = false;
+let showMobileBtsSites = false;
 let precisionCircle = null;
 let searchResults = [];
 let allNodes = [];
@@ -602,6 +610,13 @@ function initializeInterface() {
         }
     });
 
+    $('#mobileBtsCheckbox').on('change', function() {
+        const desiredState = this.checked;
+        if (desiredState !== showMobileBtsSites) {
+            toggleMobileBtsSites();
+        }
+    });
+
     // Hop depth selector change handler
     $('#hopDepthSelect').on('change', function() {
         currentHopDepth = parseInt(this.value, 10);
@@ -732,6 +747,12 @@ function initMap() {
     });
     map.addLayer(markerClusterGroup);
 
+    map.on('moveend zoomend', function() {
+        if (showMobileBtsSites) {
+            drawMobileBtsSites();
+        }
+    });
+
     // Load node data
     loadNodeLocations();
 }
@@ -769,6 +790,7 @@ async function loadNodeLocations() {
         const tracerouteLinksFetched = (data.traceroute_links || []).map(l => ({ ...l, link_type: 'traceroute' }));
         const packetLinksFetched = (data.packet_links || []).map(l => ({ ...l, link_type: 'packet' }));
         const neighborInfoLinksFetched = (data.neighborinfo_links || []).map(l => ({ ...l, link_type: 'neighborinfo' }));
+        allMobileBtsData = data.mobile_bts_sites || [];
 
         allLinkData = [...tracerouteLinksFetched, ...packetLinksFetched, ...neighborInfoLinksFetched];
 
@@ -866,6 +888,7 @@ function applyClientSideFilters() {
     tracerouteLinkData = filteredLinks.filter(link => link.link_type === 'traceroute');
     packetLinkData = filteredLinks.filter(link => link.link_type === 'packet');
     neighborInfoLinkData = filteredLinks.filter(link => link.link_type === 'neighborinfo');
+    mobileBtsData = [...allMobileBtsData];
     allNodes = nodeData; // Set the unified node list
 
     // Update the map display
@@ -900,6 +923,10 @@ function updateMapDisplay() {
 
     if (showNeighborInfoLinks && neighborInfoLinkData.length > 0) {
         drawNeighborInfoLinks();
+    }
+
+    if (showMobileBtsSites && mobileBtsData.length > 0) {
+        drawMobileBtsSites();
     }
 
     // Fit map only on first render
@@ -1474,6 +1501,22 @@ function toggleNeighborInfoLinks() {
     }
 }
 
+function toggleMobileBtsSites() {
+    showMobileBtsSites = !showMobileBtsSites;
+
+    mobileBtsMarkers.forEach(marker => map.removeLayer(marker));
+    mobileBtsMarkers = [];
+
+    if (selectedNodeId !== null) {
+        drawHopNetwork();
+        return;
+    }
+
+    if (showMobileBtsSites) {
+        drawMobileBtsSites();
+    }
+}
+
 // Draw traceroute links on the map
 function drawTracerouteLinks() {
     drawTracerouteLinksFiltered(null);
@@ -1668,6 +1711,104 @@ function drawNeighborInfoLinksFiltered(filterNodeId = null) {
     });
 }
 
+function drawMobileBtsSites() {
+    mobileBtsMarkers.forEach(marker => map.removeLayer(marker));
+    mobileBtsMarkers = [];
+
+    const viewportNodes = getViewportNodes(nodeData);
+    const visibleSites = filterMobileBtsSitesByDistance(mobileBtsData, viewportNodes, 2.0);
+
+    visibleSites.forEach(site => {
+        if (!site.latitude || !site.longitude) {
+            return;
+        }
+
+        const marker = L.circleMarker([site.latitude, site.longitude], {
+            radius: 6,
+            color: '#ff006e',
+            weight: 2,
+            fillColor: '#ff006e',
+            fillOpacity: 0.75,
+            opacity: 0.95
+        });
+
+        marker.bindPopup(createMobileBtsPopupContent(site));
+        marker.addTo(map);
+        mobileBtsMarkers.push(marker);
+    });
+}
+
+function filterMobileBtsSitesByDistance(sites, nodes, maxDistanceKm) {
+    if (!Array.isArray(sites) || !Array.isArray(nodes) || nodes.length === 0) {
+        return [];
+    }
+
+    return sites.filter(site => nodes.some(node => {
+        if (!node.latitude || !node.longitude || !site.latitude || !site.longitude) {
+            return false;
+        }
+
+        return calculateDistanceKm(
+            site.latitude,
+            site.longitude,
+            node.latitude,
+            node.longitude
+        ) < maxDistanceKm;
+    }));
+}
+
+function getViewportNodes(nodes) {
+    if (!map || !Array.isArray(nodes) || nodes.length === 0) {
+        return [];
+    }
+
+    const bounds = map.getBounds();
+    return nodes.filter(node => (
+        node.latitude != null &&
+        node.longitude != null &&
+        bounds.contains([node.latitude, node.longitude])
+    ));
+}
+
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+    const toRadians = degrees => degrees * Math.PI / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusKm * c;
+}
+
+function createMobileBtsPopupContent(site) {
+    const operator = escapeHtml(site.operator || 'Unknown');
+    const radio = escapeHtml(site.radio || 'Unknown');
+    const locationText = escapeHtml(site.location_text || 'Unknown');
+    const district = site.district_code ? escapeHtml(site.district_code) : '—';
+    const latestSeen = site.latest_seen_date ? escapeHtml(site.latest_seen_date) : '—';
+    const source = escapeHtml(site.source || 'Unknown');
+    const sourceUrl = site.source_url ? escapeHtml(site.source_url) : '';
+
+    return `
+        <div class="traceroute-link-info">
+            <div class="fw-bold mb-2">Mobile BTS Site</div>
+            <div><strong>Operator:</strong> ${operator}</div>
+            <div><strong>Radio:</strong> ${radio}</div>
+            <div><strong>Band:</strong> ${site.band_mhz} MHz</div>
+            <div><strong>Relevant Window:</strong> ${escapeHtml(site.frequency_window || '')}</div>
+            <div><strong>District:</strong> ${district}</div>
+            <div><strong>Location:</strong> ${locationText}</div>
+            <div><strong>Observed Cells:</strong> ${site.cell_count || 1}</div>
+            <div><strong>Latest Seen:</strong> ${latestSeen}</div>
+            <div><strong>Source:</strong> ${source}</div>
+            ${sourceUrl ? `<div class="mt-2"><a href="${sourceUrl}" target="_blank" rel="noopener noreferrer">Open Source</a></div>` : ''}
+        </div>
+    `;
+}
+
 // Create popup content for traceroute links
 function createLinkPopupContent(link) {
     const fromNode = nodeData.find(n => n.node_id === link.from_node_id);
@@ -1827,6 +1968,8 @@ function drawHopNetwork(skipFit = false) {
     packetLinks = [];
     neighborInfoLinks.forEach(l => map.removeLayer(l));
     neighborInfoLinks = [];
+    mobileBtsMarkers.forEach(marker => map.removeLayer(marker));
+    mobileBtsMarkers = [];
 
     // Add markers
     nodeData.forEach(addNodeMarker);
@@ -1852,6 +1995,9 @@ function drawHopNetwork(skipFit = false) {
         } else {
             drawNeighborInfoLinks();
         }
+    }
+    if (showMobileBtsSites) {
+        drawMobileBtsSites();
     }
 
     // Update node list display & stats

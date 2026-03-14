@@ -252,6 +252,33 @@ def _ensure_sqlite_schema_migrations(cursor: sqlite3.Cursor, db_path: str) -> No
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_node_primary_channel ON node_info(primary_channel)"
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mobile_bts_sites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_key TEXT NOT NULL UNIQUE,
+                operator TEXT NOT NULL,
+                radio TEXT NOT NULL,
+                band_mhz INTEGER NOT NULL,
+                frequency_window TEXT NOT NULL,
+                district_code TEXT,
+                location_text TEXT NOT NULL,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                cell_count INTEGER NOT NULL DEFAULT 1,
+                latest_seen_date TEXT,
+                source TEXT NOT NULL,
+                source_url TEXT,
+                imported_at REAL NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mobile_bts_window ON mobile_bts_sites(frequency_window)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mobile_bts_operator ON mobile_bts_sites(operator)"
+        )
         _SCHEMA_MIGRATIONS_DONE.add(migration_key)
     except sqlite3.OperationalError as exc:
         if "duplicate column name" in str(exc).lower():
@@ -308,6 +335,33 @@ def _ensure_postgres_schema_migrations(cursor) -> None:
 
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_node_primary_channel ON node_info(primary_channel)"
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mobile_bts_sites (
+            id BIGSERIAL PRIMARY KEY,
+            site_key TEXT NOT NULL UNIQUE,
+            operator TEXT NOT NULL,
+            radio TEXT NOT NULL,
+            band_mhz BIGINT NOT NULL,
+            frequency_window TEXT NOT NULL,
+            district_code TEXT,
+            location_text TEXT NOT NULL,
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            cell_count BIGINT NOT NULL DEFAULT 1,
+            latest_seen_date TEXT,
+            source TEXT NOT NULL,
+            source_url TEXT,
+            imported_at DOUBLE PRECISION NOT NULL
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mobile_bts_window ON mobile_bts_sites(frequency_window)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mobile_bts_operator ON mobile_bts_sites(operator)"
     )
 
     # Older SQLite -> PostgreSQL migrations created packet_history.id as BIGINT
