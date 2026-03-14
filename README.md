@@ -1,14 +1,18 @@
-# Malla
+# Original Malla
 
-Malla (_Mesh_, in Spanish) is an ([AI-built](./AI.md)) tool that logs Meshtastic packets from an MQTT broker into a SQLite database and exposes a web UI to get some interesting data insights from them.
+Malla (_Mesh_, in Spanish) is an ([AI-built](./AI.md)) tool that logs Meshtastic packets from an MQTT broker into a SQL database and exposes a web UI to get some interesting data insights from them.
 
-## Original
-
+## My Add
+This is a fork of the original project where I'm trying out code editing using AI codex.
 
 ## Changes
+You can choose SSLite or PostgresQL as the SQL backend. Migration scripts are included.
 Made by codex:
-  - auto refresh dashboard
-  - 
+  - add auto refresh dashboard
+  - add Live View of incoming packet
+  - add a translation layer
+  - I modified the structure to better withstand the load
+  - small check data security
 
 ## Install
   clean install ubuntu 24.04 server
