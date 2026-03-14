@@ -441,6 +441,9 @@ def init_database() -> None:
             hw_model TEXT,
             role TEXT,
             primary_channel TEXT,
+            firmware_version TEXT,
+            firmware_version_source TEXT,
+            firmware_version_updated_at DOUBLE PRECISION,
             lora_modem_preset TEXT,
             lora_modem_preset_updated_at DOUBLE PRECISION,
             is_licensed BOOLEAN,
@@ -489,6 +492,12 @@ def init_database() -> None:
     # Ensure newer node metadata columns exist for legacy databases
     legacy_columns = [
         ("primary_channel", "TEXT"),
+        ("firmware_version", "TEXT"),
+        ("firmware_version_source", "TEXT"),
+        (
+            "firmware_version_updated_at",
+            "REAL" if DATABASE_BACKEND == "sqlite" else "DOUBLE PRECISION",
+        ),
         ("lora_modem_preset", "TEXT"),
         (
             "lora_modem_preset_updated_at",
@@ -537,6 +546,50 @@ def init_database() -> None:
         logging.info("Backfilled primary_channel values in node_info table")
     except Exception as e:
         logging.warning(f"Could not backfill primary_channel column: {e}")
+
+    # Backfill firmware_version using latest MAP_REPORT_APP payloads if available
+    try:
+        cursor.execute(
+            """
+            SELECT timestamp, from_node_id, raw_payload
+            FROM packet_history
+            WHERE portnum_name = 'MAP_REPORT_APP'
+              AND raw_payload IS NOT NULL
+              AND length(raw_payload) > 0
+            ORDER BY timestamp DESC
+            """
+        )
+        updated_firmware_nodes: set[int] = set()
+        for timestamp, from_node_id, raw_payload in cursor.fetchall():
+            if from_node_id is None or from_node_id in updated_firmware_nodes:
+                continue
+            try:
+                map_report = mqtt_pb2.MapReport()
+                map_report.ParseFromString(raw_payload)
+                firmware_version = map_report.firmware_version.strip()
+                if not firmware_version:
+                    continue
+
+                cursor.execute(
+                    """
+                    UPDATE node_info
+                    SET firmware_version = ?, firmware_version_source = ?, firmware_version_updated_at = ?
+                    WHERE node_id = ?
+                      AND (firmware_version IS NULL OR firmware_version = '')
+                    """,
+                    (firmware_version, "MAP_REPORT_APP", timestamp, from_node_id),
+                )
+                if cursor.rowcount > 0:
+                    updated_firmware_nodes.add(from_node_id)
+            except Exception as e:  # noqa: BLE001
+                logging.debug(f"Skipping MAP_REPORT_APP firmware backfill row: {e}")
+        if updated_firmware_nodes:
+            logging.info(
+                "Backfilled firmware_version for %s nodes from MAP_REPORT_APP history",
+                len(updated_firmware_nodes),
+            )
+    except Exception as e:
+        logging.warning(f"Could not backfill firmware_version column: {e}")
 
     # Backfill LoRa modem preset from captured ADMIN_APP payloads if available
     try:
@@ -600,8 +653,9 @@ def load_node_cache() -> None:
 
         cursor.execute("""
             SELECT node_id, hex_id, long_name, short_name, hw_model, role,
-                   is_licensed, mac_address, primary_channel, lora_modem_preset,
-                   lora_modem_preset_updated_at, last_updated
+                   is_licensed, mac_address, primary_channel, firmware_version,
+                   firmware_version_source, firmware_version_updated_at,
+                   lora_modem_preset, lora_modem_preset_updated_at, last_updated
             FROM node_info
         """)
 
@@ -619,6 +673,9 @@ def load_node_cache() -> None:
                 is_licensed,
                 mac_address,
                 primary_channel,
+                firmware_version,
+                firmware_version_source,
+                firmware_version_updated_at,
                 lora_modem_preset,
                 lora_modem_preset_updated_at,
                 last_updated,
@@ -632,6 +689,9 @@ def load_node_cache() -> None:
                 "is_licensed": bool(is_licensed),
                 "mac_address": mac_address,
                 "primary_channel": primary_channel,
+                "firmware_version": firmware_version,
+                "firmware_version_source": firmware_version_source,
+                "firmware_version_updated_at": firmware_version_updated_at,
                 "lora_modem_preset": lora_modem_preset,
                 "lora_modem_preset_updated_at": lora_modem_preset_updated_at,
                 "last_updated": last_updated,
@@ -651,6 +711,9 @@ def update_node_cache(
     is_licensed: bool | None = None,
     mac_address: str | None = None,
     primary_channel: str | None = None,
+    firmware_version: str | None = None,
+    firmware_version_source: str | None = None,
+    firmware_version_updated_at: float | None = None,
     lora_modem_preset: str | None = None,
     lora_modem_preset_updated_at: float | None = None,
 ) -> None:
@@ -672,6 +735,9 @@ def update_node_cache(
             "is_licensed": is_licensed,
             "mac_address": mac_address,
             "primary_channel": primary_channel,
+            "firmware_version": firmware_version,
+            "firmware_version_source": firmware_version_source,
+            "firmware_version_updated_at": firmware_version_updated_at,
             "lora_modem_preset": lora_modem_preset,
             "lora_modem_preset_updated_at": lora_modem_preset_updated_at,
             "last_updated": current_time,
@@ -694,6 +760,14 @@ def update_node_cache(
             node_cache[node_id]["mac_address"] = mac_address
         if primary_channel is not None:
             node_cache[node_id]["primary_channel"] = primary_channel
+        if firmware_version is not None:
+            node_cache[node_id]["firmware_version"] = firmware_version
+        if firmware_version_source is not None:
+            node_cache[node_id]["firmware_version_source"] = firmware_version_source
+        if firmware_version_updated_at is not None:
+            node_cache[node_id]["firmware_version_updated_at"] = (
+                firmware_version_updated_at
+            )
         if lora_modem_preset is not None:
             node_cache[node_id]["lora_modem_preset"] = lora_modem_preset
         if lora_modem_preset_updated_at is not None:
@@ -709,7 +783,7 @@ def update_node_cache(
 
         # Get existing values from database if node exists
         cursor.execute(
-            "SELECT hex_id, long_name, short_name, hw_model, role, is_licensed, mac_address, primary_channel, lora_modem_preset, lora_modem_preset_updated_at, first_seen FROM node_info WHERE node_id = ?",
+            "SELECT hex_id, long_name, short_name, hw_model, role, is_licensed, mac_address, primary_channel, firmware_version, firmware_version_source, firmware_version_updated_at, lora_modem_preset, lora_modem_preset_updated_at, first_seen FROM node_info WHERE node_id = ?",
             (node_id,),
         )
         existing = cursor.fetchone()
@@ -725,6 +799,9 @@ def update_node_cache(
                 existing_is_licensed,
                 existing_mac_address,
                 existing_primary_channel,
+                existing_firmware_version,
+                existing_firmware_version_source,
+                existing_firmware_version_updated_at,
                 existing_lora_modem_preset,
                 existing_lora_modem_preset_updated_at,
                 _first_seen,
@@ -747,6 +824,21 @@ def update_node_cache(
                 if primary_channel is not None
                 else existing_primary_channel
             )
+            final_firmware_version = (
+                firmware_version
+                if firmware_version is not None
+                else existing_firmware_version
+            )
+            final_firmware_version_source = (
+                firmware_version_source
+                if firmware_version_source is not None
+                else existing_firmware_version_source
+            )
+            final_firmware_version_updated_at = (
+                firmware_version_updated_at
+                if firmware_version_updated_at is not None
+                else existing_firmware_version_updated_at
+            )
             final_lora_modem_preset = (
                 lora_modem_preset
                 if lora_modem_preset is not None
@@ -763,7 +855,9 @@ def update_node_cache(
                 UPDATE node_info
                 SET hex_id = ?, long_name = ?, short_name = ?, hw_model = ?, role = ?,
                     is_licensed = ?, mac_address = ?, primary_channel = ?,
-                    lora_modem_preset = ?, lora_modem_preset_updated_at = ?, last_updated = ?
+                    firmware_version = ?, firmware_version_source = ?,
+                    firmware_version_updated_at = ?, lora_modem_preset = ?,
+                    lora_modem_preset_updated_at = ?, last_updated = ?
                 WHERE node_id = ?
             """,
                 (
@@ -775,6 +869,9 @@ def update_node_cache(
                     final_is_licensed,
                     final_mac_address,
                     final_primary_channel,
+                    final_firmware_version,
+                    final_firmware_version_source,
+                    final_firmware_version_updated_at,
                     final_lora_modem_preset,
                     final_lora_modem_preset_updated_at,
                     current_time,
@@ -791,9 +888,10 @@ def update_node_cache(
                 """
                 INSERT INTO node_info
                 (node_id, hex_id, long_name, short_name, hw_model, role,
-                 is_licensed, mac_address, primary_channel, lora_modem_preset,
-                 lora_modem_preset_updated_at, first_seen, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 is_licensed, mac_address, primary_channel, firmware_version,
+                 firmware_version_source, firmware_version_updated_at,
+                 lora_modem_preset, lora_modem_preset_updated_at, first_seen, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     node_id,
@@ -805,6 +903,9 @@ def update_node_cache(
                     is_licensed,
                     mac_address,
                     primary_channel,
+                    firmware_version,
+                    firmware_version_source,
+                    firmware_version_updated_at,
                     lora_modem_preset,
                     lora_modem_preset_updated_at,
                     current_time,
@@ -1454,15 +1555,44 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             processed_successfully = True
 
         elif mesh_packet.decoded.portnum == portnums_pb2.PortNum.MAP_REPORT_APP:
-            # Handle MAP_REPORT_APP packets specifically
+            map_report = mqtt_pb2.MapReport()
+            map_report.ParseFromString(mesh_packet.decoded.payload)
+
             from_node_display = get_node_display_name(from_node_id_numeric)
             via_mqtt_str = (
                 " (via MQTT)" if getattr(mesh_packet, "via_mqtt", False) else ""
             )
 
-            # Log MAP_REPORT packet (protobuf structure may not be available)
+            firmware_version = map_report.firmware_version.strip() or None
+            hw_model = (
+                mesh_pb2.HardwareModel.Name(map_report.hw_model).replace(
+                    "UNSET", "Unknown"
+                )
+                if map_report.hw_model is not None
+                else None
+            )
+            role = (
+                config_pb2.Config.DeviceConfig.Role.Name(map_report.role)
+                if map_report.role is not None
+                else None
+            )
+            update_node_cache(
+                node_id=from_node_id_numeric,
+                long_name=map_report.long_name or None,
+                short_name=map_report.short_name or None,
+                hw_model=hw_model,
+                role=role,
+                firmware_version=firmware_version,
+                firmware_version_source="MAP_REPORT_APP" if firmware_version else None,
+                firmware_version_updated_at=time.time() if firmware_version else None,
+            )
+
             logging.info(
-                f"🗺️ MAP_REPORT from {from_node_display}{via_mqtt_str}: {len(mesh_packet.decoded.payload)} bytes"
+                "🗺️ MAP_REPORT from %s%s: fw=%s, %s bytes",
+                from_node_display,
+                via_mqtt_str,
+                firmware_version or "unknown",
+                len(mesh_packet.decoded.payload),
             )
 
             processed_successfully = True

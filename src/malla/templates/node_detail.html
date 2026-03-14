@@ -159,6 +159,34 @@
                                 </tr>
                                 {% endif %}
                                 <tr>
+                                    <th>Firmware Version:</th>
+                                    <td>
+                                        {% if node.firmware_version %}
+                                            <span class="badge bg-success">{{ node.firmware_version }}</span>
+                                            {% if node.firmware_version_source %}
+                                                <br><small class="text-muted">Captured from {{ node.firmware_version_source }}{% if node.firmware_version_updated_at %} at {{ node.firmware_version_updated_at }}{% endif %}</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">Not captured yet</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>FW Generation Hint:</th>
+                                    <td>
+                                        {% if node.firmware_generation_hint %}
+                                            <div>{{ node.firmware_generation_hint.label }}</div>
+                                            {% if node.firmware_generation_hint.signals %}
+                                                <small class="text-muted">{{ node.firmware_generation_hint.signals|join(', ') }}</small>
+                                            {% else %}
+                                                <small class="text-muted">No strong passive signals observed yet.</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">Insufficient evidence</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
                                     <th>LoRa Preset:</th>
                                     <td>
                                         {% if node.lora_modem_preset_display %}

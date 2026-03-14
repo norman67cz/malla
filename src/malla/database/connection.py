@@ -232,6 +232,16 @@ def _ensure_sqlite_schema_migrations(cursor: sqlite3.Cursor, db_path: str) -> No
 
         if "primary_channel" not in columns:
             cursor.execute("ALTER TABLE node_info ADD COLUMN primary_channel TEXT")
+        if "firmware_version" not in columns:
+            cursor.execute("ALTER TABLE node_info ADD COLUMN firmware_version TEXT")
+        if "firmware_version_source" not in columns:
+            cursor.execute(
+                "ALTER TABLE node_info ADD COLUMN firmware_version_source TEXT"
+            )
+        if "firmware_version_updated_at" not in columns:
+            cursor.execute(
+                "ALTER TABLE node_info ADD COLUMN firmware_version_updated_at REAL"
+            )
         if "lora_modem_preset" not in columns:
             cursor.execute("ALTER TABLE node_info ADD COLUMN lora_modem_preset TEXT")
         if "lora_modem_preset_updated_at" not in columns:
@@ -283,6 +293,14 @@ def _ensure_postgres_schema_migrations(cursor) -> None:
 
     if "primary_channel" not in columns:
         cursor.execute("ALTER TABLE node_info ADD COLUMN primary_channel TEXT")
+    if "firmware_version" not in columns:
+        cursor.execute("ALTER TABLE node_info ADD COLUMN firmware_version TEXT")
+    if "firmware_version_source" not in columns:
+        cursor.execute("ALTER TABLE node_info ADD COLUMN firmware_version_source TEXT")
+    if "firmware_version_updated_at" not in columns:
+        cursor.execute(
+            "ALTER TABLE node_info ADD COLUMN firmware_version_updated_at DOUBLE PRECISION"
+        )
     if "lora_modem_preset" not in columns:
         cursor.execute("ALTER TABLE node_info ADD COLUMN lora_modem_preset TEXT")
     if "lora_modem_preset_updated_at" not in columns:

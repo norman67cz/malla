@@ -26,6 +26,94 @@ def _format_lora_modem_preset(preset_name: str | None) -> str | None:
     return preset_name.replace("_", "-")
 
 
+def _infer_firmware_generation(
+    cursor, node_id: int, total_packets: int | None = None
+) -> dict[str, Any]:
+    """Infer a coarse firmware generation when no exact version is available."""
+    score = 0
+    signals: list[str] = []
+
+    cursor.execute(
+        """
+        SELECT raw_payload
+        FROM packet_history
+        WHERE from_node_id = ?
+          AND portnum_name = 'NODEINFO_APP'
+          AND raw_payload IS NOT NULL
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """,
+        (node_id,),
+    )
+    latest_nodeinfo = cursor.fetchone()
+    if latest_nodeinfo and latest_nodeinfo["raw_payload"]:
+        try:
+            user = mesh_pb2.User()
+            user.ParseFromString(latest_nodeinfo["raw_payload"])
+            if getattr(user, "public_key", b""):
+                score += 3
+                signals.append("NODEINFO public_key present")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not parse NODEINFO_APP for %s: %s", node_id, exc)
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS pki_packets
+        FROM packet_history
+        WHERE from_node_id = ?
+          AND pki_encrypted IS TRUE
+        """,
+        (node_id,),
+    )
+    pki_packet_count = cursor.fetchone()["pki_packets"]
+    if pki_packet_count:
+        score += 4
+        signals.append(f"{pki_packet_count} PKI-encrypted packet(s)")
+
+    cursor.execute(
+        """
+        SELECT raw_payload
+        FROM packet_history
+        WHERE portnum_name = 'ROUTING_APP'
+          AND raw_payload IS NOT NULL
+          AND (from_node_id = ? OR to_node_id = ?)
+        ORDER BY timestamp DESC
+        LIMIT 25
+        """,
+        (node_id, node_id),
+    )
+    routing_rows = cursor.fetchall()
+    pki_error_names = {
+        "PKI_FAILED",
+        "PKI_UNKNOWN_PUBKEY",
+        "PKI_SEND_FAIL_PUBLIC_KEY",
+    }
+    for row in routing_rows:
+        try:
+            routing = mesh_pb2.Routing()
+            routing.ParseFromString(row["raw_payload"])
+            error_name = mesh_pb2.Routing.Error.Name(routing.error_reason)
+            if error_name in pki_error_names:
+                score += 4
+                signals.append(f"Routing error {error_name}")
+                break
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not parse ROUTING_APP for %s: %s", node_id, exc)
+
+    if score >= 4:
+        label = "Likely 2.6+ / PKI-capable"
+    elif total_packets and total_packets >= 20 and score == 0:
+        label = "Unknown, possibly older than 2.6"
+    else:
+        label = "Insufficient evidence"
+
+    return {
+        "label": label,
+        "score": score,
+        "signals": signals,
+    }
+
+
 class DashboardRepository:
     """Repository for dashboard statistics."""
 
@@ -1370,6 +1458,9 @@ class NodeRepository:
                 n.hw_model,
                 n.role,
                 n.primary_channel,
+                n.firmware_version,
+                n.firmware_version_source,
+                n.firmware_version_updated_at,
                 n.lora_modem_preset,
                 n.lora_modem_preset_updated_at,
                 COUNT(*) as total_packets,
@@ -1387,7 +1478,8 @@ class NodeRepository:
             LEFT JOIN node_info n ON p.from_node_id = n.node_id
             WHERE p.from_node_id = ?
             GROUP BY p.from_node_id, n.long_name, n.short_name, n.hw_model, n.role,
-                     n.primary_channel, n.lora_modem_preset, n.lora_modem_preset_updated_at
+                     n.primary_channel, n.firmware_version, n.firmware_version_source,
+                     n.firmware_version_updated_at, n.lora_modem_preset, n.lora_modem_preset_updated_at
             """
 
             cursor.execute(query, (node_id,))
@@ -1425,6 +1517,20 @@ class NodeRepository:
                     "primary_channel": node_info_row["primary_channel"]
                     if "primary_channel" in node_info_row.keys()
                     else None,
+                    "firmware_version": node_info_row["firmware_version"]
+                    if "firmware_version" in node_info_row.keys()
+                    else None,
+                    "firmware_version_source": node_info_row["firmware_version_source"]
+                    if "firmware_version_source" in node_info_row.keys()
+                    else None,
+                    "firmware_version_updated_at": (
+                        datetime.fromtimestamp(
+                            node_info_row["firmware_version_updated_at"], UTC
+                        ).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        if "firmware_version_updated_at" in node_info_row.keys()
+                        and node_info_row["firmware_version_updated_at"]
+                        else None
+                    ),
                     "lora_modem_preset": no_packet_lora_preset,
                     "lora_modem_preset_display": _format_lora_modem_preset(
                         no_packet_lora_preset
@@ -1455,6 +1561,9 @@ class NodeRepository:
                     "avg_rssi": None,
                     "avg_snr": None,
                     "avg_hops": None,
+                    "firmware_generation_hint": _infer_firmware_generation(
+                        cursor, node_id, 0
+                    ),
                 }
                 conn.close()
                 return {
@@ -1487,6 +1596,20 @@ class NodeRepository:
                 "primary_channel": node_row["primary_channel"]
                 if "primary_channel" in node_row.keys()
                 else None,
+                "firmware_version": node_row["firmware_version"]
+                if "firmware_version" in node_row.keys()
+                else None,
+                "firmware_version_source": node_row["firmware_version_source"]
+                if "firmware_version_source" in node_row.keys()
+                else None,
+                "firmware_version_updated_at": (
+                    datetime.fromtimestamp(
+                        node_row["firmware_version_updated_at"], UTC
+                    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    if "firmware_version_updated_at" in node_row.keys()
+                    and node_row["firmware_version_updated_at"]
+                    else None
+                ),
                 "lora_modem_preset": node_row["lora_modem_preset"]
                 if "lora_modem_preset" in node_row.keys()
                 else None,
@@ -1532,6 +1655,9 @@ class NodeRepository:
                 "avg_hops": round(node_row["avg_hops"], 1)
                 if node_row["avg_hops"]
                 else None,
+                "firmware_generation_hint": _infer_firmware_generation(
+                    cursor, node_id, node_row["total_packets"]
+                ),
             }
 
             # Get recent packets from this node
