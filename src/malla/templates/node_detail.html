@@ -752,6 +752,74 @@
             </div>
             {% endif %}
 
+            {% if neighbor_info %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="bi bi-diagram-3"></i> Neighbor Info</h5>
+                    <small class="text-muted">Latest NEIGHBORINFO_APP reported by this node</small>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            Reported {{ neighbor_info.timestamp_relative }}
+                            {% if neighbor_info.node_broadcast_interval_secs %}
+                                • Broadcast interval {{ neighbor_info.node_broadcast_interval_secs }}s
+                            {% endif %}
+                            • {{ neighbor_info.neighbor_count }} neighbors
+                        </small>
+                    </div>
+                    {% if neighbor_info.neighbors %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Neighbor</th>
+                                    <th>SNR</th>
+                                    <th>Last Heard</th>
+                                    <th>Broadcast Interval</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for neighbor in neighbor_info.neighbors %}
+                                <tr>
+                                    <td>
+                                        {% if neighbor.node_id %}
+                                            {{ node_link(neighbor.node_id, neighbor.node_name) }}
+                                        {% else %}
+                                            {{ neighbor.node_name }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if neighbor.snr is not none %}
+                                            {{ "%.1f"|format(neighbor.snr) }} dB
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ neighbor.last_rx_relative }}</small>
+                                    </td>
+                                    <td>
+                                        {% if neighbor.node_broadcast_interval_secs %}
+                                            {{ neighbor.node_broadcast_interval_secs }}s
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i> No neighbors reported in the latest NeighborInfo packet.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Quick Actions -->
             <div class="card">
                 <div class="card-header">

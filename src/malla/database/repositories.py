@@ -2179,6 +2179,121 @@ class NodeRepository:
             # Sort recent_packets by timestamp (most recent first) after grouping
             recent_packets.sort(key=lambda x: x["timestamp_sort"], reverse=True)
 
+            # Get the latest NeighborInfo report from this node, if available.
+            neighbor_info = None
+            try:
+                cursor.execute(
+                    """
+                    SELECT id, timestamp, raw_payload
+                    FROM packet_history
+                    WHERE from_node_id = ?
+                      AND portnum_name = 'NEIGHBORINFO_APP'
+                      AND raw_payload IS NOT NULL
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                    """,
+                    (node_id,),
+                )
+                neighbor_row = cursor.fetchone()
+                if neighbor_row and neighbor_row["raw_payload"]:
+                    parsed = mesh_pb2.NeighborInfo()
+                    parsed.ParseFromString(neighbor_row["raw_payload"])
+
+                    neighbor_ids = [
+                        neighbor.node_id
+                        for neighbor in parsed.neighbors
+                        if getattr(neighbor, "node_id", 0)
+                    ]
+                    neighbor_names = (
+                        NodeRepository.get_bulk_node_names(neighbor_ids)
+                        if neighbor_ids
+                        else {}
+                    )
+
+                    report_timestamp = datetime.fromtimestamp(
+                        neighbor_row["timestamp"], UTC
+                    )
+                    neighbors_payload = []
+                    for neighbor in parsed.neighbors:
+                        neighbor_id_value = (
+                            neighbor.node_id if getattr(neighbor, "node_id", 0) else None
+                        )
+                        last_rx_time = (
+                            neighbor.last_rx_time
+                            if getattr(neighbor, "last_rx_time", 0)
+                            else None
+                        )
+                        last_rx_dt = (
+                            datetime.fromtimestamp(last_rx_time, UTC)
+                            if last_rx_time
+                            else None
+                        )
+                        neighbors_payload.append(
+                            {
+                                "node_id": neighbor_id_value,
+                                "node_name": (
+                                    neighbor_names.get(
+                                        neighbor_id_value,
+                                        f"!{neighbor_id_value:08x}",
+                                    )
+                                    if neighbor_id_value is not None
+                                    else "Unknown"
+                                ),
+                                "snr": round(float(neighbor.snr), 1)
+                                if getattr(neighbor, "snr", None) is not None
+                                else None,
+                                "last_rx_time": last_rx_time,
+                                "last_rx_time_str": (
+                                    last_rx_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                                    if last_rx_dt
+                                    else "Unknown"
+                                ),
+                                "last_rx_relative": (
+                                    format_time_ago(last_rx_dt)
+                                    if last_rx_dt
+                                    else "Unknown"
+                                ),
+                                "node_broadcast_interval_secs": (
+                                    neighbor.node_broadcast_interval_secs
+                                    if getattr(
+                                        neighbor, "node_broadcast_interval_secs", 0
+                                    )
+                                    else None
+                                ),
+                            }
+                        )
+
+                    neighbors_payload.sort(
+                        key=lambda item: (
+                            item["snr"] is None,
+                            -(item["snr"] or -9999),
+                            item["node_name"],
+                        )
+                    )
+                    neighbor_info = {
+                        "packet_id": neighbor_row["id"],
+                        "timestamp": report_timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        "timestamp_unix": neighbor_row["timestamp"],
+                        "timestamp_relative": format_time_ago(report_timestamp),
+                        "node_id": parsed.node_id if getattr(parsed, "node_id", 0) else None,
+                        "last_sent_by_id": (
+                            parsed.last_sent_by_id
+                            if getattr(parsed, "last_sent_by_id", 0)
+                            else None
+                        ),
+                        "node_broadcast_interval_secs": (
+                            parsed.node_broadcast_interval_secs
+                            if getattr(parsed, "node_broadcast_interval_secs", 0)
+                            else None
+                        ),
+                        "neighbor_count": len(neighbors_payload),
+                        "neighbors": neighbors_payload,
+                    }
+            except Exception as e:
+                logger.warning(
+                    "Failed to decode latest NeighborInfo for node %s: %s", node_id, e
+                )
+
             # ------------------------------------------------------------------
             # Collect recent packets *reported* by this node when acting as a gateway
             # ------------------------------------------------------------------
@@ -2562,6 +2677,7 @@ class NodeRepository:
                 "received_gateways": received_gateways,
                 "matrix_gateways": matrix_gateways,
                 "location": location_info,
+                "neighbor_info": neighbor_info,
             }
 
         except Exception as e:
