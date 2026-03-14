@@ -2196,7 +2196,7 @@ class NodeRepository:
             FROM packet_history p
             WHERE p.from_node_id IN ({gw_id_placeholders})
                 AND p.gateway_id IS NOT NULL
-                AND p.gateway_id LIKE '!%'
+                AND SUBSTR(p.gateway_id, 1, 1) = '!'
                 AND (p.hop_start - p.hop_limit) = 0
             """
 
