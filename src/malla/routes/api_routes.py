@@ -1812,6 +1812,9 @@ def api_nodes_data():
         primary_channel = request.args.get("primary_channel", "").strip()
         if primary_channel:
             filters["primary_channel"] = primary_channel
+        firmware_info = request.args.get("firmware_info", "").strip()
+        if firmware_info in {"captured", "heuristic", "none"}:
+            filters["firmware_info"] = firmware_info
         direct_receptions = request.args.get("direct_receptions", "").strip()
         if direct_receptions in {"gt0", "eq0"}:
             filters["direct_receptions"] = direct_receptions
@@ -1858,6 +1861,8 @@ def api_nodes_data():
                     "hw_model": node.get("hw_model", "Unknown"),
                     "role": node.get("role", "Unknown"),
                     "primary_channel": node.get("primary_channel"),
+                    "firmware_version": node.get("firmware_version"),
+                    "firmware_info_state": node.get("firmware_info_state"),
                     "last_packet_str": node.get("last_packet_str", "Never"),
                     "last_packet_time": node.get("last_packet_time"),
                     "packet_count_24h": node.get("packet_count_24h", 0),

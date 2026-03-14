@@ -114,6 +114,20 @@ def _infer_firmware_generation(
     }
 
 
+def _get_firmware_info_state(
+    cursor, node_id: int, firmware_version: str | None, total_packets: int | None = None
+) -> tuple[str, dict[str, Any] | None]:
+    """Classify firmware information availability for node listing filters."""
+    if firmware_version:
+        return "captured", None
+
+    hint = _infer_firmware_generation(cursor, node_id, total_packets)
+    if hint["label"] != "Insufficient evidence":
+        return "heuristic", hint
+
+    return "none", hint
+
+
 class DashboardRepository:
     """Repository for dashboard statistics."""
 
@@ -1217,6 +1231,8 @@ class NodeRepository:
                 where_conditions.append("ni.primary_channel = ?")
                 params.append(filters["primary_channel"])
 
+            firmware_info_filter = filters.get("firmware_info")
+
             # Add named_only filter
             if filters.get("named_only"):
                 where_conditions.append(
@@ -1320,6 +1336,7 @@ class NodeRepository:
                         ni.hw_model,
                         ni.role,
                         ni.primary_channel,
+                        ni.firmware_version,
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
@@ -1377,6 +1394,7 @@ class NodeRepository:
                         ni.hw_model,
                         ni.role,
                         ni.primary_channel,
+                        ni.firmware_version,
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         0 as packet_count_24h,
@@ -1391,9 +1409,64 @@ class NodeRepository:
                 """
 
             # Execute query with parameters
-            query_params = params + [limit, offset]
-            cursor.execute(query, query_params)
-            nodes = [dict(row) for row in cursor.fetchall()]
+            if firmware_info_filter in {"captured", "heuristic", "none"}:
+                query_no_paging = query.split("LIMIT ? OFFSET ?")[0]
+                cursor.execute(query_no_paging, params)
+                all_nodes = [dict(row) for row in cursor.fetchall()]
+
+                filtered_nodes = []
+                for node in all_nodes:
+                    firmware_state, hint = _get_firmware_info_state(
+                        cursor,
+                        int(node["node_id"]),
+                        node.get("firmware_version"),
+                        node.get("packet_count_24h"),
+                    )
+                    node["firmware_info_state"] = firmware_state
+                    node["firmware_generation_hint"] = hint
+                    if firmware_state == firmware_info_filter:
+                        filtered_nodes.append(node)
+
+                total_count = len(filtered_nodes)
+
+                reverse = order_dir == "DESC"
+
+                def _node_sort_key(item: dict[str, Any]):
+                    if order_by == "node_id":
+                        value = item.get("node_id")
+                    elif order_by == "long_name":
+                        value = (
+                            item.get("long_name")
+                            or item.get("short_name")
+                            or item.get("hex_id")
+                            or ""
+                        )
+                    elif order_by == "hw_model":
+                        value = item.get("hw_model") or ""
+                    elif order_by == "last_updated":
+                        value = item.get("last_updated") or 0
+                    elif order_by == "packet_count_24h":
+                        value = item.get("packet_count_24h") or 0
+                    else:
+                        value = item.get("last_packet_time") or item.get("last_updated") or 0
+
+                    if isinstance(value, str):
+                        value = value.lower()
+
+                    fallback_name = (
+                        item.get("long_name")
+                        or item.get("short_name")
+                        or item.get("hex_id")
+                        or ""
+                    )
+                    return (value, fallback_name.lower())
+
+                filtered_nodes.sort(key=_node_sort_key, reverse=reverse)
+                nodes = filtered_nodes[offset : offset + limit]
+            else:
+                query_params = params + [limit, offset]
+                cursor.execute(query, query_params)
+                nodes = [dict(row) for row in cursor.fetchall()]
 
             conn.close()
 
