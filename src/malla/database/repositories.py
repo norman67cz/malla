@@ -979,27 +979,53 @@ class NodeRepository:
             where_clause = " AND ".join(where_conditions)
 
             base_cte = f"""
-                WITH aggregated_nodes AS (
+                WITH source_packets AS (
                     SELECT
-                        p.from_node_id AS node_id,
+                        p.id,
+                        p.from_node_id,
+                        p.portnum_name,
+                        p.mesh_packet_id,
+                        ni.long_name,
+                        ni.short_name,
+                        CASE
+                            WHEN p.mesh_packet_id IS NOT NULL AND p.mesh_packet_id != 0
+                            THEN 'mesh:' || CAST(p.mesh_packet_id AS TEXT)
+                            ELSE 'row:' || CAST(p.id AS TEXT)
+                        END AS packet_key
+                    FROM packet_history p
+                    LEFT JOIN node_info ni ON ni.node_id = p.from_node_id
+                    WHERE {where_clause}
+                ),
+                deduplicated_packets AS (
+                    SELECT DISTINCT
+                        from_node_id,
+                        long_name,
+                        short_name,
+                        portnum_name,
+                        packet_key
+                    FROM source_packets
+                ),
+                aggregated_nodes AS (
+                    SELECT
+                        dp.from_node_id AS node_id,
                         COALESCE(
-                            ni.long_name,
-                            ni.short_name,
-                            printf('!%08x', p.from_node_id)
+                            dp.long_name,
+                            dp.short_name,
+                            printf('!%08x', dp.from_node_id)
                         ) AS node_name,
-                        SUM(CASE WHEN p.portnum_name = 'TELEMETRY_APP' THEN 1 ELSE 0 END) AS telemetry,
-                        SUM(CASE WHEN p.portnum_name = 'POSITION_APP' THEN 1 ELSE 0 END) AS position,
-                        SUM(CASE WHEN p.portnum_name = 'NODEINFO_APP' THEN 1 ELSE 0 END) AS nodeinfo,
-                        SUM(CASE WHEN p.portnum_name = 'TRACEROUTE_APP' THEN 1 ELSE 0 END) AS traceroute,
-                        SUM(CASE WHEN p.portnum_name = 'TEXT_MESSAGE_APP' THEN 1 ELSE 0 END) AS textmessage,
-                        SUM(CASE WHEN p.portnum_name = 'MAP_REPORT_APP' THEN 1 ELSE 0 END) AS mapreport,
-                        SUM(CASE WHEN p.portnum_name = 'ROUTING_APP' THEN 1 ELSE 0 END) AS routing,
-                        SUM(CASE WHEN p.portnum_name = 'NEIGHBORINFO_APP' THEN 1 ELSE 0 END) AS neighborinfo,
-                        SUM(CASE WHEN p.portnum_name = 'ADMIN_APP' THEN 1 ELSE 0 END) AS admin,
-                        SUM(CASE WHEN p.portnum_name = 'WAYPOINT_APP' THEN 1 ELSE 0 END) AS waypoint,
+                        SUM(CASE WHEN dp.portnum_name = 'TELEMETRY_APP' THEN 1 ELSE 0 END) AS telemetry,
+                        SUM(CASE WHEN dp.portnum_name = 'POSITION_APP' THEN 1 ELSE 0 END) AS position,
+                        SUM(CASE WHEN dp.portnum_name = 'NODEINFO_APP' THEN 1 ELSE 0 END) AS nodeinfo,
+                        SUM(CASE WHEN dp.portnum_name = 'TRACEROUTE_APP' THEN 1 ELSE 0 END) AS traceroute,
+                        SUM(CASE WHEN dp.portnum_name = 'TEXT_MESSAGE_APP' THEN 1 ELSE 0 END) AS textmessage,
+                        SUM(CASE WHEN dp.portnum_name = 'MAP_REPORT_APP' THEN 1 ELSE 0 END) AS mapreport,
+                        SUM(CASE WHEN dp.portnum_name = 'ROUTING_APP' THEN 1 ELSE 0 END) AS routing,
+                        SUM(CASE WHEN dp.portnum_name = 'NEIGHBORINFO_APP' THEN 1 ELSE 0 END) AS neighborinfo,
+                        SUM(CASE WHEN dp.portnum_name = 'ADMIN_APP' THEN 1 ELSE 0 END) AS admin,
+                        SUM(CASE WHEN dp.portnum_name = 'WAYPOINT_APP' THEN 1 ELSE 0 END) AS waypoint,
                         SUM(
                             CASE
-                                WHEN p.portnum_name IS NULL OR p.portnum_name = 'UNKNOWN_APP' OR p.portnum_name NOT IN (
+                                WHEN dp.portnum_name IS NULL OR dp.portnum_name = 'UNKNOWN_APP' OR dp.portnum_name NOT IN (
                                     'TELEMETRY_APP',
                                     'POSITION_APP',
                                     'NODEINFO_APP',
@@ -1014,10 +1040,8 @@ class NodeRepository:
                                 ELSE 0
                             END
                         ) AS unknown
-                    FROM packet_history p
-                    LEFT JOIN node_info ni ON ni.node_id = p.from_node_id
-                    WHERE {where_clause}
-                    GROUP BY p.from_node_id, ni.long_name, ni.short_name
+                    FROM deduplicated_packets dp
+                    GROUP BY dp.from_node_id, dp.long_name, dp.short_name
                 )
             """
 
