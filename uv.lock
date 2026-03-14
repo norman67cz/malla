@@ -530,7 +530,7 @@ requires-dist = [
     { name = "gunicorn", specifier = ">=22.0.0" },
     { name = "line-profiler", marker = "extra == 'dev'", specifier = ">=4.2.0" },
     { name = "markdown", specifier = ">=3.6.0" },
-    { name = "meshtastic", git = "https://github.com/meshtastic/python" },
+    { name = "meshtastic", specifier = "==2.7.7" },
     { name = "opentelemetry-api", specifier = ">=1.24.0" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.24.0" },
     { name = "opentelemetry-instrumentation-flask", specifier = ">=0.45b0" },
@@ -626,8 +626,8 @@ wheels = [
 
 [[package]]
 name = "meshtastic"
-version = "2.7.3"
-source = { git = "https://github.com/meshtastic/python#dcd077d85efd5aaa39a9f4a772ffbd117bff136c" }
+version = "2.7.7"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bleak" },
     { name = "packaging" },
@@ -637,6 +637,10 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "tabulate" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/4b/046435a03681ad4626b077cf709916f2f97600cc8b4e34131add51b9e26a/meshtastic-2.7.7.tar.gz", hash = "sha256:6e2dc663e61841235966f04fe4c3257445e643f8dc7b8eaf7286c4b71a106511", size = 285850, upload-time = "2026-01-24T16:34:21.626Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/04/ca95992eedadbff7f82effdfbf3be4df1553214928806ae9bbd8c296aabb/meshtastic-2.7.7-py3-none-any.whl", hash = "sha256:743e8f1138cb1aeb57b3579c70f9229b494a09d2de3292fbdb3f98bc0cf4b0ee", size = 334485, upload-time = "2026-01-24T16:34:20.225Z" },
 ]
 
 [[package]]
