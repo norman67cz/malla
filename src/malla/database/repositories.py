@@ -6,6 +6,7 @@ This module provides data access layer with business logic for different entitie
 
 import json
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -126,6 +127,20 @@ def _get_firmware_info_state(
         return "heuristic", hint
 
     return "none", hint
+
+
+def _firmware_version_is_older_than_2_6(firmware_version: str | None) -> bool:
+    """Best-effort parser for Meshtastic firmware versions."""
+    if not firmware_version:
+        return False
+
+    match = re.search(r"(\d+)\.(\d+)", firmware_version)
+    if not match:
+        return False
+
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    return (major, minor) < (2, 6)
 
 
 class DashboardRepository:
@@ -1409,7 +1424,7 @@ class NodeRepository:
                 """
 
             # Execute query with parameters
-            if firmware_info_filter in {"captured", "heuristic", "none"}:
+            if firmware_info_filter in {"captured", "heuristic", "none", "older_than_2_6"}:
                 query_no_paging = query.split("LIMIT ? OFFSET ?")[0]
                 cursor.execute(query_no_paging, params)
                 all_nodes = [dict(row) for row in cursor.fetchall()]
@@ -1424,7 +1439,19 @@ class NodeRepository:
                     )
                     node["firmware_info_state"] = firmware_state
                     node["firmware_generation_hint"] = hint
-                    if firmware_state == firmware_info_filter:
+                    matches_filter = False
+                    if firmware_info_filter == "older_than_2_6":
+                        matches_filter = _firmware_version_is_older_than_2_6(
+                            node.get("firmware_version")
+                        ) or (
+                            firmware_state == "heuristic"
+                            and hint
+                            and hint.get("label") == "Unknown, possibly older than 2.6"
+                        )
+                    else:
+                        matches_filter = firmware_state == firmware_info_filter
+
+                    if matches_filter:
                         filtered_nodes.append(node)
 
                 total_count = len(filtered_nodes)

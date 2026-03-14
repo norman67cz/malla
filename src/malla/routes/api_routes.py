@@ -1813,7 +1813,7 @@ def api_nodes_data():
         if primary_channel:
             filters["primary_channel"] = primary_channel
         firmware_info = request.args.get("firmware_info", "").strip()
-        if firmware_info in {"captured", "heuristic", "none"}:
+        if firmware_info in {"captured", "heuristic", "none", "older_than_2_6"}:
             filters["firmware_info"] = firmware_info
         direct_receptions = request.args.get("direct_receptions", "").strip()
         if direct_receptions in {"gt0", "eq0"}:
