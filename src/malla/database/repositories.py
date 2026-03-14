@@ -161,6 +161,49 @@ def _get_firmware_info_state_for_listing(
     return "none"
 
 
+def _get_latest_nodeinfo_public_key_presence(
+    cursor, node_ids: list[int]
+) -> dict[int, bool]:
+    """Return whether the latest NODEINFO_APP for each node carries a public key."""
+    if not node_ids:
+        return {}
+
+    placeholders = ",".join(["?"] * len(node_ids))
+    cursor.execute(
+        f"""
+        SELECT ph.from_node_id, ph.raw_payload
+        FROM packet_history ph
+        INNER JOIN (
+            SELECT from_node_id, MAX(timestamp) AS max_timestamp
+            FROM packet_history
+            WHERE portnum_name = 'NODEINFO_APP'
+              AND raw_payload IS NOT NULL
+              AND from_node_id IN ({placeholders})
+            GROUP BY from_node_id
+        ) latest
+            ON latest.from_node_id = ph.from_node_id
+           AND latest.max_timestamp = ph.timestamp
+        WHERE ph.portnum_name = 'NODEINFO_APP'
+          AND ph.raw_payload IS NOT NULL
+        """,
+        node_ids,
+    )
+
+    result: dict[int, bool] = {}
+    for row in cursor.fetchall():
+        node_id = int(row["from_node_id"])
+        has_public_key = False
+        try:
+            user = mesh_pb2.User()
+            user.ParseFromString(row["raw_payload"])
+            has_public_key = bool(getattr(user, "public_key", b""))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Could not parse latest NODEINFO_APP for %s: %s", node_id, exc)
+        result[node_id] = has_public_key
+
+    return result
+
+
 class DashboardRepository:
     """Repository for dashboard statistics."""
 
@@ -1534,6 +1577,14 @@ class NodeRepository:
                     """
                 cursor.execute(query_no_paging, params)
                 all_nodes = [dict(row) for row in cursor.fetchall()]
+                public_key_presence = _get_latest_nodeinfo_public_key_presence(
+                    cursor,
+                    [
+                        int(node["node_id"])
+                        for node in all_nodes
+                        if not node.get("firmware_version")
+                    ],
+                )
 
                 filtered_nodes = []
                 for node in all_nodes:
@@ -1551,6 +1602,7 @@ class NodeRepository:
                             firmware_state == "heuristic"
                             and int(node.get("pki_packet_count_total") or 0) == 0
                             and int(node.get("packet_count_total") or 0) >= 20
+                            and not public_key_presence.get(int(node["node_id"]), False)
                         )
                     else:
                         matches_filter = firmware_state == firmware_info_filter
