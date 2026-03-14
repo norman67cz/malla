@@ -143,6 +143,24 @@ def _firmware_version_is_older_than_2_6(firmware_version: str | None) -> bool:
     return (major, minor) < (2, 6)
 
 
+def _get_firmware_info_state_for_listing(
+    firmware_version: str | None,
+    packet_count_total: int | None,
+    pki_packet_count_total: int | None,
+) -> str:
+    """Fast firmware info classification for large node tables."""
+    if firmware_version:
+        return "captured"
+
+    total_packets = int(packet_count_total or 0)
+    pki_packets = int(pki_packet_count_total or 0)
+
+    if pki_packets > 0 or total_packets >= 20:
+        return "heuristic"
+
+    return "none"
+
+
 class DashboardRepository:
     """Repository for dashboard statistics."""
 
@@ -1425,28 +1443,114 @@ class NodeRepository:
 
             # Execute query with parameters
             if firmware_info_filter in {"captured", "heuristic", "none", "older_than_2_6"}:
-                query_no_paging = query.split("LIMIT ? OFFSET ?")[0]
+                if needs_24h_stats:
+                    query_no_paging = f"""
+                        SELECT
+                            ni.node_id,
+                            ni.long_name,
+                            ni.short_name,
+                            ni.hw_model,
+                            ni.role,
+                            ni.primary_channel,
+                            ni.firmware_version,
+                            ni.last_updated,
+                            printf('!%08x', ni.node_id) as hex_id,
+                            COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
+                            COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
+                            COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
+                            COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
+                            datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str,
+                            COALESCE(alltime.packet_count_total, 0) as packet_count_total,
+                            COALESCE(alltime.pki_packet_count_total, 0) as pki_packet_count_total
+                        FROM node_info ni
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_24h,
+                                SUM(
+                                    CASE
+                                        WHEN hop_start IS NOT NULL
+                                         AND hop_limit IS NOT NULL
+                                         AND (hop_start - hop_limit) = 0
+                                        THEN 1
+                                        ELSE 0
+                                    END
+                                ) as direct_packet_count_24h,
+                                MAX(timestamp) as last_packet_time
+                            FROM packet_history
+                            WHERE timestamp > (strftime('%s', 'now') - 86400)
+                            GROUP BY from_node_id
+                        ) stats ON ni.node_id = stats.node_id
+                        LEFT JOIN (
+                            SELECT
+                                gateway_id,
+                                COUNT(*) as gateway_packet_count_24h
+                            FROM packet_history
+                            WHERE timestamp > (strftime('%s', 'now') - 86400)
+                              AND gateway_id IS NOT NULL AND gateway_id != ''
+                            GROUP BY gateway_id
+                        ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_total,
+                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+                            FROM packet_history
+                            GROUP BY from_node_id
+                        ) alltime ON ni.node_id = alltime.node_id
+                        {where_clause}
+                        ORDER BY {order_column} {order_dir}
+                    """
+                else:
+                    query_no_paging = f"""
+                        SELECT
+                            ni.node_id,
+                            ni.long_name,
+                            ni.short_name,
+                            ni.hw_model,
+                            ni.role,
+                            ni.primary_channel,
+                            ni.firmware_version,
+                            ni.last_updated,
+                            printf('!%08x', ni.node_id) as hex_id,
+                            0 as packet_count_24h,
+                            0 as direct_packet_count_24h,
+                            0 as gateway_packet_count_24h,
+                            ni.last_updated as last_packet_time,
+                            datetime(ni.last_updated, 'unixepoch') as last_packet_str,
+                            COALESCE(alltime.packet_count_total, 0) as packet_count_total,
+                            COALESCE(alltime.pki_packet_count_total, 0) as pki_packet_count_total
+                        FROM node_info ni
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_total,
+                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+                            FROM packet_history
+                            GROUP BY from_node_id
+                        ) alltime ON ni.node_id = alltime.node_id
+                        {where_clause}
+                        ORDER BY {order_column} {order_dir}
+                    """
                 cursor.execute(query_no_paging, params)
                 all_nodes = [dict(row) for row in cursor.fetchall()]
 
                 filtered_nodes = []
                 for node in all_nodes:
-                    firmware_state, hint = _get_firmware_info_state(
-                        cursor,
-                        int(node["node_id"]),
+                    firmware_state = _get_firmware_info_state_for_listing(
                         node.get("firmware_version"),
-                        node.get("packet_count_24h"),
+                        node.get("packet_count_total"),
+                        node.get("pki_packet_count_total"),
                     )
                     node["firmware_info_state"] = firmware_state
-                    node["firmware_generation_hint"] = hint
                     matches_filter = False
                     if firmware_info_filter == "older_than_2_6":
                         matches_filter = _firmware_version_is_older_than_2_6(
                             node.get("firmware_version")
                         ) or (
                             firmware_state == "heuristic"
-                            and hint
-                            and hint.get("label") == "Unknown, possibly older than 2.6"
+                            and int(node.get("pki_packet_count_total") or 0) == 0
+                            and int(node.get("packet_count_total") or 0) >= 20
                         )
                     else:
                         matches_filter = firmware_state == firmware_info_filter
