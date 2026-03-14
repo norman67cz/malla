@@ -1812,6 +1812,13 @@ def api_nodes_data():
         primary_channel = request.args.get("primary_channel", "").strip()
         if primary_channel:
             filters["primary_channel"] = primary_channel
+        direct_receptions = request.args.get("direct_receptions", "").strip()
+        if direct_receptions in {"gt0", "eq0"}:
+            filters["direct_receptions"] = direct_receptions
+        if request.args.get("active_only", "").strip() in {"1", "true", "on"}:
+            filters["active_only"] = True
+        if request.args.get("named_only", "").strip() in {"1", "true", "on"}:
+            filters["named_only"] = True
 
         # Calculate offset
         offset = (page - 1) * limit

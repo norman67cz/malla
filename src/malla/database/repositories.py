@@ -1165,6 +1165,7 @@ class NodeRepository:
             needs_24h_stats = (
                 order_by == "packet_count_24h"
                 or filters.get("active_only")
+                or filters.get("direct_receptions")
                 or order_by == "last_packet_time"
             )
 
@@ -1185,11 +1186,43 @@ class NodeRepository:
                 # Add active_only filter if needed
                 if filters.get("active_only"):
                     where_conditions.append("stats.packet_count_24h > 0")
-                    where_clause = (
-                        "WHERE " + " AND ".join(where_conditions)
-                        if where_conditions
-                        else ""
-                    )
+                direct_receptions_filter = filters.get("direct_receptions")
+                if direct_receptions_filter == "gt0":
+                    where_conditions.append("COALESCE(stats.direct_packet_count_24h, 0) > 0")
+                elif direct_receptions_filter == "eq0":
+                    where_conditions.append("COALESCE(stats.direct_packet_count_24h, 0) = 0")
+
+                where_clause = (
+                    "WHERE " + " AND ".join(where_conditions)
+                    if where_conditions
+                    else ""
+                )
+
+                count_query = f"""
+                    SELECT COUNT(*) as total
+                    FROM node_info ni
+                    LEFT JOIN (
+                        SELECT
+                            from_node_id as node_id,
+                            COUNT(*) as packet_count_24h,
+                            SUM(
+                                CASE
+                                    WHEN hop_start IS NOT NULL
+                                     AND hop_limit IS NOT NULL
+                                     AND (hop_start - hop_limit) = 0
+                                    THEN 1
+                                    ELSE 0
+                                END
+                            ) as direct_packet_count_24h,
+                            MAX(timestamp) as last_packet_time
+                        FROM packet_history
+                        WHERE timestamp > (strftime('%s', 'now') - 86400)
+                        GROUP BY from_node_id
+                    ) stats ON ni.node_id = stats.node_id
+                    {where_clause}
+                """
+                cursor.execute(count_query, params)
+                total_count = cursor.fetchone()["total"]
 
                 query = f"""
                     SELECT
@@ -1202,6 +1235,7 @@ class NodeRepository:
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
+                        COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                         COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
                         COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
                         datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str
@@ -1210,6 +1244,15 @@ class NodeRepository:
                         SELECT
                             from_node_id as node_id,
                             COUNT(*) as packet_count_24h,
+                            SUM(
+                                CASE
+                                    WHEN hop_start IS NOT NULL
+                                     AND hop_limit IS NOT NULL
+                                     AND (hop_start - hop_limit) = 0
+                                    THEN 1
+                                    ELSE 0
+                                END
+                            ) as direct_packet_count_24h,
                             MAX(timestamp) as last_packet_time
                         FROM packet_history
                         WHERE timestamp > (strftime('%s', 'now') - 86400)
@@ -1249,6 +1292,7 @@ class NodeRepository:
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         0 as packet_count_24h,
+                        0 as direct_packet_count_24h,
                         0 as gateway_packet_count_24h,
                         ni.last_updated as last_packet_time,
                         datetime(ni.last_updated, 'unixepoch') as last_packet_str

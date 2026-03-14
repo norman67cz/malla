@@ -765,10 +765,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <!-- Direct Receptions Chart Component -->
-<script src="{{ url_for('static', filename='js/direct_receptions.js') }}"></script>
+<script src="{{ url_for('static', filename='js/direct_receptions.js') }}?v={{ BUILD_COMMIT }}"></script>
 
 <!-- Relay Node Analysis Component -->
-<script src="{{ url_for('static', filename='js/relay_node_analysis.js') }}"></script>
+<script src="{{ url_for('static', filename='js/relay_node_analysis.js') }}?v={{ BUILD_COMMIT }}"></script>
 
 <!-- Location data for JavaScript -->
 {% if location %}

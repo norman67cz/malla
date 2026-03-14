@@ -99,8 +99,9 @@ class RelayNodeAnalysis {
 
             // Avg RSSI column
             const rssiCell = document.createElement('td');
-            if (stat.avg_rssi !== null && stat.avg_rssi !== undefined) {
-                const rssiValue = stat.avg_rssi.toFixed(1);
+            const avgRssi = this.parseNumericValue(stat.avg_rssi);
+            if (avgRssi !== null) {
+                const rssiValue = avgRssi.toFixed(1);
                 rssiCell.innerHTML = `<span class="text-muted">${rssiValue} dBm</span>`;
             } else {
                 rssiCell.innerHTML = '<span class="text-muted">-</span>';
@@ -109,8 +110,9 @@ class RelayNodeAnalysis {
 
             // Avg SNR column
             const snrCell = document.createElement('td');
-            if (stat.avg_snr !== null && stat.avg_snr !== undefined) {
-                const snrValue = stat.avg_snr.toFixed(1);
+            const avgSnr = this.parseNumericValue(stat.avg_snr);
+            if (avgSnr !== null) {
+                const snrValue = avgSnr.toFixed(1);
                 snrCell.innerHTML = `<span class="text-muted">${snrValue} dB</span>`;
             } else {
                 snrCell.innerHTML = '<span class="text-muted">-</span>';
@@ -131,6 +133,15 @@ class RelayNodeAnalysis {
 
             tbody.appendChild(row);
         });
+    }
+
+    parseNumericValue(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : null;
     }
 
     /**
