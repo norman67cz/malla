@@ -25,6 +25,15 @@ Made by codex:
   printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
   this file is used by the footer to show the deployed commit hash
 
+## Data Retention
+  packet history cleanup already exists in `malla-capture` and runs automatically on startup and then every hour
+  configure it in `.env` using either:
+  `MALLA_DATA_RETENTION_DAYS=30`
+  or
+  `MALLA_DATA_RETENTION_HOURS=720`
+  if both are set, `MALLA_DATA_RETENTION_HOURS` wins
+  `0` means keep everything forever
+
 ## Uninstall
   sudo ./scripts/uninstall_malla_instance.sh --force
   PURGE_POSTGRES=1 sudo ./scripts/uninstall_malla_instance.sh --force

@@ -161,6 +161,19 @@ def load_config(config_path: str | os.PathLike | None = None) -> AppConfig:  # n
         if env_key in os.environ:
             data[field_name] = _coerce_value(os.environ[env_key], field_obj.type)
 
+    # Convenience alias: allow retention to be configured in days.
+    # Explicit hours win if both are present.
+    retention_days_key = f"{_ENV_PREFIX}DATA_RETENTION_DAYS"
+    retention_hours_key = f"{_ENV_PREFIX}DATA_RETENTION_HOURS"
+    if retention_days_key in os.environ and retention_hours_key not in os.environ:
+        try:
+            data["data_retention_hours"] = int(os.environ[retention_days_key]) * 24
+        except ValueError:
+            logger.warning(
+                "Could not coerce environment variable '%s' to int – ignoring",
+                retention_days_key,
+            )
+
     # Construct the config instance
     config = AppConfig(**data)  # type: ignore[arg-type]
     config._config_path = yaml_path if yaml_path.is_file() else None
