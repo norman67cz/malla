@@ -160,6 +160,21 @@
                 <input class="form-check-input" type="checkbox" id="mobileBtsCheckbox">
                 <label class="form-check-label" for="mobileBtsCheckbox">{{ t('map.mobile_bts_sites') }}</label>
             </div>
+            <div class="mt-2" id="mobileBtsDistanceSection">
+                <label class="form-label form-label-sm mb-1" for="mobileBtsDistanceKm">{{ t('map.mobile_bts_distance') }}</label>
+                <div class="input-group input-group-sm">
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="mobileBtsDistanceKm"
+                        min="0.1"
+                        max="50"
+                        step="0.1"
+                        value="2.0"
+                    >
+                    <span class="input-group-text">km</span>
+                </div>
+            </div>
         </div>
 
         <!-- Hop depth selector (shown only when a node is selected) -->
@@ -446,6 +461,7 @@ let showTracerouteLinks = true;
 let showPacketLinks = false;
 let showNeighborInfoLinks = false;
 let showMobileBtsSites = false;
+let mobileBtsDistanceKm = 2.0;
 let btsMeasurementLine = null;
 let precisionCircle = null;
 let searchResults = [];
@@ -453,6 +469,22 @@ let allNodes = [];
 let linkData = [];
 let firstDisplay = true; // prevent recenter after initial load
 let currentHopDepth = 1; // max hop depth to display around selected node
+
+function getMobileBtsDistanceKm() {
+    const input = document.getElementById('mobileBtsDistanceKm');
+    const parsed = input ? parseFloat(input.value) : NaN;
+    if (!Number.isFinite(parsed)) {
+        return mobileBtsDistanceKm;
+    }
+    return Math.min(50, Math.max(0.1, parsed));
+}
+
+function syncMobileBtsDistanceInput() {
+    const input = document.getElementById('mobileBtsDistanceKm');
+    if (input) {
+        input.value = getMobileBtsDistanceKm().toFixed(1);
+    }
+}
 
 // Update map theme based on current theme setting
 function updateMapTheme() {
@@ -615,6 +647,14 @@ function initializeInterface() {
         const desiredState = this.checked;
         if (desiredState !== showMobileBtsSites) {
             toggleMobileBtsSites();
+        }
+    });
+
+    $('#mobileBtsDistanceKm').on('input change', function() {
+        mobileBtsDistanceKm = getMobileBtsDistanceKm();
+        syncMobileBtsDistanceInput();
+        if (showMobileBtsSites) {
+            drawMobileBtsSites();
         }
     });
 
@@ -1727,7 +1767,7 @@ function drawMobileBtsSites() {
     mobileBtsMarkers = [];
 
     const viewportNodes = getViewportNodes(nodeData);
-    const visibleSites = filterMobileBtsSitesByDistance(mobileBtsData, viewportNodes, 2.0);
+    const visibleSites = filterMobileBtsSitesByDistance(mobileBtsData, viewportNodes, mobileBtsDistanceKm);
 
     visibleSites.forEach(site => {
         if (!site.latitude || !site.longitude) {
@@ -1806,7 +1846,7 @@ function createMobileBtsPopupContent(site) {
 
     return `
         <div class="traceroute-link-info">
-            <div class="fw-bold mb-2">Mobile BTS Site</div>
+            <div class="fw-bold mb-2">Mobile BTS Site CZ/SK</div>
             <div><strong>Operator:</strong> ${operator}</div>
             <div><strong>Radio:</strong> ${radio}</div>
             <div><strong>Band:</strong> ${site.band_mhz} MHz</div>
@@ -1861,7 +1901,7 @@ function measureDistanceToSelectedNode(siteLat, siteLon, siteLabel) {
         <div class="traceroute-link-info">
             <div class="fw-bold mb-2">BTS Distance</div>
             <div><strong>Node:</strong> ${escapeHtml(selectedNode.display_name || ('!' + selectedNode.node_id.toString(16).padStart(8, '0')))}</div>
-            <div><strong>BTS:</strong> ${escapeHtml(siteLabel || 'Mobile BTS Site')}</div>
+            <div><strong>BTS:</strong> ${escapeHtml(siteLabel || 'Mobile BTS Site CZ/SK')}</div>
             <div><strong>Distance:</strong> ${distanceKm.toFixed(2)} km</div>
         </div>
     `).openPopup(L.latLng(midpoint[0], midpoint[1]));

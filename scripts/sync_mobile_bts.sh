@@ -12,7 +12,7 @@ Usage: ./scripts/sync_mobile_bts.sh
 What it does:
   - ensures the web container is running
   - runs the BTS import inside the container
-  - refreshes rows in mobile_bts_sites from public gsmweb.cz data
+  - refreshes rows in mobile_bts_sites from supported public BTS sources
 
 Optional environment variables:
   INSTALL_DIR    Repository path with docker compose files

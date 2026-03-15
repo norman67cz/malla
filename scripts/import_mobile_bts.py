@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Import Czech public mobile BTS sites for relevant 800/900 MHz bands.
+"""Import public mobile BTS sites for relevant 800/900 MHz bands.
 
 Data source:
 - public GPS-enabled search pages on gsmweb.cz
+- public CLF-style BTS lists on ztk-comp.sk
 
 Filtering:
 - LTE/NR rows with explicit band 800 or 900
 - GSM rows whose BCCH/ARFCN falls into the GSM 900 ranges
+- Slovak ztk-comp rows are imported as GSM 900 when valid coordinates are present
 """
 
 from __future__ import annotations
@@ -25,7 +27,8 @@ from malla.config import get_config
 from malla.database.connection import get_db_connection
 
 USER_AGENT = "malla-bts-import/1.0 (+https://github.com/norman67cz/malla)"
-SOURCE_NAME = "gsmweb.cz"
+SOURCE_NAME_CZ = "gsmweb.cz"
+SOURCE_NAME_SK = "ztk-comp.sk"
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,13 @@ class SourceDef:
     districts_url: str
     search_op: str
     seznam_key: str
+
+
+@dataclass(frozen=True)
+class SlovakSourceDef:
+    operator: str
+    mnc: str
+    source_url: str
 
 
 SOURCES: tuple[SourceDef, ...] = (
@@ -80,6 +90,13 @@ SOURCES: tuple[SourceDef, ...] = (
         "paegas",
         "tmobile",
     ),
+)
+
+SLOVAK_SOURCES: tuple[SlovakSourceDef, ...] = (
+    SlovakSourceDef("Orange Slovensko", "01", "https://bts.ztk-comp.sk/zoznam.php?mnc=01"),
+    SlovakSourceDef("Telekom Slovensko", "02", "https://bts.ztk-comp.sk/zoznam.php?mnc=02"),
+    SlovakSourceDef("4ka", "03", "https://bts.ztk-comp.sk/zoznam.php?mnc=03"),
+    SlovakSourceDef("O2 Slovakia", "06", "https://bts.ztk-comp.sk/zoznam.php?mnc=06"),
 )
 
 
@@ -205,9 +222,81 @@ def iter_sites_for_source(source: SourceDef):
                 "longitude": lon,
                 "cell_count": 1,
                 "latest_seen_date": latest_seen_date,
-                "source": SOURCE_NAME,
+                "source": SOURCE_NAME_CZ,
                 "source_url": page_url,
             }
+
+
+def parse_slovak_clf_line(line: str) -> dict[str, str] | None:
+    line = html.unescape(line).strip()
+    if not line or not re.fullmatch(r"\d{5};.*", line):
+        return None
+
+    parts = line.split(";")
+    if len(parts) < 8:
+        return None
+
+    description_and_rat = parts[6].strip()
+    if "|" in description_and_rat:
+        description, rat = description_and_rat.rsplit("|", 1)
+    else:
+        description = description_and_rat
+        rat = ""
+
+    return {
+        "mccmnc": parts[0].strip(),
+        "cid": parts[1].strip(),
+        "lac": parts[2].strip(),
+        "rnc": parts[3].strip(),
+        "lat": parts[4].strip(),
+        "lon": parts[5].strip(),
+        "description": description.strip(),
+        "rat": rat.strip().upper(),
+    }
+
+
+def iter_slovak_sites_for_source(source: SlovakSourceDef):
+    page = fetch_html(source.source_url)
+    for raw_line in re.findall(r">([^<]+)<", page):
+        parsed = parse_slovak_clf_line(raw_line)
+        if not parsed:
+            continue
+
+        if parsed["rat"] != "GSM":
+            continue
+
+        try:
+            lat = float(parsed["lat"])
+            lon = float(parsed["lon"])
+        except ValueError:
+            continue
+
+        if not lat or not lon:
+            continue
+
+        description = parsed["description"].replace("|", " / ").strip(" /") or "no info"
+        location_text = description
+        band_mhz = 900
+        frequency_window = "880-915 MHz"
+        site_key = hashlib.sha1(
+            f"{source.operator}|GSM|{band_mhz}|SK|{parsed['cid']}|{lat:.6f}|{lon:.6f}".encode("utf-8")
+        ).hexdigest()
+
+        yield {
+            "site_key": site_key,
+            "operator": source.operator,
+            "radio": "GSM",
+            "band_mhz": band_mhz,
+            "frequency_window": frequency_window,
+            "district_code": f"SK-{source.mnc}",
+            "location_text": location_text,
+            "latitude": lat,
+            "longitude": lon,
+            "cell_count": 1,
+            "latest_seen_date": None,
+            "source": SOURCE_NAME_SK,
+            "source_url": source.source_url,
+        }
 
 
 def aggregate_sites(rows: list[dict]) -> list[dict]:
@@ -277,7 +366,9 @@ def write_sites(sites: list[dict], truncate: bool) -> int:
     ensure_table(cursor)
 
     if truncate:
-        cursor.execute("DELETE FROM mobile_bts_sites WHERE source = ?", (SOURCE_NAME,))
+        sources_to_replace = sorted({site["source"] for site in sites})
+        placeholders = ", ".join("?" for _ in sources_to_replace)
+        cursor.execute(f"DELETE FROM mobile_bts_sites WHERE source IN ({placeholders})", sources_to_replace)
 
     imported_at = time.time()
     rows = [
@@ -322,13 +413,15 @@ def write_sites(sites: list[dict], truncate: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Import Czech public mobile BTS sites")
-    parser.add_argument("--truncate", action="store_true", help="Replace existing gsmweb.cz BTS rows")
+    parser = argparse.ArgumentParser(description="Import public mobile BTS sites for Czechia and Slovakia")
+    parser.add_argument("--truncate", action="store_true", help="Replace existing BTS rows from supported public sources")
     args = parser.parse_args()
 
     rows: list[dict] = []
     for source in SOURCES:
         rows.extend(iter_sites_for_source(source))
+    for source in SLOVAK_SOURCES:
+        rows.extend(iter_slovak_sites_for_source(source))
 
     aggregated = aggregate_sites(rows)
     count = write_sites(aggregated, truncate=args.truncate)
