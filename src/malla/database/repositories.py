@@ -1285,12 +1285,12 @@ class NodeRepository:
 
             if search:
                 search_conditions = [
-                    "ni.long_name LIKE ?",
-                    "ni.short_name LIKE ?",
-                    "ni.hw_model LIKE ?",
-                    "printf('!%08x', ni.node_id) LIKE ?",
+                    "LOWER(COALESCE(ni.long_name, '')) LIKE ?",
+                    "LOWER(COALESCE(ni.short_name, '')) LIKE ?",
+                    "LOWER(COALESCE(ni.hw_model, '')) LIKE ?",
+                    "LOWER(printf('!%08x', ni.node_id)) LIKE ?",
                 ]
-                search_param = f"%{search}%"
+                search_param = f"%{search.lower()}%"
                 where_conditions.append("(" + " OR ".join(search_conditions) + ")")
                 params.extend([search_param] * len(search_conditions))
 
