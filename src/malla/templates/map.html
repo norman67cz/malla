@@ -446,6 +446,7 @@ let showTracerouteLinks = true;
 let showPacketLinks = false;
 let showNeighborInfoLinks = false;
 let showMobileBtsSites = false;
+let btsMeasurementLine = null;
 let precisionCircle = null;
 let searchResults = [];
 let allNodes = [];
@@ -1103,6 +1104,11 @@ function focusOnNode(node) {
 
 // Select a node
 function selectNode(node) {
+    if (btsMeasurementLine) {
+        map.removeLayer(btsMeasurementLine);
+        btsMeasurementLine = null;
+    }
+
     selectedNodeId = node.node_id;
 
     // Show hop depth controls
@@ -1195,6 +1201,11 @@ function showSelectedNodeDetails(node) {
 // Clear node selection
 function clearNodeSelection() {
     selectedNodeId = null;
+
+    if (btsMeasurementLine) {
+        map.removeLayer(btsMeasurementLine);
+        btsMeasurementLine = null;
+    }
 
     // Hide hop depth controls
     document.getElementById('hopDepthSection').style.display = 'none';
@@ -1791,6 +1802,7 @@ function createMobileBtsPopupContent(site) {
     const latestSeen = site.latest_seen_date ? escapeHtml(site.latest_seen_date) : '—';
     const source = escapeHtml(site.source || 'Unknown');
     const sourceUrl = site.source_url ? escapeHtml(site.source_url) : '';
+    const canMeasure = selectedNodeId !== null;
 
     return `
         <div class="traceroute-link-info">
@@ -1804,9 +1816,55 @@ function createMobileBtsPopupContent(site) {
             <div><strong>Observed Cells:</strong> ${site.cell_count || 1}</div>
             <div><strong>Latest Seen:</strong> ${latestSeen}</div>
             <div><strong>Source:</strong> ${source}</div>
-            ${sourceUrl ? `<div class="mt-2"><a href="${sourceUrl}" target="_blank" rel="noopener noreferrer">Open Source</a></div>` : ''}
+            <div class="mt-2 d-flex gap-1 flex-wrap">
+                ${canMeasure ? `<button class="btn btn-sm btn-dark" onclick="measureDistanceToSelectedNode(${site.latitude}, ${site.longitude}, '${locationText.replace(/'/g, "\\'")}')">Measure to selected node</button>` : `<span class="text-muted small">Select a node to measure distance</span>`}
+                ${sourceUrl ? `<a class="btn btn-sm btn-outline-secondary" href="${sourceUrl}" target="_blank" rel="noopener noreferrer">Open Source</a>` : ''}
+            </div>
         </div>
     `;
+}
+
+function measureDistanceToSelectedNode(siteLat, siteLon, siteLabel) {
+    if (selectedNodeId === null) {
+        return;
+    }
+
+    const selectedNode = allNodeData.find(node => node.node_id === selectedNodeId) || nodeData.find(node => node.node_id === selectedNodeId);
+    if (!selectedNode || selectedNode.latitude == null || selectedNode.longitude == null) {
+        return;
+    }
+
+    if (btsMeasurementLine) {
+        map.removeLayer(btsMeasurementLine);
+        btsMeasurementLine = null;
+    }
+
+    const distanceKm = calculateDistanceKm(
+        selectedNode.latitude,
+        selectedNode.longitude,
+        siteLat,
+        siteLon
+    );
+
+    btsMeasurementLine = L.polyline(
+        [[selectedNode.latitude, selectedNode.longitude], [siteLat, siteLon]],
+        {
+            color: '#111111',
+            weight: 3,
+            opacity: 0.9,
+            dashArray: '6, 6'
+        }
+    ).addTo(map);
+
+    const midpoint = [(selectedNode.latitude + siteLat) / 2, (selectedNode.longitude + siteLon) / 2];
+    btsMeasurementLine.bindPopup(`
+        <div class="traceroute-link-info">
+            <div class="fw-bold mb-2">BTS Distance</div>
+            <div><strong>Node:</strong> ${escapeHtml(selectedNode.display_name || ('!' + selectedNode.node_id.toString(16).padStart(8, '0')))}</div>
+            <div><strong>BTS:</strong> ${escapeHtml(siteLabel || 'Mobile BTS Site')}</div>
+            <div><strong>Distance:</strong> ${distanceKm.toFixed(2)} km</div>
+        </div>
+    `).openPopup(L.latLng(midpoint[0], midpoint[1]));
 }
 
 // Create popup content for traceroute links
