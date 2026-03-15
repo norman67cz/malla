@@ -4,6 +4,11 @@
 
 {% block content %}
 <div class="container-fluid">
+    <style>
+        .dashboard-card-title {
+            font-size: 1rem;
+        }
+    </style>
     {# Optional Markdown content defined in config.yaml #}
     {% if APP_CONFIG.home_markdown %}
     <div class="row mb-4">
@@ -90,7 +95,13 @@
         <div class="col-md-8 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-graph-up-arrow"></i> {{ t('dashboard.activity_trends') }}</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-graph-up-arrow"></i> {{ t('dashboard.activity_trends') }}
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="Hourly packet activity over the last 7 days, shown in your selected timezone."></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div id="timeSeriesChartLoading" class="text-center py-4">
@@ -108,7 +119,13 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-activity"></i> {{ t('dashboard.network_health') }}</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-activity"></i> {{ t('dashboard.network_health') }}
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="Summary of active node coverage, message success rate, gateway diversity, and recent network activity."></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
@@ -171,7 +188,7 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">
+                    <h5 class="card-title mb-0 dashboard-card-title">
                         <i class="bi bi-people"></i> {{ t('dashboard.node_activity_distribution') }}
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
@@ -194,7 +211,13 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-router-fill"></i> {{ t('dashboard.gateway_activity_distribution') }}</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-router-fill"></i> {{ t('dashboard.gateway_activity_distribution') }}
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="Distribution of packet receptions across gateways over the last 24 hours."></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div id="gatewayActivityChartLoading" class="text-center py-4">
@@ -211,7 +234,13 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-reception-4"></i> {{ t('dashboard.signal_quality_distribution') }}</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-reception-4"></i> {{ t('dashboard.signal_quality_distribution') }}
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="Packet quality buckets based on recent RSSI and SNR observations across the network."></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div id="signalDistributionChartLoading" class="text-center py-4">
@@ -231,7 +260,7 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">
+                    <h5 class="card-title mb-0 dashboard-card-title">
                         <i class="bi bi-router"></i> {{ t('dashboard.message_routing_patterns') }}
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
@@ -254,7 +283,13 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-pie-chart"></i> {{ t('dashboard.protocol_usage_24h') }}</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-pie-chart"></i> {{ t('dashboard.protocol_usage_24h') }}
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="Share of packet types seen in the last 24 hours, based on decoded protocol usage."></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     {% if stats.packet_types %}
@@ -280,7 +315,7 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0"><i class="bi bi-trophy"></i> Most Active Nodes</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title"><i class="bi bi-trophy"></i> Most Active Nodes</h5>
                 </div>
                 <div class="card-body">
                     <div id="topNodesLoading" class="text-center py-4">
