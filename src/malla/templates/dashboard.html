@@ -100,7 +100,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Hourly packet activity over the last 7 days, shown in your selected timezone."></i>
+                           title="{{ t('dashboard.activity_trends_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -124,7 +124,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Summary of active node coverage, message success rate, gateway diversity, and recent network activity."></i>
+                           title="{{ t('dashboard.network_health_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -193,7 +193,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Nodes grouped by packets sent in the last 24 hours: >100, 11-100, 1-10, or inactive."></i>
+                           title="{{ t('dashboard.node_activity_distribution_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -216,7 +216,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Distribution of packet receptions across gateways over the last 24 hours."></i>
+                           title="{{ t('dashboard.gateway_activity_distribution_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -239,7 +239,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Packet quality buckets based on recent RSSI and SNR observations across the network."></i>
+                           title="{{ t('dashboard.signal_quality_distribution_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -265,7 +265,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Based on packets from the last 24 hours: direct = 0 hops, routed = 1 hop, multi-hop = 2 or more hops."></i>
+                           title="{{ t('dashboard.message_routing_patterns_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -288,7 +288,7 @@
                         <i class="bi bi-info-circle ms-1 text-muted"
                            data-bs-toggle="tooltip"
                            data-bs-placement="top"
-                           title="Share of packet types seen in the last 24 hours, based on decoded protocol usage."></i>
+                           title="{{ t('dashboard.protocol_usage_24h_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
