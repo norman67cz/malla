@@ -1057,6 +1057,8 @@ function searchNodes(query) {
     const results = allNodes.filter(node => {
         const nodeIdHex = node.node_id.toString(16).padStart(8, '0');
         return node.display_name.toLowerCase().includes(query) ||
+               (node.short_name && node.short_name.toLowerCase().includes(query)) ||
+               (node.long_name && node.long_name.toLowerCase().includes(query)) ||
                nodeIdHex.includes(query) ||
                node.node_id.toString().includes(query) ||
                (node.hw_model && node.hw_model.toLowerCase().includes(query));
@@ -1109,12 +1111,14 @@ function displayNodeList(nodes, isSearchResults = false) {
         const ageClass = getAgeClass(ageHours);
         const roleColor = getRoleColor(node.role);
         const displayName = escapeHtml(node.display_name);
+        const shortName = node.short_name ? escapeHtml(node.short_name) : '';
         const role = node.role ? escapeHtml(formatRole(node.role)) : '';
         const hwModel = node.hw_model ? escapeHtml(node.hw_model) : '';
 
         return `
             <div class="node-list-item" onclick="selectNodeFromList(${node.node_id})">
                 <div><strong>${displayName}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${role}</span>` : ''}</div>
+                ${node.short_name ? `<small class="text-muted">${shortName}</small><br>` : ''}
                 <small class="text-muted">!${nodeIdHex}</small><br>
                 <span class="age-indicator ${ageClass}">${formatAge(ageHours)}</span>
                 ${node.hw_model ? `<small class="text-secondary ms-2">${hwModel}</small>` : ''}
