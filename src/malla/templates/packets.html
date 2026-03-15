@@ -95,7 +95,9 @@
                     <option value="1">1 hop</option>
                     <option value="2">2 hops</option>
                     <option value="3">3 hops</option>
-                    <option value="99">4+ hops</option>
+                    <option value="4">4 hops</option>
+                    <option value="5">5 hops</option>
+                    <option value="99">6+ hops</option>
                 </select>
             </div>
             <div class="col-12">
@@ -113,10 +115,10 @@
             </div>
             <div class="col-12">
                 <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
-                <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                    <option value="">{{ t('common.all_channels') }}</option>
+                <select class="form-select form-select-sm" id="primary_channel" name="primary_channel" multiple size="6">
                     <!-- Options will be loaded dynamically -->
                 </select>
+                <div class="form-text">Ctrl/Cmd + click for multiple channels</div>
             </div>
         </div>
     {% endcall %}
@@ -220,9 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             if (data.channels) {
                 const select = document.getElementById('primary_channel');
-                const allOption = select.querySelector('option[value=""]');
                 select.innerHTML = '';
-                select.appendChild(allOption);
                 data.channels.forEach((ch) => {
                     const option = document.createElement('option');
                     option.value = ch;

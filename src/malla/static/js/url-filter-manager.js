@@ -37,7 +37,11 @@ class URLFilterManager {
 
         // Add non-empty filters to URL
         Object.entries(filters).forEach(([key, value]) => {
-            if (value && value.toString().trim()) {
+            if (Array.isArray(value)) {
+                if (value.length > 0) {
+                    url.searchParams.set(key, value.join(','));
+                }
+            } else if (value && value.toString().trim()) {
                 url.searchParams.set(key, value);
             }
         });
@@ -68,6 +72,11 @@ class URLFilterManager {
                     // Special handling for checkboxes
                     if (field.type === 'checkbox') {
                         field.checked = (value === 'true' || value === '1' || value === 'on');
+                    } else if (field.multiple) {
+                        const selectedValues = value.split(',').map(v => v.trim()).filter(Boolean);
+                        Array.from(field.options).forEach((option) => {
+                            option.selected = selectedValues.includes(option.value);
+                        });
                     } else {
                         field.value = value;
                     }
@@ -227,6 +236,13 @@ class URLFilterManager {
             if (input.type === 'checkbox') {
                 // Include checkbox state (true/false)
                 filters[key] = input.checked;
+            } else if (input.multiple) {
+                const values = Array.from(input.selectedOptions)
+                    .map((option) => option.value)
+                    .filter((value) => value && value.trim());
+                if (values.length > 0) {
+                    filters[key] = values;
+                }
             } else if (input.value && input.value.trim()) {
                 // Include non-empty text/select values
                 filters[key] = input.value;

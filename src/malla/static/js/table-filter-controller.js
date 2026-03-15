@@ -136,13 +136,26 @@
                 // set initial state
                 if (input.type === 'checkbox') {
                     this.filterStore.state[key] = input.checked;
+                } else if (input.multiple) {
+                    this.filterStore.state[key] = Array.from(input.selectedOptions)
+                        .map((option) => option.value)
+                        .filter((value) => value && value.trim());
                 } else {
                     this.filterStore.state[key] = input.value;
                 }
 
                 const evt = (input.type === 'checkbox' || input.tagName === 'SELECT') ? 'change' : 'input';
                 const handler = () => {
-                    const val = input.type === 'checkbox' ? input.checked : input.value;
+                    let val;
+                    if (input.type === 'checkbox') {
+                        val = input.checked;
+                    } else if (input.multiple) {
+                        val = Array.from(input.selectedOptions)
+                            .map((option) => option.value)
+                            .filter((value) => value && value.trim());
+                    } else {
+                        val = input.value;
+                    }
                     this.filterStore.state[key] = val;
                 };
                 input.addEventListener(evt, input.type === 'text' ? debounce(handler, this.debounceDelay) : handler);
@@ -168,6 +181,9 @@
                         // For other booleans, only include if true (preserve original behavior)
                         const importantBooleans = ['group_packets', 'exclude_self'];
                         return importantBooleans.includes(key) || v === true;
+                    }
+                    if (Array.isArray(v)) {
+                        return v.length > 0;
                     }
                     return v !== undefined && v !== null && v !== '';
                 })
@@ -224,6 +240,10 @@
                 // Sync form values to store
                 if (input.type === 'checkbox') {
                     this.filterStore.state[key] = input.checked;
+                } else if (input.multiple) {
+                    this.filterStore.state[key] = Array.from(input.selectedOptions)
+                        .map((option) => option.value)
+                        .filter((value) => value && value.trim());
                 } else {
                     this.filterStore.state[key] = input.value;
                 }
@@ -247,6 +267,13 @@
 
                     if (input.type === 'checkbox') {
                         state[key] = input.checked;
+                    } else if (input.multiple) {
+                        const values = Array.from(input.selectedOptions)
+                            .map((option) => option.value)
+                            .filter((value) => value && value.trim());
+                        if (values.length > 0) {
+                            state[key] = values;
+                        }
                     } else {
                         state[key] = input.value;
                     }

@@ -385,12 +385,24 @@ class PacketRepository:
 
             # New: filter by primary_channel when provided (matches ServiceEnvelope channel_id)
             if filters.get("primary_channel"):
-                where_conditions.append("channel_id = ?")
-                params.append(filters["primary_channel"])
+                primary_channels = filters["primary_channel"]
+                if isinstance(primary_channels, (list, tuple, set)):
+                    channel_values = [value for value in primary_channels if value]
+                    if channel_values:
+                        placeholders = ", ".join("?" for _ in channel_values)
+                        where_conditions.append(f"channel_id IN ({placeholders})")
+                        params.extend(channel_values)
+                else:
+                    where_conditions.append("channel_id = ?")
+                    params.append(primary_channels)
 
             if filters.get("hop_count") is not None:
-                where_conditions.append("(hop_start - hop_limit) = ?")
-                params.append(filters["hop_count"])
+                if filters["hop_count"] == 99:
+                    where_conditions.append("(hop_start - hop_limit) >= ?")
+                    params.append(6)
+                else:
+                    where_conditions.append("(hop_start - hop_limit) = ?")
+                    params.append(filters["hop_count"])
 
             # Generic exclusion filters for from/to node IDs
             if filters.get("exclude_from") is not None:

@@ -1550,10 +1550,12 @@ def api_packets_data():
             except ValueError:
                 pass
 
-        # New: primary_channel filter (packet channel_id)
+        # New: primary_channel filter (packet channel_id), supports comma-separated multi-select
         primary_channel = request.args.get("primary_channel", "").strip()
         if primary_channel:
-            filters["primary_channel"] = primary_channel
+            channel_values = [value.strip() for value in primary_channel.split(",") if value.strip()]
+            if channel_values:
+                filters["primary_channel"] = channel_values if len(channel_values) > 1 else channel_values[0]
 
         # ------------------------------------------------------------------
         # Generic exclusion filters (exclude_from, exclude_to)
@@ -1979,10 +1981,12 @@ def api_traceroute_data():
             except ValueError:
                 pass
 
-        # New: primary_channel filter (packet channel_id)
+        # New: primary_channel filter (packet channel_id), supports comma-separated multi-select
         primary_channel = request.args.get("primary_channel", "").strip()
         if primary_channel:
-            filters["primary_channel"] = primary_channel
+            channel_values = [value.strip() for value in primary_channel.split(",") if value.strip()]
+            if channel_values:
+                filters["primary_channel"] = channel_values if len(channel_values) > 1 else channel_values[0]
 
         # Handle time filters
         start_time_str = request.args.get("start_time", "").strip()
