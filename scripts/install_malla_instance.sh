@@ -243,6 +243,11 @@ start_application() {
         up -d --build
 }
 
+sync_mobile_bts_data() {
+    log "Syncing mobile BTS data from public web sources"
+    "$INSTALL_DIR/scripts/sync_mobile_bts.sh"
+}
+
 print_summary() {
     cat <<EOF
 
@@ -274,6 +279,7 @@ main() {
     write_env_file
     maybe_edit_env
     start_application
+    sync_mobile_bts_data
     print_summary
 }
 
