@@ -41,10 +41,11 @@
             </div>
             <div class="col-12">
                 <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
-                <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                    <option value="">{{ t('common.all_channels') }}</option>
-                    <!-- Options will be loaded dynamically -->
-                </select>
+                <input type="hidden" id="primary_channel" name="primary_channel">
+                <div id="primary_channel_options" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
+                    <div class="text-muted">Loading channels...</div>
+                </div>
+                <div class="form-text">Select one or more channels</div>
             </div>
             <div class="col-12">
                 <label for="direct_receptions" class="form-label">{{ t('nodes.direct_receptions') }}</label>
@@ -234,6 +235,35 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function getSelectedPrimaryChannels() {
+        return Array.from(document.querySelectorAll('.primary-channel-checkbox:checked'))
+            .map((input) => input.value)
+            .filter((value) => value && value.trim());
+    }
+
+    function syncPrimaryChannelHiddenInput() {
+        const hiddenInput = document.getElementById('primary_channel');
+        if (!hiddenInput) return;
+        hiddenInput.value = getSelectedPrimaryChannels().join(',');
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function applyPrimaryChannelSelectionFromHidden() {
+        const hiddenInput = document.getElementById('primary_channel');
+        if (!hiddenInput) return;
+
+        const selected = new Set(
+            hiddenInput.value
+                .split(',')
+                .map((value) => value.trim())
+                .filter(Boolean)
+        );
+
+        document.querySelectorAll('.primary-channel-checkbox').forEach((input) => {
+            input.checked = selected.has(input.value);
+        });
+    }
+
     // Load primary channels from API
     async function loadPrimaryChannels() {
         try {
@@ -241,17 +271,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (data.channels) {
-                const select = document.getElementById('primary_channel');
-                const allOption = select.querySelector('option[value=""]');
-                select.innerHTML = '';
-                select.appendChild(allOption);
+                const container = document.getElementById('primary_channel_options');
+                container.innerHTML = '';
 
                 data.channels.forEach((ch) => {
-                    const option = document.createElement('option');
-                    option.value = ch;
-                    option.textContent = ch;
-                    select.appendChild(option);
+                    const channelId = `primary_channel_${String(ch).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'form-check';
+                    wrapper.innerHTML = `
+                        <input class="form-check-input primary-channel-checkbox" type="checkbox" value="${ch}" id="${channelId}">
+                        <label class="form-check-label" for="${channelId}">${ch}</label>
+                    `;
+                    container.appendChild(wrapper);
                 });
+
+                container.querySelectorAll('.primary-channel-checkbox').forEach((checkbox) => {
+                    checkbox.addEventListener('change', syncPrimaryChannelHiddenInput);
+                });
+
+                applyPrimaryChannelSelectionFromHidden();
             }
         } catch (error) {
             console.error('Error loading channels:', error);
@@ -262,6 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function initializePageWithFilters() {
         // Apply URL parameters
         const hasParams = await urlManager.applyURLParameters();
+        applyPrimaryChannelSelectionFromHidden();
 
         // Initialize the filter controller (after data + UI ready)
         controller.initialLoad(hasParams);

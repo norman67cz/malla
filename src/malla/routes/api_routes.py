@@ -1821,7 +1821,9 @@ def api_nodes_data():
 
         primary_channel = request.args.get("primary_channel", "").strip()
         if primary_channel:
-            filters["primary_channel"] = primary_channel
+            channel_values = [value.strip() for value in primary_channel.split(",") if value.strip()]
+            if channel_values:
+                filters["primary_channel"] = channel_values if len(channel_values) > 1 else channel_values[0]
         firmware_info = request.args.get("firmware_info", "").strip()
         if firmware_info in {"captured", "heuristic", "none", "older_than_2_6"}:
             filters["firmware_info"] = firmware_info

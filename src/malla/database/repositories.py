@@ -1316,8 +1316,16 @@ class NodeRepository:
                 params.append(filters["role"])
 
             if filters.get("primary_channel"):
-                where_conditions.append("ni.primary_channel = ?")
-                params.append(filters["primary_channel"])
+                primary_channels = filters["primary_channel"]
+                if isinstance(primary_channels, (list, tuple, set)):
+                    channel_values = [value for value in primary_channels if value]
+                    if channel_values:
+                        placeholders = ", ".join("?" for _ in channel_values)
+                        where_conditions.append(f"ni.primary_channel IN ({placeholders})")
+                        params.extend(channel_values)
+                else:
+                    where_conditions.append("ni.primary_channel = ?")
+                    params.append(primary_channels)
 
             firmware_info_filter = filters.get("firmware_info")
 
