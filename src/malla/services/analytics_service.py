@@ -72,6 +72,9 @@ class AnalyticsService:
             temporal_stats = AnalyticsService._get_temporal_patterns(
                 filters, twenty_four_hours_ago
             )
+            routing_patterns = AnalyticsService._get_routing_patterns(
+                filters, twenty_four_hours_ago
+            )
             top_nodes = AnalyticsService._get_top_active_nodes(filters, seven_days_ago)
             packet_types = AnalyticsService._get_packet_type_distribution(
                 filters, twenty_four_hours_ago
@@ -85,6 +88,7 @@ class AnalyticsService:
                 "node_statistics": node_stats,
                 "signal_quality": signal_stats,
                 "temporal_patterns": temporal_stats,
+                "routing_patterns": routing_patterns,
                 "top_nodes": top_nodes,
                 "packet_types": packet_types,
                 "gateway_distribution": gateway_stats,
@@ -453,6 +457,63 @@ class AnalyticsService:
             )
 
         return top_nodes
+
+    @staticmethod
+    def _get_routing_patterns(
+        filters: dict, since_timestamp: float
+    ) -> dict[str, Any]:
+        """Get routing pattern distribution from actual hop counts."""
+        from ..database.connection import get_db_connection
+
+        where_conditions: list[str] = [
+            "timestamp >= ?",
+            "hop_start IS NOT NULL",
+            "hop_limit IS NOT NULL",
+        ]
+        params: list[Any] = [since_timestamp]
+
+        if filters.get("gateway_id"):
+            where_conditions.append("gateway_id = ?")
+            params.append(filters["gateway_id"])
+
+        if filters.get("from_node"):
+            where_conditions.append("from_node_id = ?")
+            params.append(filters["from_node"])
+
+        if filters.get("hop_count") is not None:
+            where_conditions.append("(hop_start - hop_limit) = ?")
+            params.append(filters["hop_count"])
+
+        where_clause = " AND ".join(where_conditions)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT
+                SUM(CASE WHEN (hop_start - hop_limit) = 0 THEN 1 ELSE 0 END) AS direct_messages,
+                SUM(CASE WHEN (hop_start - hop_limit) = 1 THEN 1 ELSE 0 END) AS routed_messages,
+                SUM(CASE WHEN (hop_start - hop_limit) >= 2 THEN 1 ELSE 0 END) AS multi_hop_messages
+            FROM packet_history
+            WHERE {where_clause}
+        """,
+            params,
+        )
+
+        row = cursor.fetchone()
+        conn.close()
+
+        direct_messages = row["direct_messages"] or 0
+        routed_messages = row["routed_messages"] or 0
+        multi_hop_messages = row["multi_hop_messages"] or 0
+        total_messages = direct_messages + routed_messages + multi_hop_messages
+
+        return {
+            "direct_messages": direct_messages,
+            "routed_messages": routed_messages,
+            "multi_hop_messages": multi_hop_messages,
+            "total_messages": total_messages,
+        }
 
     @staticmethod
     def _get_packet_type_distribution(

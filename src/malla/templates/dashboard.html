@@ -484,7 +484,7 @@ function updateChartsForTheme() {
         createNodeActivityChart(analyticsData.node_statistics);
         createGatewayActivityChart(analyticsData.gateway_distribution);
         createSignalDistributionChart(analyticsData.signal_quality);
-        createHopDistributionChart(analyticsData.temporal_patterns);
+        createHopDistributionChart(analyticsData.routing_patterns);
         createPacketTypesChart(analyticsData.packet_types);
     }
 }
@@ -576,7 +576,7 @@ function renderAnalyticsData() {
     createNodeActivityChart(analyticsData.node_statistics);
     createGatewayActivityChart(analyticsData.gateway_distribution);
     createSignalDistributionChart(analyticsData.signal_quality);
-    createHopDistributionChart(analyticsData.temporal_patterns);
+    createHopDistributionChart(analyticsData.routing_patterns);
     createPacketTypesChart(analyticsData.packet_types);
     populateTopNodesTable(analyticsData.top_nodes);
 }
@@ -818,22 +818,22 @@ function createSignalDistributionChart(signalData) {
     });
 }
 
-function createHopDistributionChart(temporalData) {
-    // Create a simple hop distribution chart based on available data
+function createHopDistributionChart(routingData) {
     hideLoadingSpinner('hopDistributionChart');
     const ctx = document.getElementById('hopDistributionChart');
     if (!ctx) return;
 
     const colors = getChartColors();
+    const directMessages = routingData?.direct_messages || 0;
+    const routedMessages = routingData?.routed_messages || 0;
+    const multiHopMessages = routingData?.multi_hop_messages || 0;
 
-    // For now, create a chart showing message routing efficiency
-    // This could be enhanced with actual hop count data from the API
     chartInstances.hopDistributionChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['Direct Messages', 'Routed Messages', 'Multi-hop Messages'],
             datasets: [{
-                data: [60, 30, 10], // Placeholder data - could be enhanced with real hop analysis
+                data: [directMessages, routedMessages, multiHopMessages],
                 backgroundColor: [colors.success, colors.warning, colors.danger]
             }]
         },
