@@ -1537,6 +1537,9 @@ def api_packets_data():
         portnum = request.args.get("portnum", "").strip()
         if portnum:
             filters["portnum"] = portnum
+        pki_filter = request.args.get("pki_filter", "").strip()
+        if pki_filter in {"only", "exclude"}:
+            filters["pki_filter"] = pki_filter
         min_rssi_str = request.args.get("min_rssi")
         if min_rssi_str:
             try:

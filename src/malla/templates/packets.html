@@ -88,6 +88,14 @@
                 </select>
             </div>
             <div class="col-12">
+                <label for="pki_filter" class="form-label">PKI</label>
+                <select class="form-select form-select-sm" id="pki_filter" name="pki_filter">
+                    <option value="">All</option>
+                    <option value="only">PKI only</option>
+                    <option value="exclude">Non-PKI only</option>
+                </select>
+            </div>
+            <div class="col-12">
                 <label for="hop_count" class="form-label">{{ t('common.hop_count') }}</label>
                 <select class="form-select form-select-sm" id="hop_count" name="hop_count">
                     <option value="">{{ t('common.any_hops') }}</option>

@@ -371,6 +371,11 @@ class PacketRepository:
                 where_conditions.append("portnum_name = ?")
                 params.append(filters["portnum"])
 
+            if filters.get("pki_filter") == "only":
+                where_conditions.append("pki_encrypted IS TRUE")
+            elif filters.get("pki_filter") == "exclude":
+                where_conditions.append("(pki_encrypted IS NOT TRUE)")
+
             if filters.get("min_rssi"):
                 where_conditions.append("rssi >= ?")
                 params.append(filters["min_rssi"])
