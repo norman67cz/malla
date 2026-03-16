@@ -285,6 +285,10 @@
                 <div class="card-header">
                     <h5 class="card-title mb-0 dashboard-card-title">
                         <i class="bi bi-cpu"></i> {{ t('dashboard.hardware_model_distribution') }}
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="{{ t('dashboard.hardware_model_distribution_help') }}"></i>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -334,7 +338,13 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0 dashboard-card-title"><i class="bi bi-trophy"></i> Most Active Nodes</h5>
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-trophy"></i> Most Active Nodes
+                        <i class="bi bi-info-circle ms-1 text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
+                           title="{{ t('dashboard.most_active_nodes_help') }}"></i>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div id="topNodesLoading" class="text-center py-4">
