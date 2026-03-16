@@ -43,7 +43,9 @@ _DASHBOARD_PAYLOAD_CACHE: dict[
 _DASHBOARD_PAYLOAD_CACHE_TTL_SEC = 30
 _MAP_GRAPH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _MAP_GRAPH_CACHE_TTL_SEC = 30
-_LIVE_PACKETS_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
+_LIVE_PACKETS_CACHE: dict[
+    tuple[int, str, str, str], tuple[float, dict[str, Any]]
+] = {}
 _LIVE_PACKETS_CACHE_TTL_SEC = 2.5
 _LIVE_PACKET_RECEPTIONS_LOOKBACK_ROWS = 5000
 _TABLE_ENDPOINT_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -327,15 +329,32 @@ def api_live_packets():
     try:
         limit = request.args.get("limit", 50, type=int)
         limit = max(1, min(limit, 200))
+        channel_id = request.args.get("channel_id", "").strip()
+        gateway_source = request.args.get("gateway_source", "").strip()
+        packet_type = request.args.get("packet_type", "").strip()
         now_ts = time.time()
-        cached = _LIVE_PACKETS_CACHE.get(limit)
+        cache_key = (limit, channel_id, gateway_source, packet_type)
+        cached = _LIVE_PACKETS_CACHE.get(cache_key)
         if cached and (now_ts - cached[0] < _LIVE_PACKETS_CACHE_TTL_SEC):
             return safe_jsonify(cached[1])
 
         conn = get_db_connection()
         cursor = conn.cursor()
+        where_conditions: list[str] = []
+        params: list[Any] = []
+        if channel_id:
+            where_conditions.append("channel_id = ?")
+            params.append(channel_id)
+        if packet_type:
+            where_conditions.append("portnum_name = ?")
+            params.append(packet_type)
+        if gateway_source:
+            where_conditions.append("gateway_id = ?")
+            params.append(gateway_source)
+
+        where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
         cursor.execute(
-            """
+            f"""
             SELECT
                 id,
                 timestamp,
@@ -350,14 +369,46 @@ def api_live_packets():
                 hop_start,
                 hop_limit,
                 processed_successfully,
-                via_mqtt
+                via_mqtt,
+                channel_id
             FROM packet_history
+            {where_clause}
             ORDER BY id DESC
             LIMIT ?
             """,
-            (limit,),
+            [*params, limit],
         )
         rows = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT DISTINCT gateway_id
+            FROM packet_history
+            WHERE gateway_id IS NOT NULL AND gateway_id != ''
+            ORDER BY gateway_id
+            """
+        )
+        available_gateway_sources = [row[0] for row in cursor.fetchall() if row[0]]
+
+        cursor.execute(
+            """
+            SELECT DISTINCT channel_id
+            FROM packet_history
+            WHERE channel_id IS NOT NULL AND channel_id != ''
+            ORDER BY channel_id
+            """
+        )
+        available_channels = [row[0] for row in cursor.fetchall() if row[0]]
+
+        cursor.execute(
+            """
+            SELECT DISTINCT portnum_name
+            FROM packet_history
+            WHERE portnum_name IS NOT NULL AND portnum_name != ''
+            ORDER BY portnum_name
+            """
+        )
+        available_packet_types = [row[0] for row in cursor.fetchall() if row[0]]
 
         node_ids: set[int] = set()
         for row in rows:
@@ -444,6 +495,7 @@ def api_live_packets():
                     "to_node_id": to_node_id,
                     "to_node_name": to_node_name,
                     "portnum_name": row["portnum_name"] or "Unknown",
+                    "channel_id": row["channel_id"] or "",
                     "gateway_id": row["gateway_id"],
                     "payload_length": row["payload_length"],
                     "rssi": row["rssi"],
@@ -463,8 +515,21 @@ def api_live_packets():
                 }
             )
 
-        payload = {"packets": live_packets, "count": len(live_packets)}
-        _LIVE_PACKETS_CACHE[limit] = (now_ts, payload)
+        payload = {
+            "packets": live_packets,
+            "count": len(live_packets),
+            "filters": {
+                "available_channels": available_channels,
+                "available_gateway_sources": available_gateway_sources,
+                "available_packet_types": available_packet_types,
+                "selected": {
+                    "channel_id": channel_id,
+                    "gateway_source": gateway_source,
+                    "packet_type": packet_type,
+                },
+            },
+        }
+        _LIVE_PACKETS_CACHE[cache_key] = (now_ts, payload)
         return safe_jsonify(payload)
     except Exception as e:
         logger.error(f"Error in API live packets: {e}")

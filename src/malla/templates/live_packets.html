@@ -46,8 +46,18 @@
         margin: 0;
     }
 
+    .live-log-filters {
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid var(--bs-border-color);
+        background: var(--bs-tertiary-bg);
+    }
+
     @media (max-width: 768px) {
         .live-log-toolbar {
+            padding: 0.75rem 1rem;
+        }
+
+        .live-log-filters {
             padding: 0.75rem 1rem;
         }
     }
@@ -83,6 +93,33 @@
                 </div>
             </div>
             <div class="table-content">
+                <div class="live-log-filters">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label form-label-sm mb-1" for="liveLogChannelFilter">Channel</label>
+                            <select class="form-select form-select-sm" id="liveLogChannelFilter">
+                                <option value="">All Channels</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label form-label-sm mb-1" for="liveLogGatewaySourceFilter">Gateway Source</label>
+                            <select class="form-select form-select-sm" id="liveLogGatewaySourceFilter">
+                                <option value="">All Gateways</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label form-label-sm mb-1" for="liveLogTypeFilter">Type</label>
+                            <select class="form-select form-select-sm" id="liveLogTypeFilter">
+                                <option value="">All Types</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearLiveLogFilters">
+                                Clear Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="modern-table-container">
                     <div class="table-responsive">
                         <table class="modern-table mb-0 align-middle">
@@ -125,15 +162,61 @@ document.addEventListener('DOMContentLoaded', function() {
     const toggleRefreshBtn = document.getElementById('toggleRefresh');
     const refreshNowBtn = document.getElementById('refreshNow');
     const refreshState = document.getElementById('refreshState');
+    const channelFilter = document.getElementById('liveLogChannelFilter');
+    const gatewaySourceFilter = document.getElementById('liveLogGatewaySourceFilter');
+    const typeFilter = document.getElementById('liveLogTypeFilter');
+    const clearFiltersBtn = document.getElementById('clearLiveLogFilters');
 
     let autoRefreshEnabled = true;
     let isLoading = false;
     let refreshTimer = null;
+    let filtersInitialized = false;
 
     function escapeHtml(value) {
         const div = document.createElement('div');
         div.textContent = value == null ? '' : String(value);
         return div.innerHTML;
+    }
+
+    function buildLiveLogUrl() {
+        const params = new URLSearchParams({ limit: '50' });
+        if (channelFilter.value) params.set('channel_id', channelFilter.value);
+        if (gatewaySourceFilter.value) params.set('gateway_source', gatewaySourceFilter.value);
+        if (typeFilter.value) params.set('packet_type', typeFilter.value);
+        return `/api/packets/live?${params.toString()}`;
+    }
+
+    function populateSelectOptions(selectEl, values, allLabel, selectedValue) {
+        const currentValue = selectedValue ?? selectEl.value;
+        const options = [`<option value="">${allLabel}</option>`].concat(
+            values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
+        );
+        selectEl.innerHTML = options.join('');
+        selectEl.value = currentValue || '';
+    }
+
+    function updateFilterOptions(data) {
+        if (!data.filters) return;
+        const selected = data.filters.selected || {};
+        populateSelectOptions(
+            channelFilter,
+            data.filters.available_channels || [],
+            'All Channels',
+            selected.channel_id
+        );
+        populateSelectOptions(
+            gatewaySourceFilter,
+            data.filters.available_gateway_sources || [],
+            'All Gateways',
+            selected.gateway_source
+        );
+        populateSelectOptions(
+            typeFilter,
+            data.filters.available_packet_types || [],
+            'All Types',
+            selected.packet_type
+        );
+        filtersInitialized = true;
     }
 
     function renderPackets(packets) {
@@ -172,7 +255,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td><small>${timestampStr}</small></td>
                     <td>${fromNode}</td>
                     <td>${toNode}</td>
-                    <td><span class="badge bg-secondary">${portnumName}</span></td>
+                    <td>
+                        <div><span class="badge bg-secondary">${portnumName}</span></div>
+                        <div class="small text-muted">${escapeHtml(packet.channel_id || '-')}</div>
+                    </td>
                     <td>${gatewayId}</td>
                     <td>
                         <div><strong>${packet.reception_count}x</strong></div>
@@ -196,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         isLoading = true;
         try {
-            const response = await fetch('/api/packets/live?limit=50');
+            const response = await fetch(buildLiveLogUrl());
             const data = await response.json();
 
             if (data.error) {
@@ -208,6 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            updateFilterOptions(data);
             renderPackets(data.packets || []);
             lastUpdate.textContent = new Date().toLocaleTimeString();
         } catch (error) {
@@ -237,6 +324,17 @@ document.addEventListener('DOMContentLoaded', function() {
         refreshState.className = autoRefreshEnabled
             ? 'badge bg-success-subtle text-success-emphasis border border-success-subtle me-2'
             : 'badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle me-2';
+    });
+
+    [channelFilter, gatewaySourceFilter, typeFilter].forEach(filterEl => {
+        filterEl.addEventListener('change', loadPackets);
+    });
+
+    clearFiltersBtn.addEventListener('click', function() {
+        channelFilter.value = '';
+        gatewaySourceFilter.value = '';
+        typeFilter.value = '';
+        loadPackets();
     });
 
     refreshNowBtn.addEventListener('click', loadPackets);
