@@ -107,10 +107,10 @@
                 </div>
                 <div class="mb-3">
                     <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
-                    <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
-                        <option value="">{{ t('common.all_channels') }}</option>
-                        <!-- Options will be loaded dynamically -->
-                    </select>
+                    <input type="hidden" id="primary_channel" name="primary_channel" value="{{ primary_channel or '' }}">
+                    <div id="primaryChannelOptions" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
+                        <div class="text-muted">{{ t('common.loading') }}...</div>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm w-100">
                     <i class="bi bi-arrow-clockwise"></i> {{ t('graph.update_graph') }}
@@ -381,7 +381,7 @@ function initializeInterface() {
         clearSelection();
     });
 
-    // Load primary channels into filter select
+    // Load primary channels into filter checkbox list
     loadPrimaryChannels();
 }
 
@@ -1912,20 +1912,56 @@ async function loadPrimaryChannels() {
         const response = await fetch('/api/meshtastic/channels');
         const data = await response.json();
         if (data.channels) {
-            const select = document.getElementById('primary_channel');
-            const allOption = select.querySelector('option[value=""]');
-            select.innerHTML = '';
-            select.appendChild(allOption);
+            const container = document.getElementById('primaryChannelOptions');
+            container.innerHTML = '';
             data.channels.forEach((ch) => {
-                const option = document.createElement('option');
-                option.value = ch;
-                option.textContent = ch;
-                select.appendChild(option);
+                const channelId = `graph_channel_${String(ch).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'form-check';
+                wrapper.innerHTML = `
+                    <input class="form-check-input graph-channel-checkbox" type="checkbox" value="${ch}" id="${channelId}">
+                    <label class="form-check-label" for="${channelId}">${ch}</label>
+                `;
+                container.appendChild(wrapper);
             });
+
+            container.querySelectorAll('.graph-channel-checkbox').forEach((checkbox) => {
+                checkbox.addEventListener('change', syncPrimaryChannelHiddenInput);
+            });
+
+            applyPrimaryChannelSelectionFromHidden();
         }
     } catch (err) {
         console.error('Error loading channels:', err);
     }
+}
+
+function getSelectedPrimaryChannels() {
+    return Array.from(document.querySelectorAll('.graph-channel-checkbox:checked'))
+        .map((input) => input.value)
+        .filter((value) => value && value.trim());
+}
+
+function syncPrimaryChannelHiddenInput() {
+    const hiddenInput = document.getElementById('primary_channel');
+    if (!hiddenInput) return;
+    hiddenInput.value = getSelectedPrimaryChannels().join(',');
+}
+
+function applyPrimaryChannelSelectionFromHidden() {
+    const hiddenInput = document.getElementById('primary_channel');
+    if (!hiddenInput) return;
+
+    const selected = new Set(
+        hiddenInput.value
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean)
+    );
+
+    document.querySelectorAll('.graph-channel-checkbox').forEach((input) => {
+        input.checked = selected.has(input.value);
+    });
 }
 </script>
 

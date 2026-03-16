@@ -66,6 +66,7 @@ def traceroute_graph():
         hours = request.args.get("hours", 72, type=int)
         min_snr = request.args.get("min_snr", -200.0, type=float)
         include_indirect = request.args.get("include_indirect", False, type=bool)
+        primary_channel = request.args.get("primary_channel", "").strip()
 
         # Validate parameters
         if hours < 1 or hours > 168:  # Max 7 days
@@ -79,6 +80,7 @@ def traceroute_graph():
             hours=hours,
             min_snr=min_snr,
             include_indirect=include_indirect,
+            primary_channel=primary_channel,
         )
     except Exception as e:
         logger.error(f"Error in traceroute graph route: {e}")

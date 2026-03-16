@@ -102,10 +102,10 @@
                 </div>
                 <div class="mb-3">
                     <label for="channelFilter" class="form-label">{{ t('common.primary_channel') }}</label>
-                    <select class="form-select form-select-sm" id="channelFilter" name="channelFilter">
-                        <option value="">{{ t('common.all_channels') }}</option>
-                        <!-- Options loaded dynamically -->
-                    </select>
+                    <input type="hidden" id="channelFilter" name="channelFilter">
+                    <div id="channelFilterOptions" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
+                        <div class="text-muted">{{ t('common.loading') }}...</div>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label for="startDateTime" class="form-label">{{ t('common.start_date_time') }}</label>
@@ -710,20 +710,60 @@ function initializeInterface() {
             const response = await fetch('/api/meshtastic/channels');
             const data = await response.json();
             if (data.channels) {
-                const select = document.getElementById('channelFilter');
-                const allOption = select.querySelector('option[value=""]');
-                select.innerHTML = '';
-                select.appendChild(allOption);
+                const container = document.getElementById('channelFilterOptions');
+                container.innerHTML = '';
                 data.channels.forEach((ch) => {
-                    const option = document.createElement('option');
-                    option.value = ch;
-                    option.textContent = ch;
-                    select.appendChild(option);
+                    const channelId = `map_channel_${String(ch).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'form-check';
+                    wrapper.innerHTML = `
+                        <input class="form-check-input map-channel-checkbox" type="checkbox" value="${ch}" id="${channelId}">
+                        <label class="form-check-label" for="${channelId}">${ch}</label>
+                    `;
+                    container.appendChild(wrapper);
                 });
+
+                container.querySelectorAll('.map-channel-checkbox').forEach((checkbox) => {
+                    checkbox.addEventListener('change', () => {
+                        syncPrimaryChannelHiddenInput();
+                        applyClientSideFilters();
+                    });
+                });
+
+                applyPrimaryChannelSelectionFromHidden();
             }
         } catch (error) {
             console.error('Error loading primary channels:', error);
         }
+    }
+
+    function getSelectedPrimaryChannels() {
+        return Array.from(document.querySelectorAll('.map-channel-checkbox:checked'))
+            .map((input) => input.value)
+            .filter((value) => value && value.trim());
+    }
+
+    function syncPrimaryChannelHiddenInput() {
+        const hiddenInput = document.getElementById('channelFilter');
+        if (!hiddenInput) return;
+        hiddenInput.value = getSelectedPrimaryChannels().join(',');
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function applyPrimaryChannelSelectionFromHidden() {
+        const hiddenInput = document.getElementById('channelFilter');
+        if (!hiddenInput) return;
+
+        const selected = new Set(
+            hiddenInput.value
+                .split(',')
+                .map((value) => value.trim())
+                .filter(Boolean)
+        );
+
+        document.querySelectorAll('.map-channel-checkbox').forEach((input) => {
+            input.checked = selected.has(input.value);
+        });
     }
 
     // Load channels on interface init
@@ -879,7 +919,10 @@ function applyClientSideFilters() {
 
     // Apply channel filter
     if (channelFilter) {
-        filteredNodes = filteredNodes.filter(node => node.primary_channel === channelFilter);
+        const selectedChannels = channelFilter.split(',').map(value => value.trim()).filter(Boolean);
+        if (selectedChannels.length > 0) {
+            filteredNodes = filteredNodes.filter(node => selectedChannels.includes(node.primary_channel));
+        }
     }
 
     // Convert date inputs to timestamps for comparison
