@@ -11,7 +11,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from meshtastic import mesh_pb2
+from meshtastic import mesh_pb2, telemetry_pb2
 
 from ..utils.formatting import format_time_ago
 from ..utils.node_utils import get_bulk_node_short_names
@@ -127,6 +127,102 @@ def _get_firmware_info_state(
         return "heuristic", hint
 
     return "none", hint
+
+
+def _get_node_telemetry_history(cursor, node_id: int) -> dict[str, Any]:
+    """Get parsed telemetry history for the last 24 hours for a node."""
+    window_start = time.time() - (24 * 3600)
+    cursor.execute(
+        """
+        SELECT timestamp, raw_payload
+        FROM packet_history
+        WHERE from_node_id = ?
+          AND portnum_name = 'TELEMETRY_APP'
+          AND timestamp >= ?
+          AND raw_payload IS NOT NULL
+        ORDER BY timestamp ASC
+        """,
+        (node_id, window_start),
+    )
+    rows = cursor.fetchall()
+
+    points: list[dict[str, Any]] = []
+    available_metrics: set[str] = set()
+
+    for row in rows:
+        try:
+            telemetry = telemetry_pb2.Telemetry()
+            telemetry.ParseFromString(row["raw_payload"])
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Could not parse TELEMETRY_APP for node %s at %s: %s",
+                node_id,
+                row["timestamp"],
+                exc,
+            )
+            continue
+
+        point: dict[str, Any] = {"timestamp": row["timestamp"]}
+
+        if telemetry.HasField("device_metrics"):
+            metrics = telemetry.device_metrics
+            if metrics.HasField("battery_level"):
+                point["battery_level"] = int(metrics.battery_level)
+                available_metrics.add("battery_level")
+            if metrics.HasField("voltage"):
+                point["voltage"] = round(metrics.voltage / 1000.0, 3)
+                available_metrics.add("voltage")
+            if metrics.HasField("channel_utilization"):
+                point["channel_utilization"] = round(
+                    float(metrics.channel_utilization), 2
+                )
+                available_metrics.add("channel_utilization")
+            if metrics.HasField("air_util_tx"):
+                point["air_util_tx"] = round(float(metrics.air_util_tx), 2)
+                available_metrics.add("air_util_tx")
+
+        if telemetry.HasField("environment_metrics"):
+            metrics = telemetry.environment_metrics
+            if metrics.HasField("temperature"):
+                point["temperature"] = round(float(metrics.temperature), 2)
+                available_metrics.add("temperature")
+            if metrics.HasField("relative_humidity"):
+                point["relative_humidity"] = round(
+                    float(metrics.relative_humidity), 2
+                )
+                available_metrics.add("relative_humidity")
+            if metrics.HasField("barometric_pressure"):
+                point["barometric_pressure"] = round(
+                    float(metrics.barometric_pressure), 2
+                )
+                available_metrics.add("barometric_pressure")
+
+        if len(point) > 1:
+            points.append(point)
+
+    metric_order = [
+        "battery_level",
+        "voltage",
+        "channel_utilization",
+        "air_util_tx",
+        "temperature",
+        "relative_humidity",
+        "barometric_pressure",
+    ]
+
+    latest_values = points[-1] if points else {}
+    return {
+        "has_data": bool(points),
+        "points": points,
+        "available_metrics": [
+            metric_name
+            for metric_name in metric_order
+            if metric_name in available_metrics
+        ],
+        "point_count": len(points),
+        "latest_timestamp": points[-1]["timestamp"] if points else None,
+        "latest_values": latest_values,
+    }
 
 
 def _firmware_version_is_older_than_2_6(firmware_version: str | None) -> bool:
@@ -1855,6 +1951,14 @@ class NodeRepository:
                     "protocol_window": protocol_window,
                     "received_gateways": [],
                     "location": None,
+                    "telemetry_history": {
+                        "has_data": False,
+                        "points": [],
+                        "available_metrics": [],
+                        "point_count": 0,
+                        "latest_timestamp": None,
+                        "latest_values": {},
+                    },
                 }
 
             # Convert Unix timestamps to UTC datetimes to avoid local timezone drift
@@ -2565,6 +2669,8 @@ class NodeRepository:
                     }
                 )
 
+            telemetry_history = _get_node_telemetry_history(cursor, node_id)
+
             conn.close()
 
             # Get location information using the new, efficient LocationRepository helper
@@ -2703,6 +2809,7 @@ class NodeRepository:
                 "matrix_gateways": matrix_gateways,
                 "location": location_info,
                 "neighbor_info": neighbor_info,
+                "telemetry_history": telemetry_history,
             }
 
         except Exception as e:

@@ -44,6 +44,9 @@
         font-size: 0.75rem;
     }
     .matrix-table td { text-align: center; }
+    #telemetry-chart {
+        max-height: 340px;
+    }
 </style>
 {% endblock %}
 
@@ -352,6 +355,56 @@
                     </div>
                 </div>
             </div>
+
+            {% if telemetry_history and telemetry_history.has_data %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <h5 class="mb-0"><i class="bi bi-activity"></i> Telemetry</h5>
+                        <small class="text-muted">
+                            Last 24h • {{ telemetry_history.point_count }} points
+                        </small>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        {% if telemetry_history.latest_values.battery_level is defined %}
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Battery</div>
+                                <div class="fw-semibold">{{ telemetry_history.latest_values.battery_level }}%</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if telemetry_history.latest_values.voltage is defined %}
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Voltage</div>
+                                <div class="fw-semibold">{{ "%.2f"|format(telemetry_history.latest_values.voltage) }} V</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if telemetry_history.latest_values.temperature is defined %}
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Temperature</div>
+                                <div class="fw-semibold">{{ "%.1f"|format(telemetry_history.latest_values.temperature) }} °C</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if telemetry_history.latest_values.relative_humidity is defined %}
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Humidity</div>
+                                <div class="fw-semibold">{{ "%.1f"|format(telemetry_history.latest_values.relative_humidity) }}%</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <canvas id="telemetry-chart" height="120"></canvas>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Direct Receptions Graph (Gateway only) -->
             {% include "components/direct_receptions.html" %}
@@ -1082,6 +1135,134 @@ async function loadLocationHistoryMap() {
 // ========================= Direct Receptions Chart =========================
 // Initialize Direct Receptions Chart Component
 let directReceptionsChart;
+let telemetryChart;
+
+const telemetryHistory = {{ telemetry_history|tojson }};
+
+function formatTelemetryTimestamp(unixTimestamp) {
+    const date = new Date(unixTimestamp * 1000);
+    const timezone = typeof getCurrentTimezone === 'function' ? getCurrentTimezone() : 'local';
+    if (timezone === 'utc') {
+        return date.toISOString().slice(5, 16).replace('T', ' ');
+    }
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mi = String(date.getMinutes()).padStart(2, '0');
+    return `${mm}-${dd} ${hh}:${mi}`;
+}
+
+function buildTelemetryDatasets(points) {
+    const metricConfig = {
+        battery_level: { label: 'Battery %', color: '#198754', yAxisID: 'percent' },
+        channel_utilization: { label: 'Channel Util %', color: '#fd7e14', yAxisID: 'percent' },
+        air_util_tx: { label: 'Air Util TX %', color: '#dc3545', yAxisID: 'percent' },
+        relative_humidity: { label: 'Humidity %', color: '#0dcaf0', yAxisID: 'percent' },
+        voltage: { label: 'Voltage V', color: '#6f42c1', yAxisID: 'voltage' },
+        temperature: { label: 'Temperature °C', color: '#ffc107', yAxisID: 'temperature' },
+        barometric_pressure: { label: 'Pressure hPa', color: '#495057', yAxisID: 'pressure' }
+    };
+
+    return Object.entries(metricConfig)
+        .filter(([metric]) => points.some(point => point[metric] !== undefined && point[metric] !== null))
+        .map(([metric, config]) => ({
+            label: config.label,
+            data: points.map(point => point[metric] ?? null),
+            borderColor: config.color,
+            backgroundColor: config.color,
+            yAxisID: config.yAxisID,
+            tension: 0.25,
+            spanGaps: true,
+            pointRadius: 1.5,
+            pointHoverRadius: 4
+        }));
+}
+
+function initializeTelemetryChart() {
+    const canvas = document.getElementById('telemetry-chart');
+    if (!canvas || !telemetryHistory || !telemetryHistory.has_data || !window.Chart) {
+        return;
+    }
+
+    const labels = telemetryHistory.points.map(point => formatTelemetryTimestamp(point.timestamp));
+    const datasets = buildTelemetryDatasets(telemetryHistory.points);
+
+    if (!datasets.length) {
+        return;
+    }
+
+    telemetryChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        maxTicksLimit: 10
+                    }
+                },
+                percent: {
+                    type: 'linear',
+                    position: 'left',
+                    suggestedMin: 0,
+                    suggestedMax: 100,
+                    title: {
+                        display: true,
+                        text: '%'
+                    }
+                },
+                voltage: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'V'
+                    }
+                },
+                temperature: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    title: {
+                        display: true,
+                        text: '°C'
+                    }
+                },
+                pressure: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    display: datasets.some(dataset => dataset.yAxisID === 'pressure'),
+                    title: {
+                        display: true,
+                        text: 'hPa'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     const scriptTag = document.querySelector('script[data-node-id]');
@@ -1091,6 +1272,8 @@ document.addEventListener('DOMContentLoaded', function() {
         directReceptionsChart = new DirectReceptionsChart(nodeId);
         directReceptionsChart.initialize();
     }
+
+    initializeTelemetryChart();
 
     // Format all timestamps based on current timezone preference
     // This ensures timestamps on the detail page respect the timezone setting
