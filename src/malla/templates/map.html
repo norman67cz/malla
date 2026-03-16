@@ -95,6 +95,7 @@
                         <option value="REPEATER">Repeater</option>
                         <option value="CLIENT_MUTE">Client Mute</option>
                         <option value="CLIENT_BASE">Client Base</option>
+                        <option value="TRACKER">Tracker</option>
                         <option value="ROUTER_CLIENT">Router Client</option>
                         <option value="SENSOR">Sensor</option>
                         <option value="UNKNOWN">Unknown/Other</option>
@@ -192,14 +193,15 @@
         </div>
 
         {% set map_legend_items = [
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #007bff;", "content": "", "text": "Client"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #28a745;", "content": "", "text": "Router"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #28a745;", "content": "", "text": "Router Late"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #ffc107;", "content": "", "text": "Repeater"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #6c757d;", "content": "", "text": "Client Mute"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #17a2b8;", "content": "", "text": "Router Client"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #e83e8c;", "content": "", "text": "Sensor"},
-            {"type": "span", "class": "role-color-indicator", "style": "background-color: #dc3545;", "content": "", "text": "Unknown Role"},
+            {"type": "span", "class": "role-color-indicator legend-circle", "style": "--legend-color: #198754;", "content": "", "text": "Client"},
+            {"type": "span", "class": "role-color-indicator legend-triangle", "style": "--legend-color: #0d6efd;", "content": "", "text": "Router"},
+            {"type": "span", "class": "role-color-indicator legend-triangle", "style": "--legend-color: #198754;", "content": "", "text": "Router Late"},
+            {"type": "span", "class": "role-color-indicator legend-circle-slash", "style": "--legend-color: #6c757d;", "content": "", "text": "Client Mute"},
+            {"type": "span", "class": "role-color-indicator legend-triangle", "style": "--legend-color: #ffc107;", "content": "", "text": "Client Base"},
+            {"type": "span", "class": "role-color-indicator legend-circle-dot", "style": "--legend-color: #198754;", "content": "", "text": "Tracker"},
+            {"type": "span", "class": "role-color-indicator legend-circle", "style": "--legend-color: #17a2b8;", "content": "", "text": "Router Client"},
+            {"type": "span", "class": "role-color-indicator legend-circle", "style": "--legend-color: #e83e8c;", "content": "", "text": "Sensor"},
+            {"type": "span", "class": "role-color-indicator legend-circle", "style": "--legend-color: #dc3545;", "content": "", "text": "Unknown Role"},
             {"type": "span", "class": "signal-indicator bg-success", "content": "", "text": t('map.excellent_coverage')},
             {"type": "span", "class": "signal-indicator bg-warning", "content": "", "text": t('map.good_coverage')},
             {"type": "span", "class": "signal-indicator bg-danger", "content": "", "text": t('map.limited_coverage')},
@@ -306,9 +308,61 @@
     display: inline-block;
     width: 20px;
     height: 20px;
+    position: relative;
+    background: transparent;
+}
+
+.role-color-indicator.legend-circle {
     border-radius: 50%;
+    background: var(--legend-color);
     border: 1px solid white;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.role-color-indicator.legend-triangle {
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 20px solid var(--legend-color);
+}
+
+.role-color-indicator.legend-circle-dot {
+    border-radius: 50%;
+    background: var(--legend-color);
+    border: 1px solid white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.role-color-indicator.legend-circle-dot::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.95);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.role-color-indicator.legend-circle-slash {
+    border-radius: 50%;
+    background: var(--legend-color);
+    border: 1px solid white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.role-color-indicator.legend-circle-slash::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 3px;
+    background: rgba(255,255,255,0.95);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-35deg);
+    border-radius: 2px;
 }
 
 .age-indicator {
@@ -363,19 +417,9 @@
 }
 
 .node-marker-container {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: 8px;
-    font-weight: bold;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    width: 44px;
+    height: 44px;
+    position: relative;
     cursor: pointer;
     transition: transform 0.2s ease;
 }
@@ -384,7 +428,55 @@
     transform: scale(1.1);
 }
 
+.node-marker-shape {
+    position: absolute;
+    inset: 2px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.node-marker-shape.circle {
+    border-radius: 50%;
+    background: var(--marker-color);
+    border: 2px solid white;
+}
+
+.node-marker-shape.triangle {
+    background: var(--marker-color);
+    clip-path: polygon(50% 0%, 4% 96%, 96% 96%);
+    border: 2px solid white;
+}
+
+.node-marker-container.has-slash::after {
+    content: '';
+    position: absolute;
+    width: 34px;
+    height: 4px;
+    background: rgba(255,255,255,0.96);
+    top: 20px;
+    left: 5px;
+    transform: rotate(-35deg);
+    border-radius: 2px;
+    z-index: 2;
+}
+
+.node-marker-container.has-dot::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.96);
+    top: 18px;
+    left: 18px;
+    z-index: 2;
+}
+
 .node-marker-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
     font-size: 10px;
     line-height: 1;
     max-width: 36px;
@@ -392,6 +484,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: center;
+    font-weight: bold;
+    color: var(--marker-text, white);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.node-marker-container.triangle-marker .node-marker-label {
+    top: 58%;
+}
+
+.node-marker-container.light-label .node-marker-label {
+    color: #1f2328;
+    text-shadow: none;
 }
 
 /* Additional mobile adjustments specific to map */
@@ -1024,8 +1128,7 @@ function updateMapDisplay() {
 
 // Add a marker for a node
 function addNodeMarker(node) {
-    // Create custom marker with role-based styling
-    const roleColor = getRoleColor(node.role);
+    const markerSpec = getRoleMarkerSpec(node.role);
 
     // Determine display text for the marker
     let displayText = node.short_name || node.display_name;
@@ -1041,12 +1144,13 @@ function addNodeMarker(node) {
     const markerIcon = L.divIcon({
         className: 'custom-node-marker',
         html: `
-            <div class="node-marker-container" style="background-color: ${roleColor};">
+            <div class="node-marker-container ${markerSpec.containerClass}" style="--marker-color: ${markerSpec.color}; --marker-text: ${markerSpec.textColor};">
+                <div class="node-marker-shape ${markerSpec.shapeClass}"></div>
                 <div class="node-marker-label">${displayText}</div>
             </div>
         `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
     });
 
     const marker = L.marker([node.latitude, node.longitude], { icon: markerIcon });
@@ -1452,15 +1556,41 @@ function getRoleColor(role) {
     const computedStyle = getComputedStyle(document.documentElement);
 
     switch (role) {
-        case 'CLIENT': return computedStyle.getPropertyValue('--bs-primary').trim(); // Blue
+        case 'CLIENT': return computedStyle.getPropertyValue('--bs-success').trim(); // Green
         case 'CLIENT_MUTE': return computedStyle.getPropertyValue('--bs-secondary').trim(); // Gray
-        case 'CLIENT_BASE': return computedStyle.getPropertyValue('--bs-secondary').trim(); // Gray
-        case 'ROUTER': return computedStyle.getPropertyValue('--bs-success').trim(); // Green
-        case 'ROUTER_LATE': return computedStyle.getPropertyValue('--bs-success').trim(); // Green (same as ROUTER)
+        case 'CLIENT_BASE': return computedStyle.getPropertyValue('--bs-warning').trim(); // Yellow
+        case 'ROUTER': return computedStyle.getPropertyValue('--bs-primary').trim(); // Blue
+        case 'ROUTER_LATE': return computedStyle.getPropertyValue('--bs-success').trim(); // Green
+        case 'TRACKER': return computedStyle.getPropertyValue('--bs-success').trim(); // Green
         case 'REPEATER': return computedStyle.getPropertyValue('--bs-warning').trim(); // Yellow
         case 'ROUTER_CLIENT': return computedStyle.getPropertyValue('--bs-info').trim(); // Teal
         case 'SENSOR': return computedStyle.getPropertyValue('--bs-sensor').trim(); // Pink
         default: return computedStyle.getPropertyValue('--bs-danger').trim(); // Red for unknown/null roles
+    }
+}
+
+function getRoleMarkerSpec(role) {
+    const color = getRoleColor(role);
+    switch (role) {
+        case 'ROUTER':
+            return { color, textColor: '#ffffff', shapeClass: 'triangle', containerClass: 'triangle-marker' };
+        case 'ROUTER_LATE':
+            return { color, textColor: '#ffffff', shapeClass: 'triangle', containerClass: 'triangle-marker' };
+        case 'CLIENT_BASE':
+            return { color, textColor: '#1f2328', shapeClass: 'triangle', containerClass: 'triangle-marker light-label' };
+        case 'CLIENT':
+            return { color, textColor: '#ffffff', shapeClass: 'circle', containerClass: '' };
+        case 'CLIENT_MUTE':
+            return { color, textColor: '#ffffff', shapeClass: 'circle', containerClass: 'has-slash' };
+        case 'TRACKER':
+            return { color, textColor: '#ffffff', shapeClass: 'circle', containerClass: 'has-dot' };
+        default:
+            return {
+                color,
+                textColor: '#ffffff',
+                shapeClass: 'circle',
+                containerClass: ''
+            };
     }
 }
 
@@ -1470,11 +1600,16 @@ function formatRole(role) {
         case 'CLIENT': return 'C';
         case 'CLIENT_MUTE': return 'CM';
         case 'CLIENT_BASE': return 'CB';
+        case 'TRACKER': return 'T';
         case 'ROUTER': return 'R';
         case 'ROUTER_LATE': return 'RL';
         case 'REPEATER': return 'RP';
         case 'ROUTER_CLIENT': return 'RC';
         case 'SENSOR': return 'S';
+        case 'CLIENT_HIDDEN': return 'CH';
+        case 'TAK_TRACKER': return 'TT';
+        case 'LOST_AND_FOUND': return 'LF';
+        case 'TAK': return 'TAK';
         default: return '?';
     }
 }
