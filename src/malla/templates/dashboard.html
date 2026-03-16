@@ -254,10 +254,10 @@
         </div>
     </div>
 
-    <!-- Message Routing and Protocol Usage Row -->
+    <!-- Message Routing, Hardware, and Protocol Usage Row -->
     <div class="row mb-4">
         <!-- Hop Count Distribution -->
-        <div class="col-md-6 mb-4">
+        <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0 dashboard-card-title">
@@ -279,8 +279,27 @@
             </div>
         </div>
 
+        <!-- Hardware Model Distribution -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0 dashboard-card-title">
+                        <i class="bi bi-cpu"></i> {{ t('dashboard.hardware_model_distribution') }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="hardwareModelChartLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <canvas id="hardwareModelChart" style="height: 300px; display: none;"></canvas>
+                </div>
+            </div>
+        </div>
+
         <!-- Protocol Usage -->
-        <div class="col-md-6 mb-4">
+        <div class="col-md-4 mb-4">
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0 dashboard-card-title">
@@ -532,6 +551,7 @@ function updateChartsForTheme() {
         createGatewayActivityChart(analyticsData.gateway_distribution);
         createSignalDistributionChart(analyticsData.signal_quality);
         createHopDistributionChart(analyticsData.routing_patterns);
+        createHardwareModelChart(analyticsData.hardware_models);
         createPacketTypesChart(analyticsData.packet_types);
     }
 }
@@ -624,6 +644,7 @@ function renderAnalyticsData() {
     createGatewayActivityChart(analyticsData.gateway_distribution);
     createSignalDistributionChart(analyticsData.signal_quality);
     createHopDistributionChart(analyticsData.routing_patterns);
+    createHardwareModelChart(analyticsData.hardware_models);
     createPacketTypesChart(analyticsData.packet_types);
     populateTopNodesTable(analyticsData.top_nodes);
 }
@@ -918,6 +939,46 @@ function createPacketTypesChart(packetTypes) {
 
     chartInstances.packetTypesChart = new Chart(ctx, {
         type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: themeColors.slice(0, data.length)
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: colors.textColor
+                    }
+                }
+            }
+        }
+    });
+}
+
+function createHardwareModelChart(hardwareModels) {
+    if (!hardwareModels || hardwareModels.length === 0) return;
+
+    hideLoadingSpinner('hardwareModelChart');
+    const ctx = document.getElementById('hardwareModelChart');
+    if (!ctx) return;
+
+    const labels = hardwareModels.map(item => item.hw_model || 'Unknown');
+    const data = hardwareModels.map(item => item.count || 0);
+    const colors = getChartColors();
+    const themeColors = [
+        colors.primary, colors.success, colors.info, colors.warning,
+        colors.danger, colors.secondary, '#20c997', '#6610f2',
+        '#fd7e14', '#198754', '#0dcaf0', '#6f42c1'
+    ];
+
+    chartInstances.hardwareModelChart = new Chart(ctx, {
+        type: 'doughnut',
         data: {
             labels: labels,
             datasets: [{

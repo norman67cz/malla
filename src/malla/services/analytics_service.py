@@ -75,6 +75,7 @@ class AnalyticsService:
             routing_patterns = AnalyticsService._get_routing_patterns(
                 filters, twenty_four_hours_ago
             )
+            hardware_models = AnalyticsService._get_hardware_model_distribution()
             top_nodes = AnalyticsService._get_top_active_nodes(filters, seven_days_ago)
             packet_types = AnalyticsService._get_packet_type_distribution(
                 filters, twenty_four_hours_ago
@@ -89,6 +90,7 @@ class AnalyticsService:
                 "signal_quality": signal_stats,
                 "temporal_patterns": temporal_stats,
                 "routing_patterns": routing_patterns,
+                "hardware_models": hardware_models,
                 "top_nodes": top_nodes,
                 "packet_types": packet_types,
                 "gateway_distribution": gateway_stats,
@@ -568,6 +570,40 @@ class AnalyticsService:
         conn.close()
 
         return packet_types
+
+    @staticmethod
+    def _get_hardware_model_distribution() -> list[dict[str, Any]]:
+        """Get hardware model distribution across all known nodes."""
+        from ..database.connection import get_db_connection
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            WITH hw_counts AS (
+                SELECT
+                    COALESCE(NULLIF(hw_model, ''), 'Unknown') AS hw_model,
+                    COUNT(*) AS count
+                FROM node_info
+                GROUP BY COALESCE(NULLIF(hw_model, ''), 'Unknown')
+            ),
+            total_count AS (
+                SELECT SUM(count) AS total FROM hw_counts
+            )
+            SELECT
+                hc.hw_model,
+                hc.count,
+                ROUND(hc.count * 100.0 / NULLIF(t.total, 0), 2) AS percentage
+            FROM hw_counts hc, total_count t
+            ORDER BY hc.count DESC, hc.hw_model ASC
+            LIMIT 12
+        """
+        )
+
+        hardware_models = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return hardware_models
 
     @staticmethod
     def _get_gateway_distribution(
