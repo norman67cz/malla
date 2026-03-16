@@ -20,6 +20,58 @@ class LocationService:
     """Service for location-related operations and calculations."""
 
     @staticmethod
+    def get_mqtt_gateway_node_ids(filters: dict[str, Any] | None = None) -> set[int]:
+        """Return node IDs that acted as MQTT gateways within the selected time range."""
+        if filters is None:
+            filters = {}
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        where_clauses = [
+            "gateway_id IS NOT NULL",
+            "SUBSTR(gateway_id, 1, 1) = '!'",
+        ]
+        params: list[Any] = []
+
+        if filters.get("start_time") is not None:
+            where_clauses.append("timestamp >= ?")
+            params.append(filters["start_time"])
+
+        if filters.get("end_time") is not None:
+            where_clauses.append("timestamp <= ?")
+            params.append(filters["end_time"])
+
+        if filters.get("gateway_id") is not None:
+            gateway_value = filters["gateway_id"]
+            if isinstance(gateway_value, int):
+                gateway_value = f"!{gateway_value:08x}"
+            where_clauses.append("gateway_id = ?")
+            params.append(gateway_value)
+
+        query = f"""
+            SELECT DISTINCT gateway_id
+            FROM packet_history
+            WHERE {" AND ".join(where_clauses)}
+        """
+
+        gateway_node_ids: set[int] = set()
+        try:
+            cursor.execute(query, params)
+            for row in cursor.fetchall():
+                gateway_id = row["gateway_id"]
+                if not isinstance(gateway_id, str) or not gateway_id.startswith("!"):
+                    continue
+                try:
+                    gateway_node_ids.add(int(gateway_id[1:], 16))
+                except ValueError:
+                    logger.debug("Skipping malformed gateway_id in gateway lookup: %s", gateway_id)
+        finally:
+            conn.close()
+
+        return gateway_node_ids
+
+    @staticmethod
     def get_node_locations(
         filters: dict[str, Any] | None = None,
         network_data: dict[str, Any] | None = None,
@@ -249,6 +301,7 @@ class LocationService:
         enhancement_start = time.time()
         # current_time already calculated above for age filtering
         enhanced_locations = []
+        mqtt_gateway_node_ids = LocationService.get_mqtt_gateway_node_ids(filters)
 
         for location in locations:
             node_id = location["node_id"]
@@ -275,6 +328,7 @@ class LocationService:
                 "hw_model": location["hw_model"],
                 "role": location["role"],
                 "primary_channel": location.get("primary_channel"),
+                "is_mqtt_gateway": node_id in mqtt_gateway_node_ids,
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
                 "altitude": location["altitude"],

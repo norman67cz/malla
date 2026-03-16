@@ -109,6 +109,12 @@
                     </div>
                 </div>
                 <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="mqttGatewayOnly" name="mqttGatewayOnly">
+                        <label class="form-check-label" for="mqttGatewayOnly">{{ t('map.mqtt_gateway_nodes_only') }}</label>
+                    </div>
+                </div>
+                <div class="mb-3">
                     <label for="startDateTime" class="form-label">{{ t('common.start_date_time') }}</label>
                     <input type="datetime-local" class="form-control form-control-sm" id="startDateTime" name="startDateTime">
                 </div>
@@ -999,6 +1005,7 @@ function applyClientSideFilters() {
     const maxAge = formData.get('maxAge'); // still read to sync UI but no longer used for filtering
     const roleFilter = formData.get('roleFilter');
     const channelFilter = formData.get('channelFilter');
+    const mqttGatewayOnly = formData.get('mqttGatewayOnly');
     const startDateTime = formData.get('startDateTime');
     const endDateTime = formData.get('endDateTime');
     const minContacts = formData.get('minContacts');
@@ -1027,6 +1034,10 @@ function applyClientSideFilters() {
         if (selectedChannels.length > 0) {
             filteredNodes = filteredNodes.filter(node => selectedChannels.includes(node.primary_channel));
         }
+    }
+
+    if (mqttGatewayOnly) {
+        filteredNodes = filteredNodes.filter(node => node.is_mqtt_gateway);
     }
 
     // Convert date inputs to timestamps for comparison
