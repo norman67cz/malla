@@ -94,6 +94,16 @@ def help_page():
         return f"Help error: {e}", 500
 
 
+@main_bp.route("/about")
+def about_page():
+    """Short about page describing the application."""
+    try:
+        return render_template("about.html")
+    except Exception as e:
+        logger.error(f"Error in about route: {e}")
+        return f"About error: {e}", 500
+
+
 @main_bp.route("/statistic")
 def statistic_page():
     """Per-node packet type statistics page."""
