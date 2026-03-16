@@ -642,6 +642,14 @@ function calculateFresnelZone(distance, frequency = 915) {
     return fresnelRadius;
 }
 
+// Calculate Earth curvature bulge in meters along the path.
+// This is the rise of the Earth above the straight LOS chord.
+function calculateEarthCurvatureBulge(distanceFromStart, totalDistance) {
+    const earthRadiusMeters = 6371000;
+    const distanceFromEnd = totalDistance - distanceFromStart;
+    return (distanceFromStart * distanceFromEnd) / (2 * earthRadiusMeters);
+}
+
 // Check line of sight clearance
 function checkLineOfSight(geoPoints, fromAltitude, toAltitude, useNodeElevation) {
     if (!geoPoints || geoPoints.length < 2) {
@@ -668,8 +676,10 @@ function checkLineOfSight(geoPoints, fromAltitude, toAltitude, useNodeElevation)
         const point = geoPoints[i];
         const distanceRatio = point.distanceFromOriginMeters / totalDistance;
         const losElevation = startElevation + (endElevation - startElevation) * distanceRatio;
+        const earthCurvatureBulge = calculateEarthCurvatureBulge(point.distanceFromOriginMeters, totalDistance);
+        const effectiveElevation = point.elevation + earthCurvatureBulge;
         const fresnelClearance = calculateFresnelZone(point.distanceFromOriginMeters * (1 - distanceRatio));
-        const clearance = losElevation - point.elevation;
+        const clearance = losElevation - effectiveElevation;
 
         minClearance = Math.min(minClearance, clearance);
 
@@ -677,6 +687,8 @@ function checkLineOfSight(geoPoints, fromAltitude, toAltitude, useNodeElevation)
             obstacles.push({
                 distance: point.distanceFromOriginMeters,
                 elevation: point.elevation,
+                effectiveElevation: effectiveElevation,
+                earthCurvatureBulge: earthCurvatureBulge,
                 losElevation: losElevation,
                 clearance: clearance,
                 requiredClearance: fresnelClearance,
@@ -912,7 +924,9 @@ function updateMap(fromNode, toNode, geoPoints, obstacles) {
         }).addTo(map).bindPopup(`
             <strong>Obstacle ${index + 1}</strong><br>
             Distance: ${(obstacle.distance / 1000).toFixed(2)} km<br>
-            Elevation: ${obstacle.elevation.toFixed(0)} m<br>
+            Terrain Elevation: ${obstacle.elevation.toFixed(0)} m<br>
+            Earth Curvature: +${obstacle.earthCurvatureBulge.toFixed(1)} m<br>
+            Effective Elevation: ${obstacle.effectiveElevation.toFixed(0)} m<br>
             Clearance: ${obstacle.clearance.toFixed(1)} m<br>
             Required: ${obstacle.requiredClearance.toFixed(1)} m
         `);
@@ -967,6 +981,11 @@ function updateElevationChart(fromName, toName, geoPoints, fromAltitude, toAltit
         y: p.elevation
     }));
 
+    const effectiveTerrainData = geoPoints.map(p => ({
+        x: p.distanceFromOriginMeters / 1000, // Convert to km
+        y: p.elevation + calculateEarthCurvatureBulge(p.distanceFromOriginMeters, totalDistance)
+    }));
+
     const lineOfSightData = geoPoints.map(p => {
         const ratio = p.distanceFromOriginMeters / totalDistance;
         return {
@@ -1001,11 +1020,21 @@ function updateElevationChart(fromName, toName, geoPoints, fromAltitude, toAltit
                     label: 'Terrain Elevation',
                     data: terrainData,
                     borderColor: 'rgb(101, 67, 33)',
-                    backgroundColor: 'rgba(101, 67, 33, 0.3)',
+                    backgroundColor: 'rgba(101, 67, 33, 0.16)',
                     fill: 'origin',
                     tension: 0,
                     pointRadius: 0,
                     pointHoverRadius: 5
+                },
+                {
+                    label: 'Terrain + Earth Curvature',
+                    data: effectiveTerrainData,
+                    borderColor: 'rgb(133, 89, 44)',
+                    backgroundColor: 'rgba(133, 89, 44, 0.28)',
+                    fill: '-1',
+                    tension: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 4
                 },
                 {
                     label: 'Line of Sight',
