@@ -47,9 +47,19 @@
     }
 
     .live-log-filters {
-        padding: 0.75rem 1.5rem;
+        padding: 0.5rem 1.5rem;
         border-bottom: 1px solid var(--bs-border-color);
         background: var(--bs-tertiary-bg);
+    }
+
+    .live-log-filter-group .input-group-text {
+        min-width: 6.5rem;
+        justify-content: flex-start;
+        font-size: 0.875rem;
+    }
+
+    .live-log-filter-group input.form-control {
+        min-width: 0;
     }
 
     @media (max-width: 768px) {
@@ -58,7 +68,11 @@
         }
 
         .live-log-filters {
-            padding: 0.75rem 1rem;
+            padding: 0.5rem 1rem;
+        }
+
+        .live-log-filter-group .input-group-text {
+            min-width: 5.75rem;
         }
     }
 </style>
@@ -94,26 +108,44 @@
             </div>
             <div class="table-content">
                 <div class="live-log-filters">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label form-label-sm mb-1" for="liveLogChannelFilter">Channel</label>
-                            <select class="form-select form-select-sm" id="liveLogChannelFilter">
-                                <option value="">All Channels</option>
-                            </select>
+                    <div class="row g-2 align-items-center">
+                        <div class="col-lg-2 col-md-6">
+                            <div class="input-group input-group-sm live-log-filter-group">
+                                <span class="input-group-text">From</span>
+                                <input type="text" class="form-control" id="liveLogFromFilter" placeholder="Node ID or name">
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label form-label-sm mb-1" for="liveLogGatewaySourceFilter">Gateway Source</label>
-                            <select class="form-select form-select-sm" id="liveLogGatewaySourceFilter">
-                                <option value="">All Gateways</option>
-                            </select>
+                        <div class="col-lg-2 col-md-6">
+                            <div class="input-group input-group-sm live-log-filter-group">
+                                <span class="input-group-text">To</span>
+                                <input type="text" class="form-control" id="liveLogToFilter" placeholder="Node ID, name, Broadcast">
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label form-label-sm mb-1" for="liveLogTypeFilter">Type</label>
-                            <select class="form-select form-select-sm" id="liveLogTypeFilter">
-                                <option value="">All Types</option>
-                            </select>
+                        <div class="col-lg-2 col-md-4">
+                            <div class="input-group input-group-sm live-log-filter-group">
+                                <span class="input-group-text">Type</span>
+                                <select class="form-select" id="liveLogTypeFilter">
+                                    <option value="">All Types</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="col-md-3 d-flex gap-2">
+                        <div class="col-lg-2 col-md-4">
+                            <div class="input-group input-group-sm live-log-filter-group">
+                                <span class="input-group-text">Channel</span>
+                                <select class="form-select" id="liveLogChannelFilter">
+                                    <option value="">All Channels</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-lg-2 col-md-4">
+                            <div class="input-group input-group-sm live-log-filter-group">
+                                <span class="input-group-text">Gateway</span>
+                                <select class="form-select" id="liveLogGatewaySourceFilter">
+                                    <option value="">All Gateways</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-lg-2 col-md-12 d-flex gap-2 justify-content-md-end">
                             <button type="button" class="btn btn-sm btn-outline-secondary" id="clearLiveLogFilters">
                                 Clear Filters
                             </button>
@@ -165,6 +197,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const channelFilter = document.getElementById('liveLogChannelFilter');
     const gatewaySourceFilter = document.getElementById('liveLogGatewaySourceFilter');
     const typeFilter = document.getElementById('liveLogTypeFilter');
+    const fromFilter = document.getElementById('liveLogFromFilter');
+    const toFilter = document.getElementById('liveLogToFilter');
     const clearFiltersBtn = document.getElementById('clearLiveLogFilters');
 
     let autoRefreshEnabled = true;
@@ -183,6 +217,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (channelFilter.value) params.set('channel_id', channelFilter.value);
         if (gatewaySourceFilter.value) params.set('gateway_source', gatewaySourceFilter.value);
         if (typeFilter.value) params.set('packet_type', typeFilter.value);
+        if (fromFilter.value.trim()) params.set('from_filter', fromFilter.value.trim());
+        if (toFilter.value.trim()) params.set('to_filter', toFilter.value.trim());
         return `/api/packets/live?${params.toString()}`;
     }
 
@@ -221,6 +257,8 @@ document.addEventListener('DOMContentLoaded', function() {
             'All Types',
             selected.packet_type
         );
+        fromFilter.value = selected.from_filter || fromFilter.value || '';
+        toFilter.value = selected.to_filter || toFilter.value || '';
         filtersInitialized = true;
     }
 
@@ -335,10 +373,22 @@ document.addEventListener('DOMContentLoaded', function() {
         filterEl.addEventListener('change', loadPackets);
     });
 
+    [fromFilter, toFilter].forEach(inputEl => {
+        inputEl.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                loadPackets();
+            }
+        });
+        inputEl.addEventListener('change', loadPackets);
+    });
+
     clearFiltersBtn.addEventListener('click', function() {
         channelFilter.value = '';
         gatewaySourceFilter.value = '';
         typeFilter.value = '';
+        fromFilter.value = '';
+        toFilter.value = '';
         loadPackets();
     });
 

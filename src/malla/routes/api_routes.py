@@ -332,8 +332,17 @@ def api_live_packets():
         channel_id = request.args.get("channel_id", "").strip()
         gateway_source = request.args.get("gateway_source", "").strip()
         packet_type = request.args.get("packet_type", "").strip()
+        from_filter = request.args.get("from_filter", "").strip()
+        to_filter = request.args.get("to_filter", "").strip()
         now_ts = time.time()
-        cache_key = (limit, channel_id, gateway_source, packet_type)
+        cache_key = (
+            limit,
+            channel_id,
+            gateway_source,
+            packet_type,
+            from_filter.lower(),
+            to_filter.lower(),
+        )
         cached = _LIVE_PACKETS_CACHE.get(cache_key)
         if cached and (now_ts - cached[0] < _LIVE_PACKETS_CACHE_TTL_SEC):
             return safe_jsonify(cached[1])
@@ -343,37 +352,67 @@ def api_live_packets():
         where_conditions: list[str] = []
         params: list[Any] = []
         if channel_id:
-            where_conditions.append("channel_id = ?")
+            where_conditions.append("p.channel_id = ?")
             params.append(channel_id)
         if packet_type:
-            where_conditions.append("portnum_name = ?")
+            where_conditions.append("p.portnum_name = ?")
             params.append(packet_type)
         if gateway_source:
-            where_conditions.append("gateway_id = ?")
+            where_conditions.append("p.gateway_id = ?")
             params.append(gateway_source)
+        if from_filter:
+            where_conditions.append(
+                """
+                (
+                    CAST(p.from_node_id AS TEXT) = ?
+                    OR LOWER(COALESCE(fn.long_name, '')) LIKE ?
+                    OR LOWER(COALESCE(fn.short_name, '')) LIKE ?
+                )
+                """
+            )
+            from_like = f"%{from_filter.lower()}%"
+            params.extend([from_filter, from_like, from_like])
+        if to_filter:
+            if to_filter.lower() == "broadcast":
+                where_conditions.append("p.to_node_id = ?")
+                params.append(4294967295)
+            else:
+                where_conditions.append(
+                    """
+                    (
+                        CAST(p.to_node_id AS TEXT) = ?
+                        OR LOWER(COALESCE(tn.long_name, '')) LIKE ?
+                        OR LOWER(COALESCE(tn.short_name, '')) LIKE ?
+                    )
+                    """
+                )
+                to_like = f"%{to_filter.lower()}%"
+                params.extend([to_filter, to_like, to_like])
 
         where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
         cursor.execute(
             f"""
             SELECT
-                id,
-                timestamp,
-                from_node_id,
-                to_node_id,
-                mesh_packet_id,
-                portnum_name,
-                gateway_id,
-                payload_length,
-                rssi,
-                snr,
-                hop_start,
-                hop_limit,
-                processed_successfully,
-                via_mqtt,
-                channel_id
-            FROM packet_history
+                p.id,
+                p.timestamp,
+                p.from_node_id,
+                p.to_node_id,
+                p.mesh_packet_id,
+                p.portnum_name,
+                p.gateway_id,
+                p.payload_length,
+                p.rssi,
+                p.snr,
+                p.hop_start,
+                p.hop_limit,
+                p.processed_successfully,
+                p.via_mqtt,
+                p.channel_id
+            FROM packet_history p
+            LEFT JOIN node_info fn ON fn.node_id = p.from_node_id
+            LEFT JOIN node_info tn ON tn.node_id = p.to_node_id
             {where_clause}
-            ORDER BY id DESC
+            ORDER BY p.id DESC
             LIMIT ?
             """,
             [*params, limit],
@@ -559,6 +598,8 @@ def api_live_packets():
                     "channel_id": channel_id,
                     "gateway_source": gateway_source,
                     "packet_type": packet_type,
+                    "from_filter": from_filter,
+                    "to_filter": to_filter,
                 },
             },
         }
