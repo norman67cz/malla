@@ -778,18 +778,18 @@ function createTimeSeriesChart(temporalData) {
     let data = [];
 
     if (temporalData.bucket_type === 'hour') {
-        const tzOffsetMinutes = (tzPref === 'utc') ? 0 : -new Date().getTimezoneOffset();
-        const tzOffsetHours = Math.round(tzOffsetMinutes / 60);
-        const utcCounts = new Array(24).fill(0);
         temporalData.buckets.forEach(item => {
-            utcCounts[item.bucket] = item.total_packets;
+            const utcDate = new Date(`${item.bucket}:00Z`);
+            if (tzPref === 'utc') {
+                labels.push(item.bucket.slice(5));
+            } else {
+                const month = String(utcDate.getMonth() + 1).padStart(2, '0');
+                const day = String(utcDate.getDate()).padStart(2, '0');
+                const hour = String(utcDate.getHours()).padStart(2, '0');
+                labels.push(`${month}-${day} ${hour}:00`);
+            }
+            data.push(item.total_packets);
         });
-
-        for (let localHour = 0; localHour < 24; localHour++) {
-            const utcHour = ((localHour - tzOffsetHours) % 24 + 24) % 24;
-            labels.push(`${localHour}:00`);
-            data.push(utcCounts[utcHour]);
-        }
     } else {
         labels = temporalData.buckets.map(item => item.label);
         data = temporalData.buckets.map(item => item.total_packets);

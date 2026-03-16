@@ -450,9 +450,20 @@ def _adapt_sql_for_postgres(query: str) -> str:
         "strftime('%s', 'now')",
         "EXTRACT(EPOCH FROM NOW())",
     )
-    adapted = adapted.replace(
-        "strftime('%H', datetime(timestamp, 'unixepoch'))",
+    adapted = re.sub(
+        r"strftime\('%H',\s*datetime\(timestamp,\s*'unixepoch'\)\)",
         "TO_CHAR(TO_TIMESTAMP(timestamp) AT TIME ZONE 'UTC', 'HH24')",
+        adapted,
+    )
+    adapted = re.sub(
+        r"strftime\('%Y-%m-%d %H:00',\s*datetime\(timestamp,\s*'unixepoch'\)\)",
+        "TO_CHAR(TO_TIMESTAMP(timestamp) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:00')",
+        adapted,
+    )
+    adapted = re.sub(
+        r"strftime\('%Y-%m-%d',\s*datetime\(timestamp,\s*'unixepoch'\)\)",
+        "TO_CHAR(TO_TIMESTAMP(timestamp) AT TIME ZONE 'UTC', 'YYYY-MM-DD')",
+        adapted,
     )
 
     adapted = re.sub(

@@ -336,10 +336,10 @@ class AnalyticsService:
 
         where_clause = " AND ".join(where_conditions)
 
-        if window_hours <= 24:
+        if window_hours <= 72:
             query = f"""
                 SELECT
-                    strftime('%H', datetime(timestamp, 'unixepoch')) AS bucket,
+                    strftime('%Y-%m-%d %H:00', datetime(timestamp, 'unixepoch')) AS bucket,
                     COUNT(*) AS total_packets,
                     SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) AS successful_packets
                 FROM packet_history
@@ -368,40 +368,31 @@ class AnalyticsService:
         rows = cursor.fetchall()
 
         if bucket_type == "hour":
-            hourly_counts: dict[int, int] = defaultdict(int)
-            hourly_success: dict[int, int] = defaultdict(int)
+            buckets = []
+            peak_bucket = None
+            quiet_bucket = None
+            peak_value = None
+            quiet_value = None
 
-            for row in rows:
-                hour = int(row["bucket"])
-                hourly_counts[hour] = row["total_packets"]
-                hourly_success[hour] = row["successful_packets"]
-
-            buckets: list[dict[str, Any]] = []
-            for hour in range(24):
-                count = hourly_counts.get(hour, 0)
-                success = hourly_success.get(hour, 0)
+            for row in [dict(row) for row in rows]:
+                count = row["total_packets"] or 0
+                success = row["successful_packets"] or 0
                 success_rate = (success / count * 100) if count > 0 else 0
-
                 buckets.append(
                     {
-                        "bucket": hour,
-                        "label": f"{hour:02d}:00",
+                        "bucket": row["bucket"],
+                        "label": row["bucket"],
                         "total_packets": count,
                         "successful_packets": success,
                         "success_rate": round(success_rate, 2),
                     }
                 )
-
-            peak_bucket = (
-                max(hourly_counts, key=lambda x: hourly_counts[x])
-                if hourly_counts
-                else None
-            )
-            quiet_bucket = (
-                min(hourly_counts, key=lambda x: hourly_counts[x])
-                if hourly_counts
-                else None
-            )
+                if peak_value is None or count > peak_value:
+                    peak_value = count
+                    peak_bucket = row["bucket"]
+                if quiet_value is None or count < quiet_value:
+                    quiet_value = count
+                    quiet_bucket = row["bucket"]
         else:
             daily_rows = [dict(row) for row in rows]
             buckets = []
