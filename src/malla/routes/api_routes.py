@@ -38,7 +38,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 _STATS_CACHE: dict[str | None, tuple[float, dict[str, Any]]] = {}
 _STATS_CACHE_TTL_SEC = 30
 _DASHBOARD_PAYLOAD_CACHE: dict[
-    tuple[str | None, int | None, int | None], tuple[float, dict[str, Any]]
+    tuple[str | None, int | None, int | None, int], tuple[float, dict[str, Any]]
 ] = {}
 _DASHBOARD_PAYLOAD_CACHE_TTL_SEC = 30
 _MAP_GRAPH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -63,8 +63,9 @@ def _get_dashboard_payload(
     gateway_id: str | None = None,
     from_node: int | None = None,
     hop_count: int | None = None,
+    temporal_window_hours: int = 24,
 ) -> dict[str, Any]:
-    cache_key = (gateway_id, from_node, hop_count)
+    cache_key = (gateway_id, from_node, hop_count, temporal_window_hours)
     now_ts = time.time()
     cached = _DASHBOARD_PAYLOAD_CACHE.get(cache_key)
     if cached and (now_ts - cached[0] < _DASHBOARD_PAYLOAD_CACHE_TTL_SEC):
@@ -81,6 +82,7 @@ def _get_dashboard_payload(
         gateway_id=gateway_id,
         from_node=from_node,
         hop_count=hop_count,
+        temporal_window_hours=temporal_window_hours,
     )
 
     payload = {
@@ -184,9 +186,15 @@ def api_analytics():
         gateway_id = request.args.get("gateway_id")
         from_node = request.args.get("from_node", type=int)
         hop_count = request.args.get("hop_count", type=int)
+        temporal_window_hours = request.args.get("temporal_window_hours", 24, type=int)
+        if temporal_window_hours not in {24, 72, 168, 336}:
+            temporal_window_hours = 24
 
         analytics_data = AnalyticsService.get_analytics_data(
-            gateway_id=gateway_id, from_node=from_node, hop_count=hop_count
+            gateway_id=gateway_id,
+            from_node=from_node,
+            hop_count=hop_count,
+            temporal_window_hours=temporal_window_hours,
         )
         return safe_jsonify(analytics_data)
     except Exception as e:
@@ -202,11 +210,15 @@ def api_dashboard_data():
         gateway_id = request.args.get("gateway_id")
         from_node = request.args.get("from_node", type=int)
         hop_count = request.args.get("hop_count", type=int)
+        temporal_window_hours = request.args.get("temporal_window_hours", 24, type=int)
+        if temporal_window_hours not in {24, 72, 168, 336}:
+            temporal_window_hours = 24
         return safe_jsonify(
             _get_dashboard_payload(
                 gateway_id=gateway_id,
                 from_node=from_node,
                 hop_count=hop_count,
+                temporal_window_hours=temporal_window_hours,
             )
         )
     except Exception as e:

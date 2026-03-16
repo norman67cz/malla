@@ -95,13 +95,21 @@
         <div class="col-md-8 mb-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h5 class="card-title mb-0 dashboard-card-title">
-                        <i class="bi bi-graph-up-arrow"></i> {{ t('dashboard.activity_trends') }}
-                        <i class="bi bi-info-circle ms-1 text-muted"
-                           data-bs-toggle="tooltip"
-                           data-bs-placement="top"
-                           title="{{ t('dashboard.activity_trends_help') }}"></i>
-                    </h5>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <h5 class="card-title mb-0 dashboard-card-title">
+                            <i class="bi bi-graph-up-arrow"></i> {{ t('dashboard.activity_trends') }}
+                            <i class="bi bi-info-circle ms-1 text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="{{ t('dashboard.activity_trends_help') }}"></i>
+                        </h5>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Temporal window">
+                            <button type="button" class="btn btn-outline-secondary temporal-window-btn active" data-hours="24">24h</button>
+                            <button type="button" class="btn btn-outline-secondary temporal-window-btn" data-hours="72">3d</button>
+                            <button type="button" class="btn btn-outline-secondary temporal-window-btn" data-hours="168">7d</button>
+                            <button type="button" class="btn btn-outline-secondary temporal-window-btn" data-hours="336">14d</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div id="timeSeriesChartLoading" class="text-center py-4">
@@ -478,6 +486,7 @@ let chartInstances = {}; // Store chart instances for theme updates
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
 const DASHBOARD_REFRESH_MS = 30000;
+let temporalWindowHours = 24;
 
 // Get theme-aware colors for charts
 function getChartColors() {
@@ -568,6 +577,16 @@ function updateChartsForTheme() {
 
 // Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.temporal-window-btn').forEach((button) => {
+        button.addEventListener('click', function() {
+            const nextHours = Number(this.dataset.hours || '24');
+            if (nextHours === temporalWindowHours) return;
+            temporalWindowHours = nextHours;
+            updateTemporalWindowButtons();
+            refreshDashboardData();
+        });
+    });
+    updateTemporalWindowButtons();
     refreshDashboardData();
     startDashboardAutoRefresh();
 
@@ -594,7 +613,7 @@ async function refreshDashboardData() {
     dashboardRefreshInFlight = true;
 
     try {
-        const dashboardResponse = await fetch('/api/dashboard-data');
+        const dashboardResponse = await fetch(`/api/dashboard-data?temporal_window_hours=${temporalWindowHours}`);
         if (!dashboardResponse.ok) {
             throw new Error(`Dashboard HTTP error! status: ${dashboardResponse.status}`);
         }
@@ -748,39 +767,44 @@ function showErrorMessage(message) {
 }
 
 function createTimeSeriesChart(temporalData) {
-    if (!temporalData || !temporalData.hourly_breakdown) return;
+    if (!temporalData || !temporalData.buckets) return;
 
     hideLoadingSpinner('timeSeriesChart');
     const ctx = document.getElementById('timeSeriesChart');
     if (!ctx) return;
 
     const tzPref = (typeof getTimezonePreference === 'function') ? getTimezonePreference() : 'local';
-    const tzOffsetMinutes = (tzPref === 'utc') ? 0 : -new Date().getTimezoneOffset();
-    const tzOffsetHours = Math.round(tzOffsetMinutes / 60);
+    let labels = [];
+    let data = [];
 
-    const utcCounts = new Array(24).fill(0);
-    temporalData.hourly_breakdown.forEach(item => {
-        utcCounts[item.hour] = item.total_packets;
-    });
+    if (temporalData.bucket_type === 'hour') {
+        const tzOffsetMinutes = (tzPref === 'utc') ? 0 : -new Date().getTimezoneOffset();
+        const tzOffsetHours = Math.round(tzOffsetMinutes / 60);
+        const utcCounts = new Array(24).fill(0);
+        temporalData.buckets.forEach(item => {
+            utcCounts[item.bucket] = item.total_packets;
+        });
 
-    const labels = [];
-    const data = [];
-
-    for (let localHour = 0; localHour < 24; localHour++) {
-        const utcHour = ((localHour - tzOffsetHours) % 24 + 24) % 24;
-        labels.push(`${localHour}:00`);
-        data.push(utcCounts[utcHour]);
+        for (let localHour = 0; localHour < 24; localHour++) {
+            const utcHour = ((localHour - tzOffsetHours) % 24 + 24) % 24;
+            labels.push(`${localHour}:00`);
+            data.push(utcCounts[utcHour]);
+        }
+    } else {
+        labels = temporalData.buckets.map(item => item.label);
+        data = temporalData.buckets.map(item => item.total_packets);
     }
 
     const colors = getChartColors();
     const options = getDefaultChartOptions();
+    options.plugins.legend.display = false;
 
     chartInstances.timeSeriesChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [{
-                label: 'Messages per Hour',
+                label: temporalData.bucket_type === 'hour' ? 'Messages per Hour' : 'Messages per Day',
                 data: data,
                 borderColor: colors.info,
                 backgroundColor: colors.infoBg,
@@ -788,6 +812,15 @@ function createTimeSeriesChart(temporalData) {
             }]
         },
         options: options
+    });
+}
+
+function updateTemporalWindowButtons() {
+    document.querySelectorAll('.temporal-window-btn').forEach((button) => {
+        const buttonHours = Number(button.dataset.hours || '24');
+        button.classList.toggle('active', buttonHours === temporalWindowHours);
+        button.classList.toggle('btn-secondary', buttonHours === temporalWindowHours);
+        button.classList.toggle('btn-outline-secondary', buttonHours !== temporalWindowHours);
     });
 }
 

@@ -20,7 +20,7 @@ class AnalyticsService:
 
     # (gateway_id, from_node, hop_count) → (timestamp, data)
     _CACHE: dict[
-        tuple[str | None, int | None, int | None], tuple[float, dict[str, Any]]
+        tuple[str | None, int | None, int | None, int], tuple[float, dict[str, Any]]
     ] = {}
     _CACHE_TTL_SEC: int = 120  # two minute cache window
 
@@ -29,10 +29,11 @@ class AnalyticsService:
         gateway_id: str | None = None,
         from_node: int | None = None,
         hop_count: int | None = None,
+        temporal_window_hours: int = 24,
     ) -> dict[str, Any]:
         """Get comprehensive analytics data for the dashboard with simple in-memory caching."""
 
-        cache_key = (gateway_id, from_node, hop_count)
+        cache_key = (gateway_id, from_node, hop_count, temporal_window_hours)
         now_ts = time.time()
 
         # Return cached value if still valid
@@ -69,8 +70,9 @@ class AnalyticsService:
             signal_stats = AnalyticsService._get_signal_quality_statistics(
                 filters, twenty_four_hours_ago
             )
+            temporal_since = now_ts - max(1, temporal_window_hours) * 3600
             temporal_stats = AnalyticsService._get_temporal_patterns(
-                filters, twenty_four_hours_ago
+                filters, temporal_since, temporal_window_hours
             )
             routing_patterns = AnalyticsService._get_routing_patterns(
                 filters, twenty_four_hours_ago
@@ -309,8 +311,10 @@ class AnalyticsService:
         }
 
     @staticmethod
-    def _get_temporal_patterns(filters: dict, since_timestamp: float) -> dict[str, Any]:
-        """Get temporal patterns (hourly breakdown) efficiently using SQL aggregation."""
+    def _get_temporal_patterns(
+        filters: dict, since_timestamp: float, window_hours: int
+    ) -> dict[str, Any]:
+        """Get temporal patterns for the selected window using SQL aggregation."""
 
         from ..database.connection import get_db_connection
 
@@ -332,15 +336,30 @@ class AnalyticsService:
 
         where_clause = " AND ".join(where_conditions)
 
-        query = f"""
-            SELECT
-                strftime('%H', datetime(timestamp, 'unixepoch')) AS hour,
-                COUNT(*) AS total_packets,
-                SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) AS successful_packets
-            FROM packet_history
-            WHERE {where_clause}
-            GROUP BY hour
-        """
+        if window_hours <= 24:
+            query = f"""
+                SELECT
+                    strftime('%H', datetime(timestamp, 'unixepoch')) AS bucket,
+                    COUNT(*) AS total_packets,
+                    SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) AS successful_packets
+                FROM packet_history
+                WHERE {where_clause}
+                GROUP BY bucket
+                ORDER BY bucket
+            """
+            bucket_type = "hour"
+        else:
+            query = f"""
+                SELECT
+                    strftime('%Y-%m-%d', datetime(timestamp, 'unixepoch')) AS bucket,
+                    COUNT(*) AS total_packets,
+                    SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) AS successful_packets
+                FROM packet_history
+                WHERE {where_clause}
+                GROUP BY bucket
+                ORDER BY bucket
+            """
+            bucket_type = "day"
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -348,45 +367,76 @@ class AnalyticsService:
 
         rows = cursor.fetchall()
 
-        hourly_counts: dict[int, int] = defaultdict(int)
-        hourly_success: dict[int, int] = defaultdict(int)
+        if bucket_type == "hour":
+            hourly_counts: dict[int, int] = defaultdict(int)
+            hourly_success: dict[int, int] = defaultdict(int)
 
-        for row in rows:
-            hour = int(row["hour"])
-            hourly_counts[hour] = row["total_packets"]
-            hourly_success[hour] = row["successful_packets"]
+            for row in rows:
+                hour = int(row["bucket"])
+                hourly_counts[hour] = row["total_packets"]
+                hourly_success[hour] = row["successful_packets"]
 
-        hourly_data: list[dict[str, Any]] = []
-        for hour in range(24):
-            count = hourly_counts.get(hour, 0)
-            success = hourly_success.get(hour, 0)
-            success_rate = (success / count * 100) if count > 0 else 0
+            buckets: list[dict[str, Any]] = []
+            for hour in range(24):
+                count = hourly_counts.get(hour, 0)
+                success = hourly_success.get(hour, 0)
+                success_rate = (success / count * 100) if count > 0 else 0
 
-            hourly_data.append(
-                {
-                    "hour": hour,
-                    "total_packets": count,
-                    "successful_packets": success,
-                    "success_rate": round(success_rate, 2),
-                }
+                buckets.append(
+                    {
+                        "bucket": hour,
+                        "label": f"{hour:02d}:00",
+                        "total_packets": count,
+                        "successful_packets": success,
+                        "success_rate": round(success_rate, 2),
+                    }
+                )
+
+            peak_bucket = (
+                max(hourly_counts, key=lambda x: hourly_counts[x])
+                if hourly_counts
+                else None
             )
+            quiet_bucket = (
+                min(hourly_counts, key=lambda x: hourly_counts[x])
+                if hourly_counts
+                else None
+            )
+        else:
+            daily_rows = [dict(row) for row in rows]
+            buckets = []
+            peak_bucket = None
+            quiet_bucket = None
+            peak_value = None
+            quiet_value = None
 
-        # Determine peak and quiet hours if any packets exist
-        peak_hour = (
-            max(hourly_counts, key=lambda x: hourly_counts[x])
-            if hourly_counts
-            else None
-        )
-        quiet_hour = (
-            min(hourly_counts, key=lambda x: hourly_counts[x])
-            if hourly_counts
-            else None
-        )
+            for row in daily_rows:
+                count = row["total_packets"] or 0
+                success = row["successful_packets"] or 0
+                success_rate = (success / count * 100) if count > 0 else 0
+                label = row["bucket"][5:] if row["bucket"] else "Unknown"
+                buckets.append(
+                    {
+                        "bucket": row["bucket"],
+                        "label": label,
+                        "total_packets": count,
+                        "successful_packets": success,
+                        "success_rate": round(success_rate, 2),
+                    }
+                )
+                if peak_value is None or count > peak_value:
+                    peak_value = count
+                    peak_bucket = row["bucket"]
+                if quiet_value is None or count < quiet_value:
+                    quiet_value = count
+                    quiet_bucket = row["bucket"]
 
         return {
-            "hourly_breakdown": hourly_data,
-            "peak_hour": peak_hour,
-            "quiet_hour": quiet_hour,
+            "bucket_type": bucket_type,
+            "window_hours": window_hours,
+            "buckets": buckets,
+            "peak_bucket": peak_bucket,
+            "quiet_bucket": quiet_bucket,
         }
 
     @staticmethod
