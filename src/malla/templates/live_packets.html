@@ -189,7 +189,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function populateSelectOptions(selectEl, values, allLabel, selectedValue) {
         const currentValue = selectedValue ?? selectEl.value;
         const options = [`<option value="">${allLabel}</option>`].concat(
-            values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
+            values.map(value => {
+                if (value && typeof value === 'object') {
+                    return `<option value="${escapeHtml(value.value)}">${escapeHtml(value.label || value.value)}</option>`;
+                }
+                return `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`;
+            })
         );
         selectEl.innerHTML = options.join('');
         selectEl.value = currentValue || '';

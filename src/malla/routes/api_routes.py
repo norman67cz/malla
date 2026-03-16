@@ -388,7 +388,40 @@ def api_live_packets():
             ORDER BY gateway_id
             """
         )
-        available_gateway_sources = [row[0] for row in cursor.fetchall() if row[0]]
+        available_gateway_ids = [row[0] for row in cursor.fetchall() if row[0]]
+
+        gateway_node_ids: list[int] = []
+        for gateway_id_value in available_gateway_ids:
+            if (
+                isinstance(gateway_id_value, str)
+                and gateway_id_value.startswith("!")
+                and len(gateway_id_value) > 1
+            ):
+                try:
+                    gateway_node_ids.append(int(gateway_id_value[1:], 16))
+                except ValueError:
+                    continue
+
+        gateway_names = (
+            get_bulk_node_names(list(set(gateway_node_ids))) if gateway_node_ids else {}
+        )
+        available_gateway_sources = []
+        for gateway_id_value in available_gateway_ids:
+            gateway_label = gateway_id_value
+            if (
+                isinstance(gateway_id_value, str)
+                and gateway_id_value.startswith("!")
+                and len(gateway_id_value) > 1
+            ):
+                try:
+                    gateway_node_id = int(gateway_id_value[1:], 16)
+                    gateway_label = gateway_names.get(gateway_node_id, gateway_id_value)
+                except ValueError:
+                    gateway_label = gateway_id_value
+
+            available_gateway_sources.append(
+                {"value": gateway_id_value, "label": gateway_label}
+            )
 
         cursor.execute(
             """
