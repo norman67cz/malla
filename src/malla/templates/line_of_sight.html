@@ -550,14 +550,14 @@ function checkAnalyzeButton() {
 
 // Initialize map with terrain-aware tiles
 function initializeMap() {
-    map = L.map('line-of-sight-map').setView([40.4168, -3.7038], 6); // Default to Spain
+    map = L.map('line-of-sight-map').setView([49.8175, 15.4730], 7); // Default to Czech Republic
 
     // Stamen Terrain (via Stadia Maps) - Shows terrain, contours, and elevation
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.{ext}', {
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
         minZoom: 0,
         maxZoom: 18,
+        referrerPolicy: 'origin-when-cross-origin',
         attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.stamen.com/" target="_blank">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        ext: 'png'
     }).addTo(map);
 }
 
