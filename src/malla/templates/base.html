@@ -120,9 +120,11 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="z-index: 1040;">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('main.dashboard') }}">
-                <i class="bi bi-radio"></i> {{ APP_NAME }}
-            </a>
+            <div class="me-3">
+                <a class="navbar-brand mb-0 {{ 'active' if request.endpoint == 'main.about_page' }}" href="{{ url_for('main.about_page') }}">
+                    <i class="bi bi-radio"></i> {{ APP_NAME }}
+                </a>
+            </div>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -214,23 +216,10 @@
                         </ul>
                     </li>
 
-                    <li class="nav-item dropdown">
-                        {% set help_active = request.endpoint in ['main.help_page', 'main.about_page'] %}
-                        <a class="nav-link dropdown-toggle {{ 'active' if help_active }}" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown" aria-label="{{ t('menu.help') }}">
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'main.help_page' }}" href="{{ url_for('main.help_page') }}" aria-label="{{ t('menu.help') }}">
                             ?
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <a class="dropdown-item {{ 'active' if request.endpoint == 'main.help_page' }}" href="{{ url_for('main.help_page') }}">
-                                    <i class="bi bi-question-circle"></i> {{ t('menu.help') }}
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {{ 'active' if request.endpoint == 'main.about_page' }}" href="{{ url_for('main.about_page') }}">
-                                    <i class="bi bi-info-circle"></i> {{ t('menu.about') }}
-                                </a>
-                            </li>
-                        </ul>
                     </li>
                 </ul>
 
