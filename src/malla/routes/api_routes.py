@@ -1747,6 +1747,14 @@ def api_packets_data():
         portnum = request.args.get("portnum", "").strip()
         if portnum:
             filters["portnum"] = portnum
+        mesh_packet_id_str = request.args.get("mesh_packet_id", "").strip()
+        if mesh_packet_id_str:
+            try:
+                mesh_packet_id = int(mesh_packet_id_str)
+                if mesh_packet_id > 0:
+                    filters["mesh_packet_id"] = mesh_packet_id
+            except ValueError:
+                pass
         pki_filter = request.args.get("pki_filter", "").strip()
         if pki_filter in {"only", "exclude"}:
             filters["pki_filter"] = pki_filter

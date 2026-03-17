@@ -484,6 +484,10 @@ class PacketRepository:
                 where_conditions.append("gateway_id = ?")
                 params.append(filters["gateway_id"])
 
+            if filters.get("mesh_packet_id"):
+                where_conditions.append("mesh_packet_id = ?")
+                params.append(filters["mesh_packet_id"])
+
             # New: filter by primary_channel when provided (matches ServiceEnvelope channel_id)
             if filters.get("primary_channel"):
                 primary_channels = filters["primary_channel"]
