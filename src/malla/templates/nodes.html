@@ -6,6 +6,71 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
 {{ table_layout_styles() }}
+<style>
+.sidebar-content.nodes-sidebar-compact .sidebar-section:not(.nodes-legend) > h6 {
+    display: none;
+}
+
+.sidebar-content.nodes-sidebar-compact .sidebar-section {
+    padding: 0.75rem 0.875rem;
+}
+
+.sidebar-content.nodes-sidebar-compact .row.g-3 {
+    --bs-gutter-y: 0.4rem;
+    --bs-gutter-x: 0;
+}
+
+.sidebar-content.nodes-sidebar-compact .nodes-inline-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-content.nodes-sidebar-compact .nodes-inline-field > .form-label {
+    width: 8rem;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.sidebar-content.nodes-sidebar-compact .nodes-inline-field > .form-control,
+.sidebar-content.nodes-sidebar-compact .nodes-inline-field > .form-select,
+.sidebar-content.nodes-sidebar-compact .nodes-inline-field > .form-check,
+.sidebar-content.nodes-sidebar-compact .nodes-inline-field > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-content.nodes-sidebar-compact .form-check-input {
+    margin-top: 0;
+}
+
+.sidebar-content.nodes-sidebar-compact #primary_channel_options {
+    max-height: 140px !important;
+}
+
+.sidebar-content.nodes-sidebar-compact .form-label,
+.sidebar-content.nodes-sidebar-compact .form-check-label,
+.sidebar-content.nodes-sidebar-compact .form-control,
+.sidebar-content.nodes-sidebar-compact .form-select,
+.sidebar-content.nodes-sidebar-compact .btn,
+.sidebar-content.nodes-sidebar-compact .form-text,
+.sidebar-content.nodes-sidebar-compact .small,
+.sidebar-content.nodes-sidebar-compact .legend-content {
+    font-size: 0.85rem;
+}
+
+.sidebar-content.nodes-sidebar-compact .form-control.form-control-sm,
+.sidebar-content.nodes-sidebar-compact .form-select.form-select-sm {
+    min-height: calc(1.5em + 0.4rem + 2px);
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+}
+
+.sidebar-content.nodes-sidebar-compact .d-grid.gap-2 {
+    gap: 0.4rem !important;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -18,36 +83,37 @@
 {% endcall %}
 
 <!-- Sidebar content (will be injected into the sidebar) -->
-<div id="sidebarContent" style="display: none;">
+<div id="sidebarContent" class="nodes-sidebar-compact" style="display: none;">
     {% call filter_section("filtersForm", t('nodes.node_filters')) %}
         <div class="row g-3">
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
                 <label for="search" class="form-label">{{ t('common.search') }}</label>
                 <input type="text" class="form-control form-control-sm" id="search" name="search" placeholder="{{ t('nodes.search_placeholder') }}">
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
                 <label for="role" class="form-label">{{ t('common.role') }}</label>
                 <select class="form-select form-select-sm" id="role" name="role">
                     <option value="">{{ t('common.all_roles') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
                 <label for="hw_model" class="form-label">{{ t('common.hardware_model') }}</label>
                 <select class="form-select form-select-sm" id="hw_model" name="hw_model">
                     <option value="">{{ t('common.all_hardware') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
                 <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
-                <input type="hidden" id="primary_channel" name="primary_channel">
-                <div id="primary_channel_options" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
-                    <div class="text-muted">Loading channels...</div>
+                <div>
+                    <input type="hidden" id="primary_channel" name="primary_channel">
+                    <div id="primary_channel_options" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
+                        <div class="text-muted">Loading channels...</div>
+                    </div>
                 </div>
-                <div class="form-text">Select one or more channels</div>
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
                 <label for="direct_receptions" class="form-label">{{ t('nodes.direct_receptions') }}</label>
                 <select class="form-select form-select-sm" id="direct_receptions" name="direct_receptions">
                     <option value="">{{ t('nodes.direct_receptions_any') }}</option>
@@ -55,7 +121,7 @@
                     <option value="eq0">{{ t('nodes.direct_receptions_eq0') }}</option>
                 </select>
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
                 <label for="firmware_info" class="form-label">{{ t('nodes.firmware_info') }}</label>
                 <select class="form-select form-select-sm" id="firmware_info" name="firmware_info">
                     <option value="">{{ t('nodes.firmware_info_any') }}</option>
@@ -65,7 +131,8 @@
                     <option value="none">{{ t('nodes.firmware_info_none') }}</option>
                 </select>
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
+                <label class="form-label" for="active_only">Active</label>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="active_only" name="active_only" value="1">
                     <label class="form-check-label" for="active_only">
@@ -73,7 +140,8 @@
                     </label>
                 </div>
             </div>
-            <div class="col-12">
+            <div class="col-12 nodes-inline-field">
+                <label class="form-label" for="named_only">Named</label>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="named_only" name="named_only" value="1">
                     <label class="form-check-label" for="named_only">
@@ -93,7 +161,7 @@
     {{ table_controls_section(table_controls) }}
 
     <!-- Legend Section -->
-    <div class="sidebar-section">
+    <div class="sidebar-section nodes-legend">
         <h6><i class="bi bi-palette"></i> {{ t('common.legend') }}</h6>
         <div class="legend-content">
             <div class="legend-item">
@@ -154,7 +222,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebarContainer = document.querySelector('.sidebar-content');
     if (sidebarContent && sidebarContainer) {
         sidebarContainer.innerHTML = sidebarContent.innerHTML;
+        sidebarContainer.classList.add('nodes-sidebar-compact');
         sidebarContent.remove();
+    }
+
+    const sidebarTitle = document.querySelector('.sidebar-header h5');
+    if (sidebarTitle) {
+        sidebarTitle.innerHTML = '<i class="bi bi-funnel"></i> Node Filters';
     }
 
     // Initialize URL filter manager AFTER sidebar content is moved

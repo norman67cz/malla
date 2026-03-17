@@ -8,6 +8,93 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/node-picker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
 {{ table_layout_styles() }}
+<style>
+.sidebar-content.traceroute-sidebar-compact .sidebar-section > h6 {
+    display: none;
+}
+
+.sidebar-content.traceroute-sidebar-compact .sidebar-section {
+    padding: 0.75rem 0.875rem;
+}
+
+.sidebar-content.traceroute-sidebar-compact .row.g-3 {
+    --bs-gutter-y: 0.4rem;
+    --bs-gutter-x: 0;
+}
+
+.sidebar-content.traceroute-sidebar-compact .traceroute-inline-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-content.traceroute-sidebar-compact .traceroute-inline-field > .form-label {
+    width: 8rem;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.sidebar-content.traceroute-sidebar-compact .traceroute-inline-field > .form-control,
+.sidebar-content.traceroute-sidebar-compact .traceroute-inline-field > .form-select,
+.sidebar-content.traceroute-sidebar-compact .traceroute-inline-field > .form-check,
+.sidebar-content.traceroute-sidebar-compact .traceroute-inline-field > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-content.traceroute-sidebar-compact .traceroute-picker-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-content.traceroute-sidebar-compact .traceroute-picker-inline > .form-label {
+    width: 8rem;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.sidebar-content.traceroute-sidebar-compact .traceroute-picker-inline > .position-relative {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-content.traceroute-sidebar-compact .form-check-input {
+    margin-top: 0;
+}
+
+.sidebar-content.traceroute-sidebar-compact .form-label,
+.sidebar-content.traceroute-sidebar-compact .form-check-label,
+.sidebar-content.traceroute-sidebar-compact .form-control,
+.sidebar-content.traceroute-sidebar-compact .form-select,
+.sidebar-content.traceroute-sidebar-compact .node-picker-input,
+.sidebar-content.traceroute-sidebar-compact .gateway-picker-input,
+.sidebar-content.traceroute-sidebar-compact .btn,
+.sidebar-content.traceroute-sidebar-compact .form-text,
+.sidebar-content.traceroute-sidebar-compact .small {
+    font-size: 0.85rem;
+}
+
+.sidebar-content.traceroute-sidebar-compact .node-picker-input,
+.sidebar-content.traceroute-sidebar-compact .gateway-picker-input,
+.sidebar-content.traceroute-sidebar-compact .form-control.form-control-sm,
+.sidebar-content.traceroute-sidebar-compact .form-select.form-select-sm {
+    min-height: calc(1.5em + 0.4rem + 2px);
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+}
+
+.sidebar-content.traceroute-sidebar-compact .node-picker-clear,
+.sidebar-content.traceroute-sidebar-compact .gateway-picker-clear {
+    padding: 0.1rem 0.4rem;
+}
+
+.sidebar-content.traceroute-sidebar-compact .d-grid.gap-2 {
+    gap: 0.4rem !important;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -20,14 +107,14 @@
 {% endcall %}
 
 <!-- Sidebar content (will be injected into the sidebar) -->
-<div id="sidebarContent" style="display: none;">
+<div id="sidebarContent" class="traceroute-sidebar-compact" style="display: none;">
     {% call filter_section("filtersForm", t('traceroute.filters')) %}
         <div class="row g-3">
-            <div class="col-12">
+            <div class="col-12 traceroute-inline-field">
                 <label for="start_time" class="form-label">{{ t('common.start_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="start_time" name="start_time">
             </div>
-            <div class="col-12">
+            <div class="col-12 traceroute-inline-field">
                 <label for="end_time" class="form-label">{{ t('common.end_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="end_time" name="end_time">
             </div>
@@ -37,7 +124,8 @@
                     label=t('traceroute.source_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder=t('traceroute.all_source_nodes')
+                    placeholder=t('traceroute.all_source_nodes'),
+                    additional_classes="traceroute-picker-inline"
                 ) }}
             </div>
             <div class="col-12">
@@ -46,7 +134,8 @@
                     label=t('traceroute.destination_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder=t('traceroute.all_destination_nodes')
+                    placeholder=t('traceroute.all_destination_nodes'),
+                    additional_classes="traceroute-picker-inline"
                 ) }}
             </div>
             <div class="col-12">
@@ -55,11 +144,9 @@
                     label=t('traceroute.route_node'),
                     selected_value="",
                     selected_display="",
-                    placeholder=t('traceroute.all_route_nodes')
+                    placeholder=t('traceroute.all_route_nodes'),
+                    additional_classes="traceroute-picker-inline"
                 ) }}
-                <div class="form-text">
-                    <small class="text-muted">{{ t('traceroute.route_node_help') }}</small>
-                </div>
             </div>
             <div class="col-12">
                 {{ gateway_picker(
@@ -67,21 +154,20 @@
                     label=t('common.gateway'),
                     selected_value="",
                     selected_display="",
-                    placeholder=t('packets.all_gateways')
+                    placeholder=t('packets.all_gateways'),
+                    additional_classes="traceroute-picker-inline"
                 ) }}
             </div>
-            <div class="col-12">
+            <div class="col-12 traceroute-inline-field">
+                <label class="form-label" for="return_path_only">Return</label>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="return_path_only" name="return_path_only" value="1">
                     <label class="form-check-label" for="return_path_only">
                         <i class="bi bi-arrow-return-left"></i> {{ t('traceroute.return_path_only') }}
                     </label>
-                    <div class="form-text">
-                        <small class="text-muted">{{ t('traceroute.return_path_help') }}</small>
-                    </div>
                 </div>
             </div>
-            <div class="col-12">
+            <div class="col-12 traceroute-inline-field">
                 <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
                 <select class="form-select form-select-sm" id="primary_channel" name="primary_channel">
                     <option value="">{{ t('common.all_channels') }}</option>
@@ -123,7 +209,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebarContainer = document.querySelector('.sidebar-content');
     if (sidebarContent && sidebarContainer) {
         sidebarContainer.innerHTML = sidebarContent.innerHTML;
+        sidebarContainer.classList.add('traceroute-sidebar-compact');
         sidebarContent.remove();
+    }
+
+    const sidebarTitle = document.querySelector('.sidebar-header h5');
+    if (sidebarTitle) {
+        sidebarTitle.innerHTML = '<i class="bi bi-funnel"></i> Traceroute Filters';
     }
 
     // Initialize URL filter manager AFTER sidebar content is moved
