@@ -1750,7 +1750,7 @@ def api_packets_data():
         mesh_packet_id_str = request.args.get("mesh_packet_id", "").strip()
         if mesh_packet_id_str:
             try:
-                mesh_packet_id = int(mesh_packet_id_str)
+                mesh_packet_id = int(mesh_packet_id_str, 0)
                 if mesh_packet_id > 0:
                     filters["mesh_packet_id"] = mesh_packet_id
             except ValueError:

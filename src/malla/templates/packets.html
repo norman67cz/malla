@@ -8,6 +8,102 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/node-picker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
 {{ table_layout_styles() }}
+<style>
+.sidebar-content.packets-sidebar-compact .sidebar-section > h6 {
+    display: none;
+}
+
+.sidebar-content.packets-sidebar-compact .sidebar-section {
+    padding: 0.75rem 0.875rem;
+}
+
+.sidebar-content.packets-sidebar-compact .row.g-3 {
+    --bs-gutter-y: 0.4rem;
+    --bs-gutter-x: 0;
+}
+
+.sidebar-content.packets-sidebar-compact .packets-inline-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-content.packets-sidebar-compact .packets-inline-field > .form-label {
+    width: 8rem;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.sidebar-content.packets-sidebar-compact .packets-inline-field > .form-control,
+.sidebar-content.packets-sidebar-compact .packets-inline-field > .form-select,
+.sidebar-content.packets-sidebar-compact .packets-inline-field > .form-check,
+.sidebar-content.packets-sidebar-compact .packets-inline-field > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-content.packets-sidebar-compact .packets-picker-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-content.packets-sidebar-compact .packets-picker-inline > .form-label {
+    width: 8rem;
+    margin-bottom: 0;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.sidebar-content.packets-sidebar-compact .packets-picker-inline > .position-relative {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-content.packets-sidebar-compact .form-check-input {
+    margin-top: 0;
+}
+
+.sidebar-content.packets-sidebar-compact #primary_channel_options {
+    max-height: 140px !important;
+}
+
+.sidebar-content.packets-sidebar-compact .form-text {
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
+}
+
+.sidebar-content.packets-sidebar-compact .d-grid.gap-2 {
+    gap: 0.4rem !important;
+}
+
+.sidebar-content.packets-sidebar-compact .form-label,
+.sidebar-content.packets-sidebar-compact .form-check-label,
+.sidebar-content.packets-sidebar-compact .form-control,
+.sidebar-content.packets-sidebar-compact .form-select,
+.sidebar-content.packets-sidebar-compact .node-picker-input,
+.sidebar-content.packets-sidebar-compact .gateway-picker-input,
+.sidebar-content.packets-sidebar-compact .btn,
+.sidebar-content.packets-sidebar-compact .form-text,
+.sidebar-content.packets-sidebar-compact .small {
+    font-size: 0.85rem;
+}
+
+.sidebar-content.packets-sidebar-compact .node-picker-input,
+.sidebar-content.packets-sidebar-compact .gateway-picker-input,
+.sidebar-content.packets-sidebar-compact .form-control.form-control-sm,
+.sidebar-content.packets-sidebar-compact .form-select.form-select-sm {
+    min-height: calc(1.5em + 0.4rem + 2px);
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+}
+
+.sidebar-content.packets-sidebar-compact .node-picker-clear,
+.sidebar-content.packets-sidebar-compact .gateway-picker-clear {
+    padding: 0.1rem 0.4rem;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -20,14 +116,18 @@
 {% endcall %}
 
 <!-- Sidebar content (will be injected into the sidebar) -->
-<div id="sidebarContent" style="display: none;">
+<div id="sidebarContent" class="packets-sidebar-compact" style="display: none;">
     {% call filter_section("filtersForm", t('packets.packet_filters')) %}
         <div class="row g-3">
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
+                <label for="mesh_packet_id" class="form-label">Mesh Packet ID</label>
+                <input type="text" class="form-control form-control-sm" id="mesh_packet_id" name="mesh_packet_id" placeholder="e.g. 1921575801 or 0xae21a9fa">
+            </div>
+            <div class="col-12 packets-inline-field">
                 <label for="start_time" class="form-label">{{ t('common.start_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="start_time" name="start_time">
             </div>
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
                 <label for="end_time" class="form-label">{{ t('common.end_time') }}</label>
                 <input type="datetime-local" class="form-control form-control-sm" id="end_time" name="end_time">
             </div>
@@ -38,7 +138,8 @@
                     selected_value="",
                     selected_display="",
                     placeholder=t('packets.all_nodes'),
-                    include_broadcast=true
+                    include_broadcast=true,
+                    additional_classes="packets-picker-inline"
                 ) }}
             </div>
             <div class="col-12">
@@ -48,7 +149,8 @@
                     selected_value="",
                     selected_display="",
                     placeholder=t('packets.all_destination_nodes'),
-                    include_broadcast=true
+                    include_broadcast=true,
+                    additional_classes="packets-picker-inline"
                 ) }}
             </div>
             <div class="col-12">
@@ -58,7 +160,8 @@
                     selected_value="",
                     selected_display="",
                     placeholder=t('packets.no_exclusions'),
-                    include_broadcast=true
+                    include_broadcast=true,
+                    additional_classes="packets-picker-inline"
                 ) }}
             </div>
             <div class="col-12">
@@ -68,7 +171,8 @@
                     selected_value="",
                     selected_display="",
                     placeholder=t('packets.no_exclusions'),
-                    include_broadcast=true
+                    include_broadcast=true,
+                    additional_classes="packets-picker-inline"
                 ) }}
             </div>
             <div class="col-12">
@@ -77,21 +181,18 @@
                     label=t('packets.gateway_receiver'),
                     selected_value="",
                     selected_display="",
-                    placeholder=t('packets.all_gateways')
+                    placeholder=t('packets.all_gateways'),
+                    additional_classes="packets-picker-inline"
                 ) }}
             </div>
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
                 <label for="portnum" class="form-label">{{ t('common.packet_type') }}</label>
                 <select class="form-select form-select-sm" id="portnum" name="portnum">
                     <option value="">{{ t('common.all_types') }}</option>
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
-            <div class="col-12">
-                <label for="mesh_packet_id" class="form-label">Mesh Packet ID</label>
-                <input type="number" class="form-control form-control-sm" id="mesh_packet_id" name="mesh_packet_id" min="1" step="1" placeholder="e.g. 1921575801">
-            </div>
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
                 <label for="pki_filter" class="form-label">PKI</label>
                 <select class="form-select form-select-sm" id="pki_filter" name="pki_filter">
                     <option value="">All</option>
@@ -99,7 +200,7 @@
                     <option value="exclude">Non-PKI only</option>
                 </select>
             </div>
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
                 <label for="hop_count" class="form-label">{{ t('common.hop_count') }}</label>
                 <select class="form-select form-select-sm" id="hop_count" name="hop_count">
                     <option value="">{{ t('common.any_hops') }}</option>
@@ -112,31 +213,33 @@
                     <option value="99">6+ hops</option>
                 </select>
             </div>
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
                 <label for="min_rssi" class="form-label">{{ t('common.min_rssi') }}</label>
                 <input type="number" class="form-control form-control-sm" id="min_rssi" name="min_rssi" placeholder="-120">
             </div>
             <!-- Exclude self-reported gateway messages -->
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
+                <label class="form-label" for="exclude_self">Options</label>
                 <div class="form-check d-flex align-items-center">
                     <input class="form-check-input me-2" type="checkbox" id="exclude_self" name="exclude_self">
                     <label class="form-check-label mb-0" for="exclude_self">
-                        {{ t('packets.exclude_gateway_self_messages') }}
+                        excl gw self mess
                     </label>
                 </div>
             </div>
-            <div class="col-12">
+            <div class="col-12 packets-inline-field">
                 <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
-                <input type="hidden" id="primary_channel" name="primary_channel">
-                <div id="primary_channel_options" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
-                    <div class="text-muted">Loading channels...</div>
+                <div>
+                    <input type="hidden" id="primary_channel" name="primary_channel">
+                    <div id="primary_channel_options" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
+                        <div class="text-muted">Loading channels...</div>
+                    </div>
                 </div>
-                <div class="form-text">Select one or more channels</div>
             </div>
         </div>
     {% endcall %}
 
-    {{ grouping_section("group_packets", t('common.group_by_packet_id'), t('packets.group_packets_same_id')) }}
+    {{ grouping_section("group_packets", t('common.group_by_packet_id'), "") }}
 
     {% set table_controls = [
         {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": t('common.apply_filters'), "type": "button"},
@@ -168,7 +271,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebarContainer = document.querySelector('.sidebar-content');
     if (sidebarContent && sidebarContainer) {
         sidebarContainer.innerHTML = sidebarContent.innerHTML;
+        sidebarContainer.classList.add('packets-sidebar-compact');
         sidebarContent.remove();
+    }
+
+    const sidebarTitle = document.querySelector('.sidebar-header h5');
+    if (sidebarTitle) {
+        sidebarTitle.innerHTML = '<i class="bi bi-funnel"></i> Packet Filters';
     }
 
     // Initialize URL filter manager AFTER sidebar content is moved
