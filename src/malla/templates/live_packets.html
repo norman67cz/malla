@@ -145,7 +145,15 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="col-lg-2 col-md-12 d-flex gap-2 justify-content-md-end">
+                        <div class="col-lg-2 col-md-6">
+                            <div class="form-check form-switch form-check-sm mt-1">
+                                <input class="form-check-input" type="checkbox" id="liveLogGroupByMeshId">
+                                <label class="form-check-label small" for="liveLogGroupByMeshId">
+                                    Group by Mesh Packet ID
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-lg-2 col-md-6 d-flex gap-2 justify-content-md-end">
                             <button type="button" class="btn btn-sm btn-outline-secondary" id="clearLiveLogFilters">
                                 Clear Filters
                             </button>
@@ -199,6 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const typeFilter = document.getElementById('liveLogTypeFilter');
     const fromFilter = document.getElementById('liveLogFromFilter');
     const toFilter = document.getElementById('liveLogToFilter');
+    const groupByMeshIdFilter = document.getElementById('liveLogGroupByMeshId');
     const clearFiltersBtn = document.getElementById('clearLiveLogFilters');
 
     let autoRefreshEnabled = true;
@@ -219,6 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeFilter.value) params.set('packet_type', typeFilter.value);
         if (fromFilter.value.trim()) params.set('from_filter', fromFilter.value.trim());
         if (toFilter.value.trim()) params.set('to_filter', toFilter.value.trim());
+        if (groupByMeshIdFilter.checked) params.set('group_by_mesh_id', '1');
         return `/api/packets/live?${params.toString()}`;
     }
 
@@ -259,6 +269,7 @@ document.addEventListener('DOMContentLoaded', function() {
         );
         fromFilter.value = selected.from_filter || fromFilter.value || '';
         toFilter.value = selected.to_filter || toFilter.value || '';
+        groupByMeshIdFilter.checked = Boolean(selected.group_by_mesh_id);
         filtersInitialized = true;
     }
 
@@ -369,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
             : 'badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle me-2';
     });
 
-    [channelFilter, gatewaySourceFilter, typeFilter].forEach(filterEl => {
+    [channelFilter, gatewaySourceFilter, typeFilter, groupByMeshIdFilter].forEach(filterEl => {
         filterEl.addEventListener('change', loadPackets);
     });
 
@@ -389,6 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
         typeFilter.value = '';
         fromFilter.value = '';
         toFilter.value = '';
+        groupByMeshIdFilter.checked = false;
         loadPackets();
     });
 

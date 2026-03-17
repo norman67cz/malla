@@ -334,6 +334,12 @@ def api_live_packets():
         packet_type = request.args.get("packet_type", "").strip()
         from_filter = request.args.get("from_filter", "").strip()
         to_filter = request.args.get("to_filter", "").strip()
+        group_by_mesh_id = request.args.get("group_by_mesh_id", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         now_ts = time.time()
         cache_key = (
             limit,
@@ -342,6 +348,7 @@ def api_live_packets():
             packet_type,
             from_filter.lower(),
             to_filter.lower(),
+            group_by_mesh_id,
         )
         cached = _LIVE_PACKETS_CACHE.get(cache_key)
         if cached and (now_ts - cached[0] < _LIVE_PACKETS_CACHE_TTL_SEC):
@@ -390,6 +397,7 @@ def api_live_packets():
                 params.extend([to_filter, to_like, to_like])
 
         where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+        query_limit = min(limit * 6, 1000) if group_by_mesh_id else limit
         cursor.execute(
             f"""
             SELECT
@@ -415,9 +423,9 @@ def api_live_packets():
             ORDER BY p.id DESC
             LIMIT ?
             """,
-            [*params, limit],
+            [*params, query_limit],
         )
-        rows = cursor.fetchall()
+        fetched_rows = cursor.fetchall()
 
         cursor.execute(
             """
@@ -482,6 +490,46 @@ def api_live_packets():
         )
         available_packet_types = [row[0] for row in cursor.fetchall() if row[0]]
 
+        rows: list[Any] = list(fetched_rows)
+        if group_by_mesh_id:
+            grouped_rows: dict[tuple[Any, ...], dict[str, Any]] = {}
+            grouped_order: list[tuple[Any, ...]] = []
+            for row in fetched_rows:
+                mesh_packet_id = row["mesh_packet_id"]
+                if mesh_packet_id not in (None, 0):
+                    group_key = (
+                        mesh_packet_id,
+                        row["from_node_id"],
+                        row["to_node_id"],
+                        row["portnum_name"],
+                        row["channel_id"],
+                    )
+                else:
+                    group_key = ("row", row["id"])
+
+                grouped = grouped_rows.get(group_key)
+                if grouped is None:
+                    grouped = {
+                        "row": row,
+                        "gateway_ids": set(),
+                        "reception_count": 0,
+                    }
+                    grouped_rows[group_key] = grouped
+                    grouped_order.append(group_key)
+
+                if row["gateway_id"]:
+                    grouped["gateway_ids"].add(row["gateway_id"])
+                grouped["reception_count"] += 1
+
+            rows = []
+            for group_key in grouped_order[:limit]:
+                grouped = grouped_rows[group_key]
+                representative_row = grouped["row"]
+                row_payload = dict(representative_row)
+                row_payload["_grouped_reception_count"] = grouped["reception_count"]
+                row_payload["_grouped_gateway_ids"] = sorted(grouped["gateway_ids"])
+                rows.append(row_payload)
+
         node_ids: set[int] = set()
         for row in rows:
             if row["from_node_id"] is not None:
@@ -499,7 +547,7 @@ def api_live_packets():
             }
         )
         receptions_by_mesh_id: dict[int, dict[str, Any]] = {}
-        if mesh_packet_ids:
+        if mesh_packet_ids and not group_by_mesh_id:
             placeholders = ",".join("?" for _ in mesh_packet_ids)
             oldest_visible_packet_id = min(row["id"] for row in rows)
             reception_window_start_id = max(
@@ -543,6 +591,10 @@ def api_live_packets():
             from_node_id = row["from_node_id"]
             to_node_id = row["to_node_id"]
             mesh_packet_id = row["mesh_packet_id"]
+            grouped_reception_count = (
+                row["_grouped_reception_count"] if group_by_mesh_id else None
+            )
+            grouped_gateway_ids = row["_grouped_gateway_ids"] if group_by_mesh_id else None
             reception_info = receptions_by_mesh_id.get(mesh_packet_id)
 
             if to_node_id == 4294967295:
@@ -576,12 +628,18 @@ def api_live_packets():
                     "processed_successfully": bool(row["processed_successfully"]),
                     "via_mqtt": bool(row["via_mqtt"]),
                     "reception_count": (
-                        reception_info["reception_count"] if reception_info else 1
+                        grouped_reception_count
+                        if grouped_reception_count is not None
+                        else (reception_info["reception_count"] if reception_info else 1)
                     ),
                     "reception_gateways": (
-                        reception_info["gateways"]
-                        if reception_info
-                        else ([row["gateway_id"]] if row["gateway_id"] else [])
+                        grouped_gateway_ids
+                        if grouped_gateway_ids is not None
+                        else (
+                            reception_info["gateways"]
+                            if reception_info
+                            else ([row["gateway_id"]] if row["gateway_id"] else [])
+                        )
                     ),
                     "detail_url": f"/packet/{row['id']}",
                 }
@@ -600,6 +658,7 @@ def api_live_packets():
                     "packet_type": packet_type,
                     "from_filter": from_filter,
                     "to_filter": to_filter,
+                    "group_by_mesh_id": group_by_mesh_id,
                 },
             },
         }
