@@ -2158,6 +2158,40 @@ def api_traceroute_data():
     """Modern table endpoint for traceroutes with structured JSON response."""
     logger.info("API traceroute modern endpoint accessed")
     try:
+        def classify_traceroute_role(
+            *,
+            raw_payload: bytes | None,
+            route_nodes: list[int],
+            from_node_id: int | None,
+            to_node_id: int | None,
+        ) -> tuple[str, bool]:
+            route_back_nodes: list[int] = []
+            has_return_path = False
+            if raw_payload:
+                try:
+                    route_data = parse_traceroute_payload(raw_payload)
+                    route_back_nodes = route_data.get("route_back", []) or []
+                    has_return_path = bool(route_back_nodes)
+                except Exception:
+                    route_back_nodes = []
+                    has_return_path = False
+
+            has_route_result = bool(
+                raw_payload
+                and (
+                    (
+                        route_nodes
+                        and not (
+                            len(route_nodes) <= 2
+                            and route_nodes[0] == from_node_id
+                            and route_nodes[-1] == to_node_id
+                        )
+                    )
+                    or route_back_nodes
+                )
+            )
+            return ("result" if has_route_result else "request_only", has_return_path)
+
         # Get parameters
         page = request.args.get("page", type=int, default=1)
         limit = request.args.get("limit", type=int, default=100)
@@ -2359,6 +2393,13 @@ def api_traceroute_data():
                         or node_short_names.get(to_node_id, f"{to_node_id:08x}"[-4:])
                     )
 
+            packet_role, has_return_path = classify_traceroute_role(
+                raw_payload=tr.get("raw_payload"),
+                route_nodes=route_nodes,
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+            )
+
             # Handle gateway display for both grouped and individual packets
             gateway_display = tr.get("gateway_id", "N/A")
             gateway_sort_value = 0
@@ -2421,6 +2462,10 @@ def api_traceroute_data():
                 "snr": snr_display,
                 "hops": hops_display,
                 "is_grouped": group_packets,
+                "packet_role": packet_role,
+                "has_return_path": has_return_path,
+                "paired_packet_id": None,
+                "paired_packet_role": None,
             }
 
             # Add gateway-specific fields for grouped packets
@@ -2439,6 +2484,161 @@ def api_traceroute_data():
                         pass
 
             data.append(response_data)
+
+        pair_window_seconds = 30
+        rows_needing_external_pair = [
+            row
+            for row in data
+            if row.get("from_node_id") and row.get("to_node_id") and row.get("timestamp")
+        ]
+
+        external_pairs: dict[tuple[int, int], dict[str, Any]] = {}
+        if rows_needing_external_pair:
+            min_ts = min(row["timestamp"] for row in rows_needing_external_pair)
+            max_ts = max(row["timestamp"] for row in rows_needing_external_pair)
+            candidate_pairs = {
+                (row["to_node_id"], row["from_node_id"]) for row in rows_needing_external_pair
+            }
+
+            if candidate_pairs:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                pair_conditions = []
+                pair_params: list[Any] = []
+                for from_id, to_id in candidate_pairs:
+                    pair_conditions.append("(from_node_id = ? AND to_node_id = ?)")
+                    pair_params.extend([from_id, to_id])
+
+                cursor.execute(
+                    f"""
+                    SELECT id, timestamp, from_node_id, to_node_id, raw_payload
+                    FROM packet_history
+                    WHERE portnum_name = 'TRACEROUTE_APP'
+                      AND timestamp BETWEEN ? AND ?
+                      AND ({' OR '.join(pair_conditions)})
+                    ORDER BY timestamp DESC
+                    LIMIT 500
+                    """,
+                    [
+                        min_ts - pair_window_seconds,
+                        max_ts + pair_window_seconds,
+                        *pair_params,
+                    ],
+                )
+
+                for row in cursor.fetchall():
+                    row_dict = dict(row)
+                    route_nodes = []
+                    if row_dict.get("raw_payload"):
+                        try:
+                            parsed = parse_traceroute_payload(row_dict["raw_payload"])
+                            route_nodes = parsed.get("route_nodes", []) or []
+                        except Exception:
+                            route_nodes = []
+
+                    packet_role, has_return_path = classify_traceroute_role(
+                        raw_payload=row_dict.get("raw_payload"),
+                        route_nodes=route_nodes,
+                        from_node_id=row_dict.get("from_node_id"),
+                        to_node_id=row_dict.get("to_node_id"),
+                    )
+                    row_dict["packet_role"] = packet_role
+                    row_dict["has_return_path"] = has_return_path
+
+                    key = (row_dict["from_node_id"], row_dict["to_node_id"])
+                    existing = external_pairs.get(key)
+                    if existing is None or row_dict["timestamp"] > existing["timestamp"]:
+                        external_pairs[key] = row_dict
+
+                conn.close()
+
+        for row in data:
+            if row["packet_role"] != "request_only":
+                continue
+
+            request_ts = row.get("timestamp")
+            request_from = row.get("from_node_id")
+            request_to = row.get("to_node_id")
+            if not request_ts or not request_from or not request_to:
+                continue
+
+            best_match = None
+            for candidate in data:
+                if candidate["packet_role"] != "result":
+                    continue
+                if (
+                    candidate.get("from_node_id") != request_to
+                    or candidate.get("to_node_id") != request_from
+                ):
+                    continue
+
+                candidate_ts = candidate.get("timestamp")
+                if candidate_ts is None:
+                    continue
+
+                delta = candidate_ts - request_ts
+                if delta < 0 or delta > pair_window_seconds:
+                    continue
+
+                if best_match is None or delta < best_match[0]:
+                    best_match = (delta, candidate)
+
+            if best_match is not None:
+                paired = best_match[1]
+                row["paired_packet_id"] = paired["id"]
+                row["paired_packet_role"] = paired["packet_role"]
+                continue
+
+            external = external_pairs.get((request_to, request_from))
+            if external is not None:
+                delta = external["timestamp"] - request_ts
+                if 0 <= delta <= pair_window_seconds and external["packet_role"] == "result":
+                    row["paired_packet_id"] = external["id"]
+                    row["paired_packet_role"] = external["packet_role"]
+
+        for row in data:
+            if row["packet_role"] != "result":
+                continue
+
+            result_ts = row.get("timestamp")
+            result_from = row.get("from_node_id")
+            result_to = row.get("to_node_id")
+            if not result_ts or not result_from or not result_to:
+                continue
+
+            best_match = None
+            for candidate in data:
+                if candidate["packet_role"] != "request_only":
+                    continue
+                if (
+                    candidate.get("from_node_id") != result_to
+                    or candidate.get("to_node_id") != result_from
+                ):
+                    continue
+
+                candidate_ts = candidate.get("timestamp")
+                if candidate_ts is None:
+                    continue
+
+                delta = result_ts - candidate_ts
+                if delta < 0 or delta > pair_window_seconds:
+                    continue
+
+                if best_match is None or delta < best_match[0]:
+                    best_match = (delta, candidate)
+
+            if best_match is not None:
+                paired = best_match[1]
+                row["paired_packet_id"] = paired["id"]
+                row["paired_packet_role"] = paired["packet_role"]
+                continue
+
+            external = external_pairs.get((result_to, result_from))
+            if external is not None:
+                delta = result_ts - external["timestamp"]
+                if 0 <= delta <= pair_window_seconds and external["packet_role"] == "request_only":
+                    row["paired_packet_id"] = external["id"]
+                    row["paired_packet_role"] = external["packet_role"]
 
         response = {
             "data": data,

@@ -497,13 +497,29 @@
                                         <h6><i class="bi bi-route"></i> Route Information</h6>
                                         <table class="table table-sm">
                                             {% if payload_info.data.route_nodes %}
+                                                {% if payload_info.data.forward_path_display %}
                                                 <tr>
-                                                    <th>Route Path:</th>
+                                                    <th>Forward Path:</th>
+                                                    <td>{{ payload_info.data.forward_path_display }}</td>
+                                                </tr>
+                                                {% endif %}
+                                                {% if payload_info.data.return_path_display %}
+                                                <tr>
+                                                    <th>Return Path:</th>
+                                                    <td>{{ payload_info.data.return_path_display }}</td>
+                                                </tr>
+                                                {% endif %}
+                                                <tr>
+                                                    <th>Raw Route Nodes:</th>
                                                     <td>
-                                                        {% for node_id in payload_info.data.route_nodes %}
-                                                            {{ node_link(node_id, display_text=payload_info.data.route_node_names.get(node_id)) }}
-                                                            {% if not loop.last %}→{% endif %}
-                                                        {% endfor %}
+                                                        {% if payload_info.data.route_nodes %}
+                                                            {% for node_id in payload_info.data.route_nodes %}
+                                                                {{ node_link(node_id, display_text=payload_info.data.route_node_names.get(node_id)) }}
+                                                                {% if not loop.last %}→{% endif %}
+                                                            {% endfor %}
+                                                        {% else %}
+                                                            <span class="text-muted">None</span>
+                                                        {% endif %}
                                                     </td>
                                                 </tr>
                                                 <tr>

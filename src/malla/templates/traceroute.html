@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             },
-                        {
+            {
                 key: 'route',
                 title: 'Route',
                 sortable: false,
@@ -275,6 +275,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     // Fallback for no route data
                     return `<span class="text-muted">No route data</span>`;
+                }
+            },
+            {
+                key: 'packet_role',
+                title: 'State',
+                sortable: false,
+                render: (value, row) => {
+                    const isResult = value === 'result';
+                    const baseBadge = isResult
+                        ? '<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Result</span>'
+                        : '<span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">Request only</span>';
+
+                    const returnBadge = row.has_return_path
+                        ? ' <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Return path</span>'
+                        : '';
+
+                    const pairInfo = row.paired_packet_id
+                        ? `<div class="small text-muted mt-1">Paired: <a href="/packet/${row.paired_packet_id}" class="text-decoration-none">#${row.paired_packet_id}</a></div>`
+                        : '';
+
+                    return `${baseBadge}${returnBadge}${pairInfo}`;
                 }
             },
             {

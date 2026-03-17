@@ -171,11 +171,7 @@ class TraceroutePacket:
 
     def _build_forward_path(self) -> TraceroutePath:
         """
-        Build the forward path based on Meshtastic traceroute logic.
-
-        The key insight: when route_back exists, the packet display logic
-        shows: to_node_id + route_nodes + from_node_id
-        This reflects that packets with return data traveled on the return journey.
+        Build the forward path using a stable source -> destination orientation.
         """
         if self.from_node_id is None or self.to_node_id is None:
             return TraceroutePath(
@@ -188,27 +184,19 @@ class TraceroutePacket:
                 total_hops=0,
             )
 
-        if self.has_return_path():
-            # When return path exists, display shows the "forward" as to->route->from
-            node_ids = (
-                [self.to_node_id] + self.route_data["route_nodes"] + [self.from_node_id]
-            )
-            snr_values = self.route_data["snr_towards"]
-            path_type = "forward_with_return"
-        else:
-            # Normal forward path: from->route->to
-            node_ids = [self.from_node_id] + self.route_data["route_nodes"]
-            snr_values = self.route_data["snr_towards"]
-            path_type = "forward"
+        node_ids = [self.from_node_id] + self.route_data["route_nodes"]
+        snr_values = self.route_data["snr_towards"]
+        path_type = "forward"
 
-        # Check if the FORWARD traceroute is complete (reached destination)
-        # The forward path is complete if:
-        # 1. The last route node matches the destination, OR
-        # 2. We have more SNR values than route nodes (indicating final hop reached destination)
+        # A forward traceroute is complete when the route explicitly reaches the
+        # destination, or when the SNR list includes the final hop to it.
         is_complete = (
-            self.route_data["route_nodes"]
+            bool(self.route_data["route_nodes"])
             and self.route_data["route_nodes"][-1] == self.to_node_id
-        )
+        ) or (len(snr_values) > len(self.route_data["route_nodes"]))
+
+        if is_complete and (not node_ids or node_ids[-1] != self.to_node_id):
+            node_ids = node_ids + [self.to_node_id]
 
         # Build hops
         hops = []
@@ -241,20 +229,20 @@ class TraceroutePacket:
         ):
             return None
 
-        # Return path: from_node_id + route_back + to_node_id
-        node_ids = [self.from_node_id] + self.route_data["route_back"]
+        # Return path always starts at the original destination and heads back
+        # towards the originator.
+        node_ids = [self.to_node_id] + self.route_data["route_back"]
         snr_values = self.route_data["snr_back"]
 
-        # Check if the return path is complete
-        # The return path is complete if the last route_back node matches the original source (from_node_id)
-        # OR if we have SNR data for the final hop back to the originator
+        # The return path is complete if it explicitly reaches the original
+        # source or if the SNR data includes the final hop back to it.
         is_complete = (
-            self.route_data["route_back"]
+            bool(self.route_data["route_back"])
             and self.route_data["route_back"][-1] == self.from_node_id
-        )
+        ) or (len(snr_values) > len(self.route_data["route_back"]))
 
-        if is_complete:
-            node_ids = node_ids + [self.to_node_id]
+        if is_complete and node_ids[-1] != self.from_node_id:
+            node_ids = node_ids + [self.from_node_id]
 
         # Build hops
         hops = []
@@ -289,10 +277,6 @@ class TraceroutePacket:
         - Forward path: packet travels from source to destination, collecting SNR data
         - Return path (if present): packet travels back from destination to source
 
-        When route_back exists, it means the packet has completed its forward journey
-        and is now on its return journey. The SNR data reflects the actual RF hops
-        that occurred during transmission.
-
         Returns:
             TraceroutePath containing all actual RF hops with SNR data
         """
@@ -313,30 +297,11 @@ class TraceroutePacket:
         # Process forward path RF hops
         forward_snr_values = self.route_data["snr_towards"]
         if forward_snr_values:
-            # Build forward path nodes based on whether this is a return journey packet
-            if self.has_return_path() or self.is_going_back():
-                forward_node_ids = (
-                    [self.to_node_id]
-                    + self.route_data["route_nodes"]
-                    + [self.from_node_id]
-                )
-            else:
-                forward_node_ids = (
-                    [self.from_node_id]
-                    + self.route_data["route_nodes"]
-                    + [self.to_node_id]
-                )
-
-            # Handle direct hop case (no intermediate route nodes)
-            if len(self.route_data["route_nodes"]) == 0 and len(forward_snr_values) > 0:
-                if not self.has_return_path():
-                    # Direct hop on forward journey: source -> destination
-                    forward_node_ids = [self.from_node_id, self.to_node_id]
-                else:
-                    # Direct hop on return journey: destination -> source
-                    # (The SNR data represents the original forward hop, but the packet
-                    # is now traveling in the reverse direction)
-                    forward_node_ids = [self.to_node_id, self.from_node_id]
+            forward_node_ids = [self.from_node_id] + self.route_data["route_nodes"]
+            if len(forward_snr_values) > len(self.route_data["route_nodes"]):
+                forward_node_ids.append(self.to_node_id)
+            elif len(self.route_data["route_nodes"]) == 0:
+                forward_node_ids = [self.from_node_id, self.to_node_id]
 
             # Build forward RF hops
             for i in range(len(forward_node_ids) - 1):
@@ -355,25 +320,11 @@ class TraceroutePacket:
         if self.has_return_path():
             return_snr_values = self.route_data["snr_back"]
             if return_snr_values:
-                # Build return path nodes: from_node -> route_back nodes -> to_node
-                # This represents the actual return journey RF hops
-                return_node_ids = [self.from_node_id] + self.route_data["route_back"]
-
-                # Only include hops that actually have SNR data
-                actual_return_hops = min(
-                    len(self.route_data["route_back"]), len(return_snr_values)
-                )
-
-                if actual_return_hops > 0:
-                    return_node_ids = [self.from_node_id] + self.route_data[
-                        "route_back"
-                    ][:actual_return_hops]
-                    # Add the final destination if we have SNR data for the final hop
-                    if len(return_snr_values) > actual_return_hops:
-                        return_node_ids.append(self.to_node_id)
-                else:
-                    # No actual hops occurred
-                    return_node_ids = [self.from_node_id]
+                return_node_ids = [self.to_node_id] + self.route_data["route_back"]
+                if len(return_snr_values) > len(self.route_data["route_back"]):
+                    return_node_ids.append(self.from_node_id)
+                elif len(self.route_data["route_back"]) == 0:
+                    return_node_ids = [self.to_node_id, self.from_node_id]
 
                 # Build return hops
                 for i in range(len(return_node_ids) - 1):
@@ -391,17 +342,12 @@ class TraceroutePacket:
         # Determine path type and completeness
         if self.has_return_path():
             path_type = "combined_rf"
-            # Complete if both forward and return paths have all their SNR data
-            forward_complete = len(forward_snr_values) > len(
-                self.route_data["route_nodes"]
-            )
-            return_complete = len(self.route_data["snr_back"]) > len(
-                self.route_data["route_back"]
-            )
+            forward_complete = self.forward_path.is_complete
+            return_complete = self.return_path.is_complete if self.return_path else False
             is_complete = forward_complete and return_complete
         else:
             path_type = "forward_rf"
-            is_complete = len(forward_snr_values) > len(self.route_data["route_nodes"])
+            is_complete = self.forward_path.is_complete
 
         # Build combined node IDs list (all unique nodes in order)
         combined_node_ids = []
