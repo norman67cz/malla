@@ -178,6 +178,9 @@
     {% endcall %}
 
     {{ grouping_section("group_packets", t('common.group_by_packet_id'), t('traceroute.group_same_id')) }}
+    <div class="px-3 pb-2">
+        <small class="text-muted">{{ t('traceroute.group_recent_sample_notice') }}</small>
+    </div>
 
     {% set table_controls = [
         {"class": "btn-primary", "id": "applyFilters", "icon": "bi bi-search", "text": t('common.apply_filters'), "type": "button"},
