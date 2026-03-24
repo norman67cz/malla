@@ -77,11 +77,11 @@
                 <div class="mb-3">
                     <label for="maxAge" class="form-label">{{ t('map.max_age') }}</label>
                     <select class="form-select form-select-sm" id="maxAge" name="maxAge">
-                        <option value="" selected>{{ t('map.no_limit') }}</option>
+                        <option value="">{{ t('map.no_limit') }}</option>
                         <option value="1">1 Hour</option>
                         <option value="6">6 Hours</option>
                         <option value="24">24 Hours</option>
-                        <option value="72">3 Days</option>
+                        <option value="72" selected>3 Days</option>
                         <option value="168">1 Week</option>
                     </select>
                 </div>
@@ -803,10 +803,7 @@ function initializeInterface() {
 
     // Clear dates button
     $('#clearDateRange').on('click', function() {
-        $('#startDateTime').val('');
-        $('#endDateTime').val('');
-        $('#maxAge').val('');
-        applyClientSideFilters();
+        $('#maxAge').val('72').trigger('change');
     });
 
     // Move hop depth section just below the selected details container
@@ -876,8 +873,21 @@ function initializeInterface() {
         });
     }
 
+    function initializeDefaultMaxAge() {
+        const params = new URLSearchParams(window.location.search);
+        const hasExplicitTimeFilter =
+            params.has('maxAge') ||
+            params.has('startDateTime') ||
+            params.has('endDateTime');
+
+        if (!hasExplicitTimeFilter && !$('#startDateTime').val() && !$('#endDateTime').val()) {
+            $('#maxAge').val('72').trigger('change');
+        }
+    }
+
     // Load channels on interface init
     loadPrimaryChannels();
+    initializeDefaultMaxAge();
 
     // Trigger change events for all form fields to initialize them based on default values
     const formFields = document.querySelectorAll('#locationFilterForm select, #locationFilterForm input');
