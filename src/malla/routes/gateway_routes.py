@@ -107,6 +107,10 @@ def gateway_compare():
             "gateway_comparison.html",
             available_gateways=[],
             available_nodes=[],
+            gateway1_id=None,
+            gateway2_id=None,
+            comparison_data=None,
+            filters={},
             error=f"Error loading page: {str(e)}",
         )
 

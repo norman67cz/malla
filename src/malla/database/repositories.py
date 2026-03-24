@@ -3253,7 +3253,7 @@ class NodeRepository:
                 FROM packet_history ph
                 LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
                 WHERE ph.from_node_id IS NOT NULL
-                GROUP BY ph.from_node_id
+                GROUP BY ph.from_node_id, ni.long_name, ni.short_name
                 ORDER BY packet_count DESC
             """
 
@@ -4591,6 +4591,96 @@ class LocationRepository:
 
         except Exception as e:
             logger.error(f"Error getting node location history: {e}")
+            raise
+
+    @staticmethod
+    def get_bulk_node_location_history(
+        node_ids: list[int], limit_per_node: int = 50
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Get recent decoded location history for multiple nodes with a single query."""
+        if not node_ids:
+            return {}
+
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            normalized_ids: list[int] = []
+            for node_id in node_ids:
+                if isinstance(node_id, str):
+                    if node_id.startswith("!"):
+                        normalized_ids.append(int(node_id[1:], 16))
+                    else:
+                        normalized_ids.append(
+                            int(node_id, 16) if not node_id.isdigit() else int(node_id)
+                        )
+                else:
+                    normalized_ids.append(int(node_id))
+
+            placeholders = ",".join(["?"] * len(normalized_ids))
+            query = f"""
+                WITH ranked_locations AS (
+                    SELECT
+                        from_node_id,
+                        timestamp,
+                        raw_payload,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY from_node_id
+                            ORDER BY timestamp DESC
+                        ) AS row_num
+                    FROM packet_history
+                    WHERE from_node_id IN ({placeholders})
+                      AND portnum = 3
+                      AND raw_payload IS NOT NULL
+                )
+                SELECT
+                    from_node_id,
+                    timestamp,
+                    raw_payload
+                FROM ranked_locations
+                WHERE row_num <= ?
+                ORDER BY from_node_id, timestamp DESC
+            """
+
+            cursor.execute(query, normalized_ids + [limit_per_node])
+            history_by_node: dict[int, list[dict[str, Any]]] = {}
+
+            for row in cursor.fetchall():
+                try:
+                    position = mesh_pb2.Position()
+                    position.ParseFromString(row["raw_payload"])
+
+                    latitude = (
+                        position.latitude_i / 1e7 if position.latitude_i else None
+                    )
+                    longitude = (
+                        position.longitude_i / 1e7 if position.longitude_i else None
+                    )
+                    altitude = position.altitude if position.altitude else None
+
+                    if not latitude or not longitude:
+                        continue
+
+                    node_id = row["from_node_id"]
+                    history_by_node.setdefault(node_id, []).append(
+                        {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "altitude": altitude,
+                            "timestamp": row["timestamp"],
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to parse bulk location for node {row['from_node_id']}: {e}"
+                    )
+                    continue
+
+            conn.close()
+            return history_by_node
+
+        except Exception as e:
+            logger.error(f"Error getting bulk node location history: {e}")
             raise
 
     @staticmethod

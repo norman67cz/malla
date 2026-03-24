@@ -473,6 +473,7 @@ class TracerouteService:
                     parsed_route_cache[packet["id"]] = route_data
                     nodes_for_packet = {packet["from_node_id"], packet["to_node_id"]}
                     nodes_for_packet.update(route_data.get("route_nodes", []))
+                    nodes_for_packet.update(route_data.get("route_back", []))
                     # Remove invalid placeholders
                     nodes_for_packet.discard(None)
                     nodes_for_packet.discard(4294967295)
@@ -488,21 +489,9 @@ class TracerouteService:
             from ..utils import traceroute_utils as _tru  # Local import to avoid cycles
 
             # Build a dict: node_id -> list[location_dict] (DESC by timestamp)
-            location_history_cache: dict[int, list[dict[str, Any]]] = {}
-            for node_id in unique_node_ids:
-                try:
-                    locations = LocationRepository.get_node_location_history(
-                        node_id, limit=50
-                    )
-                    if locations:
-                        location_history_cache[node_id] = (
-                            locations  # already DESC order
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"Error fetching location history for node {node_id}: {e}"
-                    )
-                    continue
+            location_history_cache = LocationRepository.get_bulk_node_location_history(
+                list(unique_node_ids), limit_per_node=50
+            )
 
             prefetch_duration = time.time() - prefetch_start
             logger.info(
@@ -530,10 +519,8 @@ class TracerouteService:
 
                 history = location_history_cache.get(node_id)
                 if not history:
-                    loc = _orig_get_location(node_id, target_ts)
-                    if loc:
-                        location_cache[memo_key] = loc
-                    return loc
+                    location_cache[memo_key] = None
+                    return None
 
                 # histories are DESC (newest first). Find first <= ts.
                 best = None

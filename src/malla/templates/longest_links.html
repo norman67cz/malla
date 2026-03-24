@@ -308,7 +308,13 @@
         });
 
         fetch(`/api/longest-links?${params}`)
-            .then(response => response.json())
+            .then(async response => {
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 currentData = data;
                 displayResults(data);
