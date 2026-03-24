@@ -566,6 +566,7 @@ let allTracerouteLinks = [];
 let allPacketLinks = [];
 let allNeighborInfoLinks = [];
 let allMobileBtsData = [];
+let allLinkData = [];
 let selectedNodeId = null;
 let showTracerouteLinks = true;
 let showPacketLinks = false;
@@ -967,6 +968,10 @@ function buildFilterParams() {
     // Only send server-side filters (gateway, search, etc.)
     // Age and role filtering is now done client-side
 
+    if (showMobileBtsSites) {
+        params.set('include_mobile_bts', '1');
+    }
+
     return params;
 }
 
@@ -1106,6 +1111,10 @@ function applyClientSideFilters() {
 
 // Update map display with filtered data
 function updateMapDisplay() {
+    if (!map || !markerClusterGroup) {
+        return;
+    }
+
     // Update statistics
     updateStats();
 
@@ -1761,6 +1770,11 @@ function toggleMobileBtsSites() {
     mobileBtsMarkers.forEach(marker => map.removeLayer(marker));
     mobileBtsMarkers = [];
 
+    if (showMobileBtsSites && allMobileBtsData.length === 0) {
+        loadNodeLocations();
+        return;
+    }
+
     if (selectedNodeId !== null) {
         drawHopNetwork();
         return;
@@ -2244,7 +2258,7 @@ function computeNodesWithinHops(startNodeId, maxHops) {
 
 // Draw network limited by hop depth around the selected node
 function drawHopNetwork(skipFit = false) {
-    if (selectedNodeId === null) {
+    if (selectedNodeId === null || !map || !markerClusterGroup) {
         return;
     }
 

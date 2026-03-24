@@ -1088,6 +1088,12 @@ def api_locations():
     try:
         # Build filters from request parameters
         filters = {}
+        include_mobile_bts = request.args.get("include_mobile_bts", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
         # Always limit to last 3 days to keep map queries bounded
         from datetime import datetime, timedelta
@@ -1109,7 +1115,10 @@ def api_locations():
         if request.args.get("search"):
             filters["search"] = request.args.get("search")
 
-        cache_key = _get_map_graph_cache_key("locations", filters)
+        cache_filters = dict(filters)
+        cache_filters["include_mobile_bts"] = include_mobile_bts
+
+        cache_key = _get_map_graph_cache_key("locations", cache_filters)
         now_ts = time.time()
         cached = _MAP_GRAPH_CACHE.get(cache_key)
         if cached and (now_ts - cached[0] < _MAP_GRAPH_CACHE_TTL_SEC):
@@ -1146,7 +1155,7 @@ def api_locations():
         neighborinfo_links = LocationService.get_neighborinfo_links(filters)
 
         # 2c. Get imported public mobile BTS sites for 800/900 MHz bands
-        mobile_bts_sites = LocationService.get_mobile_bts_sites()
+        mobile_bts_sites = LocationService.get_mobile_bts_sites() if include_mobile_bts else []
 
         # 3. Get enhanced location data, passing pre-computed data
         locations = LocationService.get_node_locations(
