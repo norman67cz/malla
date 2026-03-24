@@ -81,6 +81,7 @@ path = "src/malla/__init__.py"
 include = [
     "src/malla/**/*.py",
     "src/malla/templates/**/*.html",
+    "src/malla/static/favicon.ico",
     "src/malla/static/**/*",
     "README.md",
     "LICENSE",
