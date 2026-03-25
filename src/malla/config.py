@@ -23,6 +23,9 @@ class AppConfig:
     # Core UI settings
     name: str = "Malla"
     home_markdown: str = ""
+    wiki_directory: str = "wiki"
+    wiki_default_page: str = "index.md"
+    wiki_edit_key: str | None = None
 
     # Flask/server settings
     secret_key: str = "dev-secret-key-change-in-production"

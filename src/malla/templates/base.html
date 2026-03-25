@@ -217,6 +217,12 @@
                         </ul>
                     </li>
 
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'main.wiki_page' }}" href="{{ url_for('main.wiki_page') }}">
+                            <i class="bi bi-journal-text"></i> {{ t('menu.wiki') }}
+                        </a>
+                    </li>
+
                 </ul>
 
                 <!-- Timezone Toggle and Dark Mode Toggle -->

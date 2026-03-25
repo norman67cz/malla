@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('page.wiki_title') }} - Malla{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h1 class="h5 mb-0">
+                        <i class="bi bi-journal-text"></i> {{ t('page.wiki_title') }}
+                    </h1>
+                </div>
+
+                <p class="text-muted small mb-3">{{ t('wiki.directory_label') }}: <code>{{ wiki_base_dir }}</code></p>
+
+                {% if pages %}
+                    <div class="list-group list-group-flush">
+                        {% for page in pages %}
+                            <a href="{{ url_for('main.wiki_page', page=page.path) }}"
+                               class="list-group-item list-group-item-action px-0 border-0 {{ 'active' if page.path == selected_page }}">
+                                <div class="fw-semibold">{{ page.name }}</div>
+                                <div class="small text-muted"><code>{{ page.path }}</code></div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary mb-0">{{ t('wiki.no_pages_found') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="mb-3">
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} mb-2">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div>
+                        <h2 class="h4 mb-1">{{ selected_page }}</h2>
+                        {% if not page_exists %}
+                            <div class="small text-muted">{{ t('wiki.page_missing') }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                        {% if wiki_edit_allowed %}
+                            {% if edit_mode %}
+                                <a href="{{ url_for('main.wiki_page', page=selected_page) }}" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-eye"></i> {{ t('wiki.view_mode') }}
+                                </a>
+                            {% else %}
+                                <a href="{{ url_for('main.wiki_page', page=selected_page, edit=1) }}" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-pencil-square"></i> {{ t('wiki.edit_button') }}
+                                </a>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('main.wiki_lock') }}" class="d-inline">
+                                <input type="hidden" name="page" value="{{ selected_page }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-lock"></i> {{ t('wiki.lock_button') }}
+                                </button>
+                            </form>
+                        {% elif wiki_edit_available %}
+                            <form method="post" action="{{ url_for('main.wiki_unlock') }}" class="d-flex flex-wrap gap-2 align-items-center">
+                                <input type="hidden" name="page" value="{{ selected_page }}">
+                                <input type="password"
+                                       name="edit_key"
+                                       class="form-control form-control-sm"
+                                       style="min-width: 220px;"
+                                       placeholder="{{ t('wiki.edit_key_placeholder') }}"
+                                       autocomplete="current-password">
+                                <button type="submit" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-unlock"></i> {{ t('wiki.unlock_button') }}
+                                </button>
+                            </form>
+                        {% else %}
+                            <span class="text-muted small">{{ t('wiki.edit_unavailable') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if edit_mode and wiki_edit_allowed %}
+                    <form method="post" action="{{ url_for('main.wiki_save') }}">
+                        <input type="hidden" name="page" value="{{ selected_page }}">
+                        <div class="mb-3">
+                            <label for="wiki-content" class="form-label">{{ t('wiki.markdown_content') }}</label>
+                            <textarea id="wiki-content"
+                                      name="content"
+                                      class="form-control"
+                                      rows="22"
+                                      spellcheck="false">{{ page_content }}</textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-save"></i> {{ t('wiki.save_button') }}
+                            </button>
+                            <a href="{{ url_for('main.wiki_page', page=selected_page) }}" class="btn btn-outline-secondary">
+                                {{ t('wiki.cancel_button') }}
+                            </a>
+                        </div>
+                    </form>
+                {% else %}
+                    {% if page_content %}
+                        <div class="wiki-content">
+                            {{ page_content | markdown }}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary mb-0">{{ t('wiki.empty_page') }}</div>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
