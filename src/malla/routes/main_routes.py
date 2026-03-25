@@ -158,12 +158,14 @@ def wiki_page():
             page = pages[0].path
 
         selected_page, page_content, page_exists = WikiService.read_page(page, cfg)
+        rendered_page_content = WikiService.render_internal_links(page_content)
 
         return render_template(
             "wiki.html",
             pages=pages,
             selected_page=selected_page,
             page_content=page_content,
+            rendered_page_content=rendered_page_content,
             page_exists=page_exists,
             edit_mode=edit_mode and _wiki_edit_allowed(),
             wiki_edit_available=_wiki_edit_available(),

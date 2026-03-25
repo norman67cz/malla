@@ -55,9 +55,14 @@
                     </div>
 
                     <div>
-                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#wikiEditControls" aria-expanded="{{ 'true' if edit_mode else 'false' }}" aria-controls="wikiEditControls">
-                            <i class="bi bi-sliders"></i> {{ t('wiki.controls_button') }}
-                        </button>
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#wikiEditControls" aria-expanded="{{ 'true' if edit_mode else 'false' }}" aria-controls="wikiEditControls">
+                                <i class="bi bi-sliders"></i> {{ t('wiki.controls_button') }}
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#wikiMarkdownHelpModal" aria-label="{{ t('wiki.markdown_help_button') }}">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -162,12 +167,63 @@
                 {% else %}
                     {% if page_content %}
                         <div class="wiki-content">
-                            {{ page_content | markdown }}
+                            {{ rendered_page_content | markdown }}
                         </div>
                     {% else %}
                         <div class="alert alert-secondary mb-0">{{ t('wiki.empty_page') }}</div>
                     {% endif %}
                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="wikiMarkdownHelpModal" tabindex="-1" aria-labelledby="wikiMarkdownHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="wikiMarkdownHelpModalLabel">
+                    <i class="bi bi-markdown"></i> {{ t('wiki.markdown_help_title') }}
+                </h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('wiki.close_button') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-3">{{ t('wiki.markdown_help_intro') }}</div>
+                <div class="d-grid gap-3">
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_wiki_link') }}</div>
+                        <code>[[2.routing]]</code><br>
+                        <code>[[2.routing|Routing]]</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_heading') }}</div>
+                        <code># Heading</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_bold') }}</div>
+                        <code>**bold text**</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_italic') }}</div>
+                        <code>*italic text*</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_list') }}</div>
+                        <code>- item one<br>- item two</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_link') }}</div>
+                        <code>[ApertureLab](https://mesh.aperturelab.cz)</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_code') }}</div>
+                        <code>`inline code`</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_quote') }}</div>
+                        <code>&gt; quoted text</code>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

@@ -17,6 +17,8 @@ class WikiPageInfo:
 class WikiService:
     """Filesystem-backed Markdown wiki helper."""
 
+    _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]")
+
     @staticmethod
     def _sort_key(page_path: str) -> tuple[list[int], str]:
         stem = PurePosixPath(page_path).stem.strip().lower()
@@ -120,3 +122,18 @@ class WikiService:
         if source_path.exists():
             source_path.rename(target_path)
         return normalized_new_page
+
+    @staticmethod
+    def render_internal_links(content: str) -> str:
+        def replace_link(match: re.Match[str]) -> str:
+            raw_target = match.group(1).strip()
+            raw_label = (match.group(2) or "").strip()
+
+            if not raw_target:
+                return match.group(0)
+
+            target = raw_target if raw_target.lower().endswith(".md") else f"{raw_target}.md"
+            label = raw_label or raw_target
+            return f"[{label}](/wiki?page={target})"
+
+        return WikiService._WIKI_LINK_RE.sub(replace_link, content)
