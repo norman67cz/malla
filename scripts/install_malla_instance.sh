@@ -55,14 +55,20 @@ run_as_target_user() {
 
 write_build_commit_file() {
     local commit_file="$INSTALL_DIR/BUILD_COMMIT"
+    local version_file="$INSTALL_DIR/BUILD_VERSION"
     local build_commit
+    local build_version
 
     build_commit="$(run_as_target_user git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || true)"
     [ -n "$build_commit" ] || build_commit="unknown"
+    build_version="$(run_as_target_user git -C "$INSTALL_DIR" show -s --date=format:%Y.%m.%d --format=%cd HEAD 2>/dev/null || true)"
+    [ -n "$build_version" ] || build_version="unknown"
 
     log "Writing build commit metadata to $commit_file"
     printf '%s\n' "$build_commit" >"$commit_file"
     chown "$RUN_AS_USER":"$RUN_AS_USER" "$commit_file"
+    printf '%s\n' "$build_version" >"$version_file"
+    chown "$RUN_AS_USER":"$RUN_AS_USER" "$version_file"
 }
 
 require_root() {

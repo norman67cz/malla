@@ -59,6 +59,21 @@ def get_build_commit(package_dir: Path) -> str:
     return file_commit or "unknown"
 
 
+def get_build_version(package_dir: Path) -> str:
+    """Return the deployed build version date from env or a build metadata file."""
+    version = os.getenv("MALLA_BUILD_VERSION", "").strip()
+    if version:
+        return version
+
+    version_file = package_dir.parent.parent / "BUILD_VERSION"
+    try:
+        file_version = version_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
+
+    return file_version or "unknown"
+
+
 def make_json_safe(obj):
     """
     Recursively convert an object to be JSON-serializable by handling bytes objects.
@@ -339,6 +354,7 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
             "APP_CONFIG": cfg,
             "DATABASE_FILE": cfg.database_file,
             "BUILD_COMMIT": get_build_commit(package_dir),
+            "BUILD_VERSION": get_build_version(package_dir),
             "current_lang": current_lang,
             "t": lambda key: translate(key, current_lang),
         }

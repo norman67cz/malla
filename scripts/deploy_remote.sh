@@ -7,6 +7,7 @@ DEPLOY_USER="${DEPLOY_USER:-}"
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/malla}"
 SSH_TARGET="${DEPLOY_USER:+${DEPLOY_USER}@}${DEPLOY_HOST}"
 BUILD_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD)"
+BUILD_VERSION="$(git -C "$PROJECT_ROOT" show -s --date=format:%Y.%m.%d --format=%cd HEAD)"
 
 if ! command -v ssh >/dev/null 2>&1; then
     echo "ssh is required"
@@ -48,6 +49,7 @@ else
 fi
 
 ssh "$SSH_TARGET" "printf '%s\n' '$BUILD_COMMIT' > '$DEPLOY_PATH/BUILD_COMMIT'"
+ssh "$SSH_TARGET" "printf '%s\n' '$BUILD_VERSION' > '$DEPLOY_PATH/BUILD_VERSION'"
 
 echo "Rebuilding containers on ${SSH_TARGET}"
 ssh "$SSH_TARGET" "

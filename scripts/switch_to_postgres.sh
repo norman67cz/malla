@@ -84,16 +84,21 @@ run_cmd() {
 
 write_build_commit_file() {
     local commit
+    local version
 
     commit="$(git -C "$COMPOSE_PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
     [ -n "$commit" ] || commit="unknown"
+    version="$(git -C "$COMPOSE_PROJECT_DIR" show -s --date=format:%Y.%m.%d --format=%cd HEAD 2>/dev/null || true)"
+    [ -n "$version" ] || version="unknown"
 
     if [ "$DRY_RUN" -eq 1 ]; then
         log "DRY-RUN: would write BUILD_COMMIT=$commit"
+        log "DRY-RUN: would write BUILD_VERSION=$version"
         return
     fi
 
     printf '%s\n' "$commit" > "$COMPOSE_PROJECT_DIR/BUILD_COMMIT"
+    printf '%s\n' "$version" > "$COMPOSE_PROJECT_DIR/BUILD_VERSION"
 }
 
 ensure_pg_hba_local_password_auth() {
