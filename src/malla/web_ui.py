@@ -123,7 +123,7 @@ class _HtmlAllowlistSanitizer(HTMLParser):
         "h6",
     }
     allowed_attrs = {
-        "a": {"href", "title"},
+        "a": {"href", "title", "target", "rel"},
     }
     void_tags = {"br", "hr"}
     allowed_schemes = {"http", "https", "mailto"}
@@ -154,6 +154,9 @@ class _HtmlAllowlistSanitizer(HTMLParser):
                 safe_href = self._sanitize_href(href)
                 if safe_href:
                     clean_attrs.append(f'href="{html.escape(safe_href, quote=True)}"')
+                    target = attr_dict.get("target")
+                    if target:
+                        clean_attrs.append(f'target="{html.escape(target, quote=True)}"')
                     clean_attrs.append('rel="noopener noreferrer"')
             title = attr_dict.get("title")
             if title:

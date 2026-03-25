@@ -17,7 +17,7 @@ class WikiPageInfo:
 class WikiService:
     """Filesystem-backed Markdown wiki helper."""
 
-    _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]")
+    _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]|]+?))?(?:\|([^\]]+))?\]\]")
 
     @staticmethod
     def _sort_key(page_path: str) -> tuple[list[int], str]:
@@ -128,12 +128,29 @@ class WikiService:
         def replace_link(match: re.Match[str]) -> str:
             raw_target = match.group(1).strip()
             raw_label = (match.group(2) or "").strip()
+            raw_mode = (match.group(3) or "").strip().lower()
+
+            if not raw_target:
+                return match.group(0)
+
+            open_in_new_tab = False
+            if raw_target.endswith("^"):
+                raw_target = raw_target[:-1].strip()
+                open_in_new_tab = True
+
+            if raw_mode in {"new", "blank", "tab"}:
+                open_in_new_tab = True
 
             if not raw_target:
                 return match.group(0)
 
             target = raw_target if raw_target.lower().endswith(".md") else f"{raw_target}.md"
             label = raw_label or raw_target
+            if open_in_new_tab:
+                return (
+                    f'<a href="/wiki?page={target}" target="_blank" '
+                    f'rel="noopener noreferrer">{label}</a>'
+                )
             return f"[{label}](/wiki?page={target})"
 
         return WikiService._WIKI_LINK_RE.sub(replace_link, content)
