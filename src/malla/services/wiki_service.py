@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+import re
 
 from ..config import AppConfig
 
@@ -15,6 +16,17 @@ class WikiPageInfo:
 
 class WikiService:
     """Filesystem-backed Markdown wiki helper."""
+
+    @staticmethod
+    def _sort_key(page_path: str) -> tuple[list[int], str]:
+        stem = PurePosixPath(page_path).stem.strip().lower()
+        match = re.match(r"^(\d+(?:\.\d+)*)", stem)
+        if not match:
+            return ([], stem)
+
+        numeric_prefix = [int(part) for part in match.group(1).split(".")]
+        remainder = stem[match.end() :].strip(" -_.")
+        return (numeric_prefix, remainder)
 
     @staticmethod
     def get_base_dir(cfg: AppConfig) -> Path:
@@ -48,7 +60,7 @@ class WikiService:
                 )
             )
 
-        return sorted(pages, key=lambda page: page.path.lower())
+        return sorted(pages, key=lambda page: WikiService._sort_key(page.path))
 
     @staticmethod
     def normalize_page_path(page: str | None, cfg: AppConfig) -> str:
@@ -90,3 +102,21 @@ class WikiService:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(content, encoding="utf-8")
         return normalized_page
+
+    @staticmethod
+    def delete_page(page: str | None, cfg: AppConfig) -> str:
+        normalized_page, target_path = WikiService.resolve_page_path(page, cfg)
+        if target_path.exists():
+            target_path.unlink()
+        return normalized_page
+
+    @staticmethod
+    def rename_page(page: str | None, new_page: str | None, cfg: AppConfig) -> str:
+        normalized_page, source_path = WikiService.resolve_page_path(page, cfg)
+        normalized_new_page, target_path = WikiService.resolve_page_path(new_page, cfg)
+        if normalized_page == normalized_new_page:
+            return normalized_page
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if source_path.exists():
+            source_path.rename(target_path)
+        return normalized_new_page

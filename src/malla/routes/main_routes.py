@@ -239,6 +239,61 @@ def wiki_save():
     return redirect(url_for("main.wiki_page", page=saved_page))
 
 
+@main_bp.route("/wiki/delete", methods=["POST"])
+def wiki_delete():
+    """Delete a wiki markdown file from the filesystem."""
+    from ..config import get_config
+
+    if not _wiki_edit_allowed():
+        flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    cfg = get_config()
+    page = request.form.get("page")
+
+    try:
+        deleted_page = WikiService.delete_page(page, cfg)
+    except ValueError as e:
+        logger.warning(f"Invalid wiki delete path requested: {e}")
+        flash(str(e), "danger")
+        return redirect(url_for("main.wiki_page"))
+    except Exception as e:
+        logger.error(f"Error deleting wiki page: {e}")
+        flash(_tr("wiki.delete_failed"), "danger")
+        return redirect(url_for("main.wiki_page", page=page))
+
+    flash(_tr("wiki.deleted"), "success")
+    return redirect(url_for("main.wiki_page"))
+
+
+@main_bp.route("/wiki/rename", methods=["POST"])
+def wiki_rename():
+    """Rename a wiki markdown file on the filesystem."""
+    from ..config import get_config
+
+    if not _wiki_edit_allowed():
+        flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    cfg = get_config()
+    page = request.form.get("page")
+    new_page = request.form.get("new_page")
+
+    try:
+        renamed_page = WikiService.rename_page(page, new_page, cfg)
+    except ValueError as e:
+        logger.warning(f"Invalid wiki rename path requested: {e}")
+        flash(str(e), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+    except Exception as e:
+        logger.error(f"Error renaming wiki page: {e}")
+        flash(_tr("wiki.rename_failed"), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+
+    flash(_tr("wiki.renamed"), "success")
+    return redirect(url_for("main.wiki_page", page=renamed_page, edit=1))
+
+
 @main_bp.route("/set-language/<lang>")
 def set_language(lang: str):
     """Store the selected UI language in the session and return back."""

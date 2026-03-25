@@ -24,6 +24,7 @@ if command -v rsync >/dev/null 2>&1; then
         --delete \
         --exclude ".git/" \
         --exclude ".env" \
+        --exclude "wiki/" \
         --exclude ".venv/" \
         --exclude ".pytest_cache/" \
         --exclude "__pycache__/" \
@@ -35,6 +36,7 @@ elif command -v tar >/dev/null 2>&1; then
     tar \
         --exclude=".git" \
         --exclude=".env" \
+        --exclude="wiki" \
         --exclude=".venv" \
         --exclude=".pytest_cache" \
         --exclude="__pycache__" \
@@ -50,6 +52,17 @@ fi
 
 ssh "$SSH_TARGET" "printf '%s\n' '$BUILD_COMMIT' > '$DEPLOY_PATH/BUILD_COMMIT'"
 ssh "$SSH_TARGET" "printf '%s\n' '$BUILD_VERSION' > '$DEPLOY_PATH/BUILD_VERSION'"
+ssh "$SSH_TARGET" "
+    set -euo pipefail
+    mkdir -p '$DEPLOY_PATH/wiki'
+    if command -v sudo >/dev/null 2>&1; then
+        sudo chown -R 1000:1000 '$DEPLOY_PATH/wiki'
+        sudo chmod -R u+rwX '$DEPLOY_PATH/wiki'
+    else
+        chown -R 1000:1000 '$DEPLOY_PATH/wiki'
+        chmod -R u+rwX '$DEPLOY_PATH/wiki'
+    fi
+"
 
 echo "Rebuilding containers on ${SSH_TARGET}"
 ssh "$SSH_TARGET" "
