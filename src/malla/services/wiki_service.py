@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 import re
+from urllib.parse import urlparse
 
 from ..config import AppConfig
 
@@ -144,13 +145,22 @@ class WikiService:
             if not raw_target:
                 return match.group(0)
 
-            target = raw_target if raw_target.lower().endswith(".md") else f"{raw_target}.md"
+            parsed_target = urlparse(raw_target)
+            is_external = parsed_target.scheme.lower() in {"http", "https", "mailto"}
+            target = (
+                raw_target
+                if is_external or raw_target.lower().endswith(".md")
+                else f"{raw_target}.md"
+            )
             label = raw_label or raw_target
             if open_in_new_tab:
+                href = target if is_external else f"/wiki?page={target}"
                 return (
-                    f'<a href="/wiki?page={target}" target="_blank" '
+                    f'<a href="{href}" target="_blank" '
                     f'rel="noopener noreferrer">{label}</a>'
                 )
+            if is_external:
+                return f"[{label}]({target})"
             return f"[{label}](/wiki?page={target})"
 
         return WikiService._WIKI_LINK_RE.sub(replace_link, content)
