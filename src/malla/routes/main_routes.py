@@ -6,7 +6,17 @@ import hashlib
 import hmac
 import logging
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 
 # Import from the new modular architecture
 from ..database.repositories import (
@@ -19,8 +29,14 @@ logger = logging.getLogger(__name__)
 main_bp = Blueprint("main", __name__)
 
 
-def _tr(key: str) -> str:
-    return translate(key, normalize_language(session.get("lang")))
+def _tr(key: str, **kwargs) -> str:
+    text = translate(key, normalize_language(session.get("lang")))
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+    return text
 
 
 def _wiki_auth_digest(edit_key: str | None) -> str:
@@ -181,6 +197,27 @@ def wiki_page():
         return f"Wiki error: {e}", 500
 
 
+@main_bp.route("/wiki/media/<path:media_path>")
+def wiki_media(media_path: str):
+    """Serve uploaded wiki media files from the local wiki directory."""
+    try:
+        from ..config import get_config
+
+        cfg = get_config()
+        normalized = media_path.strip().replace("\\", "/")
+        if not normalized.startswith("img/"):
+            raise ValueError("Wiki media must be under img/")
+
+        image_name = normalized.removeprefix("img/")
+        _, image_path = WikiService.resolve_image_path(image_name, cfg)
+        if not image_path.exists():
+            abort(404)
+        return send_from_directory(str(image_path.parent), image_path.name)
+    except ValueError as e:
+        logger.warning(f"Invalid wiki media path requested: {e}")
+        abort(404)
+
+
 @main_bp.route("/wiki/unlock", methods=["POST"])
 def wiki_unlock():
     """Unlock wiki editing for the current session."""
@@ -239,6 +276,37 @@ def wiki_save():
 
     flash(_tr("wiki.saved"), "success")
     return redirect(url_for("main.wiki_page", page=saved_page))
+
+
+@main_bp.route("/wiki/upload-image", methods=["POST"])
+def wiki_upload_image():
+    """Upload a PNG/GIF image into the wiki img directory."""
+    from ..config import get_config
+
+    if not _wiki_edit_allowed():
+        flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    cfg = get_config()
+    page = request.form.get("page")
+    upload = request.files.get("image_file")
+    if upload is None or not getattr(upload, "filename", ""):
+        flash(_tr("wiki.image_upload_failed"), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+
+    try:
+        image_name = WikiService.save_image(upload, cfg)
+    except ValueError as e:
+        logger.warning(f"Invalid wiki image upload: {e}")
+        flash(_tr("wiki.image_upload_invalid_type"), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+    except Exception as e:
+        logger.error(f"Error uploading wiki image: {e}")
+        flash(_tr("wiki.image_upload_failed"), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+
+    flash(_tr("wiki.image_uploaded", image_name=image_name), "success")
+    return redirect(url_for("main.wiki_page", page=page, edit=1))
 
 
 @main_bp.route("/wiki/delete", methods=["POST"])

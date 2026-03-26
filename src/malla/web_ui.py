@@ -116,6 +116,7 @@ class _HtmlAllowlistSanitizer(HTMLParser):
         "blockquote",
         "hr",
         "div",
+        "img",
         "h1",
         "h2",
         "h3",
@@ -126,6 +127,7 @@ class _HtmlAllowlistSanitizer(HTMLParser):
     allowed_attrs = {
         "a": {"href", "title", "target", "rel"},
         "div": {"style"},
+        "img": {"src", "alt", "title", "loading"},
     }
     void_tags = {"br", "hr"}
     allowed_schemes = {"http", "https", "mailto"}
@@ -163,6 +165,21 @@ class _HtmlAllowlistSanitizer(HTMLParser):
             title = attr_dict.get("title")
             if title:
                 clean_attrs.append(f'title="{html.escape(title, quote=True)}"')
+        elif tag == "img":
+            src = attr_dict.get("src")
+            if src:
+                safe_src = self._sanitize_href(src)
+                if safe_src:
+                    clean_attrs.append(f'src="{html.escape(safe_src, quote=True)}"')
+            alt = attr_dict.get("alt")
+            if alt:
+                clean_attrs.append(f'alt="{html.escape(alt, quote=True)}"')
+            title = attr_dict.get("title")
+            if title:
+                clean_attrs.append(f'title="{html.escape(title, quote=True)}"')
+            loading = attr_dict.get("loading")
+            if loading in {"lazy", "eager"}:
+                clean_attrs.append(f'loading="{loading}"')
         else:
             for name, value in attr_dict.items():
                 if value is not None:

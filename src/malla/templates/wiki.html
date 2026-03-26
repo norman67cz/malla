@@ -89,6 +89,18 @@
 
                             <div class="d-flex flex-wrap gap-2 align-items-center justify-content-end">
                                 {% if wiki_edit_allowed %}
+                                    <form method="post" action="{{ url_for('main.wiki_upload_image') }}" enctype="multipart/form-data" class="d-flex flex-nowrap gap-2 align-items-center">
+                                        <input type="hidden" name="page" value="{{ selected_page }}">
+                                        <input type="file"
+                                               name="image_file"
+                                               class="form-control form-control-sm"
+                                               style="min-width: 220px; width: 220px;"
+                                               accept=".png,.gif,image/png,image/gif"
+                                               required>
+                                        <button type="submit" class="btn btn-outline-info btn-sm">
+                                            <i class="bi bi-image"></i> {{ t('wiki.image_upload_button') }}
+                                        </button>
+                                    </form>
                                     <form method="post" action="{{ url_for('main.wiki_rename') }}" class="d-flex flex-nowrap gap-2 align-items-center">
                                         <input type="hidden" name="page" value="{{ selected_page }}">
                                         <input type="text"
@@ -197,6 +209,11 @@
                         <code>[[2.routing^]]</code><br>
                         <code>[[2.routing|Routing|new]]</code><br>
                         <code>[[https://mesh.aperturelab.cz|ApertureLab|new]]</code>
+                    </div>
+                    <div>
+                        <div class="fw-semibold">{{ t('wiki.markdown_help_image') }}</div>
+                        <code>[[img:diagram.png]]</code><br>
+                        <code>[[img:diagram.png|Schema]]</code>
                     </div>
                     <div>
                         <div class="fw-semibold">{{ t('wiki.markdown_help_spacing') }}</div>

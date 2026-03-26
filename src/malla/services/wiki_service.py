@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 import re
 from urllib.parse import urlparse
+from werkzeug.utils import secure_filename
 
 from ..config import AppConfig
 
@@ -20,6 +21,8 @@ class WikiService:
 
     _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]|]+?))?(?:\|([^\]]+))?\]\]")
     _WIKI_SPACE_RE = re.compile(r"\[\[space:(\d{1,4})\]\]", re.IGNORECASE)
+    _WIKI_IMAGE_RE = re.compile(r"\[\[img:([^\]|]+?)(?:\|([^\]]+))?\]\]", re.IGNORECASE)
+    _ALLOWED_IMAGE_EXTENSIONS = {".png", ".gif"}
 
     @staticmethod
     def _sort_key(page_path: str) -> tuple[list[int], str]:
@@ -108,6 +111,35 @@ class WikiService:
         return normalized_page
 
     @staticmethod
+    def get_image_dir(cfg: AppConfig) -> Path:
+        return (WikiService.get_base_dir(cfg) / "img").resolve()
+
+    @staticmethod
+    def normalize_image_name(filename: str) -> str:
+        candidate = secure_filename(Path(filename).name)
+        suffix = Path(candidate).suffix.lower()
+        if not candidate or suffix not in WikiService._ALLOWED_IMAGE_EXTENSIONS:
+            raise ValueError("Only .png and .gif wiki images are allowed")
+        return candidate
+
+    @staticmethod
+    def resolve_image_path(filename: str, cfg: AppConfig) -> tuple[str, Path]:
+        image_dir = WikiService.get_image_dir(cfg)
+        image_name = WikiService.normalize_image_name(filename)
+        image_path = (image_dir / image_name).resolve()
+        if image_dir != image_path.parent:
+            raise ValueError("Invalid wiki image path")
+        return image_name, image_path
+
+    @staticmethod
+    def save_image(upload, cfg: AppConfig) -> str:
+        filename = getattr(upload, "filename", "") or ""
+        image_name, image_path = WikiService.resolve_image_path(filename, cfg)
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        upload.save(image_path)
+        return image_name
+
+    @staticmethod
     def delete_page(page: str | None, cfg: AppConfig) -> str:
         normalized_page, target_path = WikiService.resolve_page_path(page, cfg)
         if target_path.exists():
@@ -130,6 +162,13 @@ class WikiService:
         content = content.replace("[[br]]", "<br>").replace("[[BR]]", "<br>")
         content = WikiService._WIKI_SPACE_RE.sub(
             lambda match: f'<div style="height: {max(0, min(int(match.group(1)), 400))}px;"></div>',
+            content,
+        )
+        content = WikiService._WIKI_IMAGE_RE.sub(
+            lambda match: (
+                f'<img src="/wiki/media/img/{WikiService.normalize_image_name(match.group(1).strip())}" '
+                f'alt="{(match.group(2) or match.group(1)).strip()}" loading="lazy">'
+            ),
             content,
         )
 
