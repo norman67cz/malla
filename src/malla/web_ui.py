@@ -11,6 +11,7 @@ import html
 import json
 import logging
 import os
+import re
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
@@ -131,6 +132,7 @@ class _HtmlAllowlistSanitizer(HTMLParser):
     }
     void_tags = {"br", "hr"}
     allowed_schemes = {"http", "https", "mailto"}
+    allowed_div_style = re.compile(r"^height:\s*(?:0|[1-9]\d{0,2}|400)px;$")
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
@@ -180,6 +182,10 @@ class _HtmlAllowlistSanitizer(HTMLParser):
             loading = attr_dict.get("loading")
             if loading in {"lazy", "eager"}:
                 clean_attrs.append(f'loading="{loading}"')
+        elif tag == "div":
+            style = attr_dict.get("style")
+            if style and self.allowed_div_style.fullmatch(style.strip()):
+                clean_attrs.append(f'style="{html.escape(style.strip(), quote=True)}"')
         else:
             for name, value in attr_dict.items():
                 if value is not None:

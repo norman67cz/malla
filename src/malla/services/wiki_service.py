@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+import shutil
 import re
 from urllib.parse import urlparse
 from werkzeug.utils import secure_filename
@@ -16,6 +17,12 @@ class WikiPageInfo:
     modified_ts: float
 
 
+@dataclass(slots=True, frozen=True)
+class WikiImageInfo:
+    name: str
+    modified_ts: float
+
+
 class WikiService:
     """Filesystem-backed Markdown wiki helper."""
 
@@ -23,6 +30,8 @@ class WikiService:
     _WIKI_SPACE_RE = re.compile(r"\[\[space:(\d{1,4})\]\]", re.IGNORECASE)
     _WIKI_IMAGE_RE = re.compile(r"\[\[img:([^\]|]+?)(?:\|([^\]]+))?\]\]", re.IGNORECASE)
     _ALLOWED_IMAGE_EXTENSIONS = {".png", ".gif"}
+    _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+    _GIF_SIGNATURES = {b"GIF87a", b"GIF89a"}
 
     @staticmethod
     def _sort_key(page_path: str) -> tuple[list[int], str]:
@@ -107,6 +116,9 @@ class WikiService:
     def write_page(page: str | None, content: str, cfg: AppConfig) -> str:
         normalized_page, target_path = WikiService.resolve_page_path(page, cfg)
         target_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.exists():
+            backup_path = target_path.with_name(f"{target_path.name}.old")
+            shutil.copy2(target_path, backup_path)
         target_path.write_text(content, encoding="utf-8")
         return normalized_page
 
@@ -135,15 +147,49 @@ class WikiService:
     def save_image(upload, cfg: AppConfig) -> str:
         filename = getattr(upload, "filename", "") or ""
         image_name, image_path = WikiService.resolve_image_path(filename, cfg)
+        suffix = Path(image_name).suffix.lower()
+        stream = getattr(upload, "stream", None)
+        if stream is None:
+            raise ValueError("Invalid upload stream")
+        header = stream.read(16)
+        stream.seek(0)
+        if suffix == ".png" and not header.startswith(WikiService._PNG_SIGNATURE):
+            raise ValueError("Invalid PNG signature")
+        if suffix == ".gif" and header[:6] not in WikiService._GIF_SIGNATURES:
+            raise ValueError("Invalid GIF signature")
         image_path.parent.mkdir(parents=True, exist_ok=True)
         upload.save(image_path)
         return image_name
 
     @staticmethod
+    def list_images(cfg: AppConfig) -> list[WikiImageInfo]:
+        image_dir = WikiService.get_image_dir(cfg)
+        if not image_dir.exists() or not image_dir.is_dir():
+            return []
+
+        images: list[WikiImageInfo] = []
+        for image_path in image_dir.iterdir():
+            if not image_path.is_file():
+                continue
+            if image_path.suffix.lower() not in WikiService._ALLOWED_IMAGE_EXTENSIONS:
+                continue
+            stat = image_path.stat()
+            images.append(
+                WikiImageInfo(
+                    name=image_path.name,
+                    modified_ts=stat.st_mtime,
+                )
+            )
+        return sorted(images, key=lambda image: image.name.lower())
+
+    @staticmethod
     def delete_page(page: str | None, cfg: AppConfig) -> str:
         normalized_page, target_path = WikiService.resolve_page_path(page, cfg)
         if target_path.exists():
-            target_path.unlink()
+            backup_path = target_path.with_name(f"{target_path.name}.bak")
+            if backup_path.exists():
+                backup_path.unlink()
+            target_path.rename(backup_path)
         return normalized_page
 
     @staticmethod
@@ -153,6 +199,8 @@ class WikiService:
         if normalized_page == normalized_new_page:
             return normalized_page
         target_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.exists():
+            raise ValueError("Target wiki page already exists")
         if source_path.exists():
             source_path.rename(target_path)
         return normalized_new_page

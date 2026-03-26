@@ -5,6 +5,8 @@ Main routes for the Meshtastic Mesh Health Web UI
 import hashlib
 import hmac
 import logging
+import secrets
+import time
 
 from flask import (
     Blueprint,
@@ -27,6 +29,10 @@ from ..utils.i18n import normalize_language, translate
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint("main", __name__)
+_WIKI_UNLOCK_ATTEMPTS: dict[str, list[float]] = {}
+_WIKI_UNLOCK_MAX_ATTEMPTS = 5
+_WIKI_UNLOCK_WINDOW_SECONDS = 900
+_WIKI_UNLOCK_LOCK_SECONDS = 900
 
 
 def _tr(key: str, **kwargs) -> str:
@@ -43,6 +49,53 @@ def _wiki_auth_digest(edit_key: str | None) -> str:
     if not edit_key:
         return ""
     return hashlib.sha256(edit_key.encode("utf-8")).hexdigest()
+
+
+def _wiki_csrf_token() -> str:
+    token = str(session.get("wiki_csrf_token", "")).strip()
+    if token:
+        return token
+    token = secrets.token_urlsafe(32)
+    session["wiki_csrf_token"] = token
+    return token
+
+
+def _wiki_validate_csrf() -> bool:
+    expected = str(session.get("wiki_csrf_token", "")).strip()
+    submitted = str(request.form.get("csrf_token", "")).strip()
+    return bool(expected) and hmac.compare_digest(expected, submitted)
+
+
+def _wiki_unlock_client_key() -> str:
+    return (request.headers.get("X-Forwarded-For", "") or request.remote_addr or "unknown").split(",")[0].strip() or "unknown"
+
+
+def _wiki_unlock_is_rate_limited() -> bool:
+    now = time.monotonic()
+    client_key = _wiki_unlock_client_key()
+    attempts = [
+        ts for ts in _WIKI_UNLOCK_ATTEMPTS.get(client_key, [])
+        if now - ts <= _WIKI_UNLOCK_WINDOW_SECONDS
+    ]
+    _WIKI_UNLOCK_ATTEMPTS[client_key] = attempts
+    if len(attempts) < _WIKI_UNLOCK_MAX_ATTEMPTS:
+        return False
+    return now - attempts[-1] < _WIKI_UNLOCK_LOCK_SECONDS
+
+
+def _wiki_register_unlock_failure() -> None:
+    now = time.monotonic()
+    client_key = _wiki_unlock_client_key()
+    attempts = [
+        ts for ts in _WIKI_UNLOCK_ATTEMPTS.get(client_key, [])
+        if now - ts <= _WIKI_UNLOCK_WINDOW_SECONDS
+    ]
+    attempts.append(now)
+    _WIKI_UNLOCK_ATTEMPTS[client_key] = attempts
+
+
+def _wiki_clear_unlock_failures() -> None:
+    _WIKI_UNLOCK_ATTEMPTS.pop(_wiki_unlock_client_key(), None)
 
 
 def _wiki_edit_available() -> bool:
@@ -169,6 +222,7 @@ def wiki_page():
         page = request.args.get("page")
         edit_mode = request.args.get("edit") == "1"
         pages = WikiService.list_pages(cfg)
+        images = WikiService.list_images(cfg)
 
         if not page and pages:
             page = pages[0].path
@@ -179,6 +233,7 @@ def wiki_page():
         return render_template(
             "wiki.html",
             pages=pages,
+            images=images,
             selected_page=selected_page,
             page_content=page_content,
             rendered_page_content=rendered_page_content,
@@ -187,6 +242,7 @@ def wiki_page():
             wiki_edit_available=_wiki_edit_available(),
             wiki_edit_allowed=_wiki_edit_allowed(),
             wiki_base_dir=str(WikiService.get_base_dir(cfg)),
+            wiki_csrf_token=_wiki_csrf_token(),
         )
     except ValueError as e:
         logger.warning(f"Invalid wiki path requested: {e}")
@@ -232,11 +288,21 @@ def wiki_unlock():
         flash(_tr("wiki.edit_unavailable"), "warning")
         return redirect(url_for("main.wiki_page", page=page))
 
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
+        return redirect(url_for("main.wiki_page", page=page))
+
+    if _wiki_unlock_is_rate_limited():
+        flash(_tr("wiki.unlock_rate_limited"), "danger")
+        return redirect(url_for("main.wiki_page", page=page))
+
     if hmac.compare_digest(submitted_key, expected):
         session["wiki_edit_auth"] = _wiki_auth_digest(expected)
+        _wiki_clear_unlock_failures()
         flash(_tr("wiki.unlocked"), "success")
         return redirect(url_for("main.wiki_page", page=page, edit=1))
 
+    _wiki_register_unlock_failure()
     flash(_tr("wiki.invalid_key"), "danger")
     return redirect(url_for("main.wiki_page", page=page))
 
@@ -245,6 +311,9 @@ def wiki_unlock():
 def wiki_lock():
     """Lock wiki editing for the current session."""
     page = request.form.get("page")
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
+        return redirect(url_for("main.wiki_page", page=page))
     session.pop("wiki_edit_auth", None)
     flash(_tr("wiki.locked"), "secondary")
     return redirect(url_for("main.wiki_page", page=page))
@@ -257,6 +326,10 @@ def wiki_save():
 
     if not _wiki_edit_allowed():
         flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
         return redirect(url_for("main.wiki_page"))
 
     cfg = get_config()
@@ -285,6 +358,10 @@ def wiki_upload_image():
 
     if not _wiki_edit_allowed():
         flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
         return redirect(url_for("main.wiki_page"))
 
     cfg = get_config()
@@ -318,6 +395,10 @@ def wiki_delete():
         flash(_tr("wiki.edit_locked"), "danger")
         return redirect(url_for("main.wiki_page"))
 
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
     cfg = get_config()
     page = request.form.get("page")
 
@@ -343,6 +424,10 @@ def wiki_rename():
 
     if not _wiki_edit_allowed():
         flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
         return redirect(url_for("main.wiki_page"))
 
     cfg = get_config()
