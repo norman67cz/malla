@@ -219,12 +219,33 @@
                 {% if images %}
                     <div class="list-group">
                         {% for image in images %}
-                            <button type="button"
-                                    class="list-group-item list-group-item-action d-flex align-items-center justify-content-between gap-3 wiki-image-insert-button"
-                                    data-image-name="{{ image.name }}">
-                                <span class="fw-semibold">{{ image.name }}</span>
-                                <span class="text-muted small">[[img:{{ image.name }}]]</span>
-                            </button>
+                            <div class="list-group-item d-flex align-items-center justify-content-between gap-3">
+                                <button type="button"
+                                        class="btn btn-link text-start text-decoration-none p-0 flex-grow-1 wiki-image-insert-button"
+                                        data-image-name="{{ image.name }}">
+                                    <div class="fw-semibold">{{ image.name }}</div>
+                                    <div class="text-muted small">[[img:{{ image.name }}]]</div>
+                                    {% if image.used_by %}
+                                        <div class="text-muted small mt-1">
+                                            {{ t('wiki.image_used_by') }} {{ image.used_by|length }}:
+                                            {{ image.used_by|join(', ') }}
+                                        </div>
+                                    {% endif %}
+                                </button>
+                                <form method="post"
+                                      action="{{ url_for('main.wiki_delete_image') }}"
+                                      class="d-inline"
+                                      onsubmit="return confirm('{{ t('wiki.image_delete_confirm') }}');">
+                                    <input type="hidden" name="csrf_token" value="{{ wiki_csrf_token }}">
+                                    <input type="hidden" name="page" value="{{ selected_page }}">
+                                    <input type="hidden" name="image_name" value="{{ image.name }}">
+                                    <button type="submit"
+                                            class="btn btn-outline-danger btn-sm"
+                                            {% if not wiki_edit_allowed %}disabled{% endif %}>
+                                        <i class="bi bi-trash"></i> {{ t('wiki.delete_button') }}
+                                    </button>
+                                </form>
+                            </div>
                         {% endfor %}
                     </div>
                 {% else %}

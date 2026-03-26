@@ -417,6 +417,38 @@ def wiki_delete():
     return redirect(url_for("main.wiki_page"))
 
 
+@main_bp.route("/wiki/delete-image", methods=["POST"])
+def wiki_delete_image():
+    """Delete a wiki image file from the filesystem."""
+    from ..config import get_config
+
+    if not _wiki_edit_allowed():
+        flash(_tr("wiki.edit_locked"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    if not _wiki_validate_csrf():
+        flash(_tr("wiki.invalid_csrf"), "danger")
+        return redirect(url_for("main.wiki_page"))
+
+    cfg = get_config()
+    page = request.form.get("page")
+    image_name = request.form.get("image_name", "")
+
+    try:
+        deleted_image = WikiService.delete_image(image_name, cfg)
+    except ValueError as e:
+        logger.warning(f"Invalid wiki image delete request: {e}")
+        flash(str(e), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+    except Exception as e:
+        logger.error(f"Error deleting wiki image: {e}")
+        flash(_tr("wiki.image_delete_failed"), "danger")
+        return redirect(url_for("main.wiki_page", page=page, edit=1))
+
+    flash(_tr("wiki.image_deleted", image_name=deleted_image), "success")
+    return redirect(url_for("main.wiki_page", page=page, edit=1))
+
+
 @main_bp.route("/wiki/rename", methods=["POST"])
 def wiki_rename():
     """Rename a wiki markdown file on the filesystem."""

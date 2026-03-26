@@ -21,6 +21,7 @@ class WikiPageInfo:
 class WikiImageInfo:
     name: str
     modified_ts: float
+    used_by: tuple[str, ...] = ()
 
 
 class WikiService:
@@ -167,6 +168,7 @@ class WikiService:
         if not image_dir.exists() or not image_dir.is_dir():
             return []
 
+        image_usage = WikiService.get_image_usage(cfg)
         images: list[WikiImageInfo] = []
         for image_path in image_dir.iterdir():
             if not image_path.is_file():
@@ -178,9 +180,41 @@ class WikiService:
                 WikiImageInfo(
                     name=image_path.name,
                     modified_ts=stat.st_mtime,
+                    used_by=tuple(image_usage.get(image_path.name, ())),
                 )
             )
         return sorted(images, key=lambda image: image.name.lower())
+
+    @staticmethod
+    def get_image_usage(cfg: AppConfig) -> dict[str, list[str]]:
+        usage: dict[str, list[str]] = {}
+        for page in WikiService.list_pages(cfg):
+            try:
+                _, content, exists = WikiService.read_page(page.path, cfg)
+            except Exception:
+                continue
+            if not exists or not content:
+                continue
+
+            for match in WikiService._WIKI_IMAGE_RE.finditer(content):
+                try:
+                    image_name = WikiService.normalize_image_name(match.group(1).strip())
+                except ValueError:
+                    continue
+                usage.setdefault(image_name, [])
+                if page.name not in usage[image_name]:
+                    usage[image_name].append(page.name)
+        return usage
+
+    @staticmethod
+    def delete_image(filename: str, cfg: AppConfig) -> str:
+        image_name, image_path = WikiService.resolve_image_path(filename, cfg)
+        if image_path.exists():
+            backup_path = image_path.with_name(f"{image_path.name}.bak")
+            if backup_path.exists():
+                backup_path.unlink()
+            image_path.rename(backup_path)
+        return image_name
 
     @staticmethod
     def delete_page(page: str | None, cfg: AppConfig) -> str:
