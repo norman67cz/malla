@@ -115,6 +115,7 @@ class _HtmlAllowlistSanitizer(HTMLParser):
         "pre",
         "blockquote",
         "hr",
+        "div",
         "h1",
         "h2",
         "h3",
@@ -124,6 +125,7 @@ class _HtmlAllowlistSanitizer(HTMLParser):
     }
     allowed_attrs = {
         "a": {"href", "title", "target", "rel"},
+        "div": {"style"},
     }
     void_tags = {"br", "hr"}
     allowed_schemes = {"http", "https", "mailto"}

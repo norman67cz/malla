@@ -19,6 +19,7 @@ class WikiService:
     """Filesystem-backed Markdown wiki helper."""
 
     _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]|]+?))?(?:\|([^\]]+))?\]\]")
+    _WIKI_SPACE_RE = re.compile(r"\[\[space:(\d{1,4})\]\]", re.IGNORECASE)
 
     @staticmethod
     def _sort_key(page_path: str) -> tuple[list[int], str]:
@@ -126,6 +127,12 @@ class WikiService:
 
     @staticmethod
     def render_internal_links(content: str) -> str:
+        content = content.replace("[[br]]", "<br>").replace("[[BR]]", "<br>")
+        content = WikiService._WIKI_SPACE_RE.sub(
+            lambda match: f'<div style="height: {max(0, min(int(match.group(1)), 400))}px;"></div>',
+            content,
+        )
+
         def replace_link(match: re.Match[str]) -> str:
             raw_target = match.group(1).strip()
             raw_label = (match.group(2) or "").strip()
