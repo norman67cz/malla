@@ -5,6 +5,7 @@ Analytics service for Meshtastic Mesh Health Web UI
 import logging
 import time
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -318,9 +319,30 @@ class AnalyticsService:
 
         from ..database.connection import get_db_connection
 
+        now_utc = datetime.now(UTC)
+        if window_hours <= 72:
+            bucket_type = "hour"
+            aligned_end_dt = now_utc.replace(minute=0, second=0, microsecond=0)
+            aligned_start_dt = aligned_end_dt - timedelta(hours=window_hours)
+            bucket_keys = [
+                (aligned_start_dt + timedelta(hours=index)).strftime("%Y-%m-%d %H:00")
+                for index in range(window_hours)
+            ]
+        else:
+            bucket_type = "day"
+            aligned_end_dt = now_utc.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            total_days = max(1, window_hours // 24)
+            aligned_start_dt = aligned_end_dt - timedelta(days=total_days)
+            bucket_keys = [
+                (aligned_start_dt + timedelta(days=index)).strftime("%Y-%m-%d")
+                for index in range(total_days)
+            ]
+
         # Build WHERE clause similarly to PacketRepository but simplified (only params we care about)
-        where_conditions: list[str] = ["timestamp >= ?"]
-        params: list[Any] = [since_timestamp]
+        where_conditions: list[str] = ["timestamp >= ?", "timestamp < ?"]
+        params: list[Any] = [aligned_start_dt.timestamp(), aligned_end_dt.timestamp()]
 
         if filters.get("gateway_id"):
             where_conditions.append("gateway_id = ?")
@@ -336,7 +358,7 @@ class AnalyticsService:
 
         where_clause = " AND ".join(where_conditions)
 
-        if window_hours <= 72:
+        if bucket_type == "hour":
             query = f"""
                 SELECT
                     strftime('%Y-%m-%d %H:00', datetime(timestamp, 'unixepoch')) AS bucket,
@@ -347,7 +369,6 @@ class AnalyticsService:
                 GROUP BY bucket
                 ORDER BY bucket
             """
-            bucket_type = "hour"
         else:
             query = f"""
                 SELECT
@@ -359,68 +380,40 @@ class AnalyticsService:
                 GROUP BY bucket
                 ORDER BY bucket
             """
-            bucket_type = "day"
 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(query, params)
 
-        rows = cursor.fetchall()
+        rows = {dict(row)["bucket"]: dict(row) for row in cursor.fetchall()}
 
-        if bucket_type == "hour":
-            buckets = []
-            peak_bucket = None
-            quiet_bucket = None
-            peak_value = None
-            quiet_value = None
+        buckets = []
+        peak_bucket = None
+        quiet_bucket = None
+        peak_value = None
+        quiet_value = None
 
-            for row in [dict(row) for row in rows]:
-                count = row["total_packets"] or 0
-                success = row["successful_packets"] or 0
-                success_rate = (success / count * 100) if count > 0 else 0
-                buckets.append(
-                    {
-                        "bucket": row["bucket"],
-                        "label": row["bucket"],
-                        "total_packets": count,
-                        "successful_packets": success,
-                        "success_rate": round(success_rate, 2),
-                    }
-                )
-                if peak_value is None or count > peak_value:
-                    peak_value = count
-                    peak_bucket = row["bucket"]
-                if quiet_value is None or count < quiet_value:
-                    quiet_value = count
-                    quiet_bucket = row["bucket"]
-        else:
-            daily_rows = [dict(row) for row in rows]
-            buckets = []
-            peak_bucket = None
-            quiet_bucket = None
-            peak_value = None
-            quiet_value = None
-
-            for row in daily_rows:
-                count = row["total_packets"] or 0
-                success = row["successful_packets"] or 0
-                success_rate = (success / count * 100) if count > 0 else 0
-                label = row["bucket"][5:] if row["bucket"] else "Unknown"
-                buckets.append(
-                    {
-                        "bucket": row["bucket"],
-                        "label": label,
-                        "total_packets": count,
-                        "successful_packets": success,
-                        "success_rate": round(success_rate, 2),
-                    }
-                )
-                if peak_value is None or count > peak_value:
-                    peak_value = count
-                    peak_bucket = row["bucket"]
-                if quiet_value is None or count < quiet_value:
-                    quiet_value = count
-                    quiet_bucket = row["bucket"]
+        for bucket_key in bucket_keys:
+            row = rows.get(bucket_key, {})
+            count = row.get("total_packets") or 0
+            success = row.get("successful_packets") or 0
+            success_rate = (success / count * 100) if count > 0 else 0
+            label = bucket_key if bucket_type == "hour" else bucket_key[5:]
+            buckets.append(
+                {
+                    "bucket": bucket_key,
+                    "label": label,
+                    "total_packets": count,
+                    "successful_packets": success,
+                    "success_rate": round(success_rate, 2),
+                }
+            )
+            if peak_value is None or count > peak_value:
+                peak_value = count
+                peak_bucket = bucket_key
+            if quiet_value is None or count < quiet_value:
+                quiet_value = count
+                quiet_bucket = bucket_key
 
         return {
             "bucket_type": bucket_type,
