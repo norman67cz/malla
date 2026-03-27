@@ -31,9 +31,9 @@ def node_detail(node_id):
     """Node detail page showing comprehensive information about a specific node."""
     logger.info(f"Node detail route accessed for node {node_id}")
     try:
-        protocol_window = request.args.get("protocol_window", "all")
+        protocol_window = request.args.get("protocol_window", "last_day")
         if protocol_window not in VALID_PROTOCOL_WINDOWS:
-            protocol_window = "all"
+            protocol_window = "last_day"
 
         # Handle both hex ID and integer node ID
         if isinstance(node_id, str) and node_id.startswith("!"):

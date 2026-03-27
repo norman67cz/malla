@@ -1791,7 +1791,7 @@ class NodeRepository:
 
     @staticmethod
     def get_node_details(
-        node_id: int, protocol_window: str = "all"
+        node_id: int, protocol_window: str = "last_day"
     ) -> dict[str, Any] | None:
         """Get comprehensive details about a specific node."""
         try:
@@ -1826,7 +1826,9 @@ class NodeRepository:
                 "all": None,
             }
             protocol_window = (
-                protocol_window if protocol_window in protocol_window_map else "all"
+                protocol_window
+                if protocol_window in protocol_window_map
+                else "last_day"
             )
 
             # Get basic node information from packet_history with node_info join
