@@ -31,7 +31,7 @@ services:
       - ./wiki:/app/wiki
       - /var/run/postgresql:/var/run/postgresql
       # Optional: mount your own config file (uncomment if you have one)
-      # - ./config.yaml:/app/config.yaml:ro
+      - ./config.yaml:/app/config.yaml:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -62,7 +62,7 @@ services:
       - malla_data:/app/data
       - /var/run/postgresql:/var/run/postgresql
       # Optional: mount your own config file (uncomment if you have one)
-      # - ./config.yaml:/app/config.yaml:ro
+      - ./config.yaml:/app/config.yaml:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

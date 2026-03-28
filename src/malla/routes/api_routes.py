@@ -2734,6 +2734,26 @@ def api_mqtt_sources():
         return jsonify({"error": str(e), "mqtt_sources": []}), 500
 
 
+@api_bp.route("/mqtt-overlap")
+def api_mqtt_overlap():
+    """API endpoint for overlap analysis between MQTT sources."""
+    logger.info("API MQTT overlap endpoint accessed")
+    try:
+        cache_key = _get_table_cache_key("mqtt_overlap")
+        now_ts = time.time()
+        cached = _TABLE_ENDPOINT_CACHE.get(cache_key)
+        if cached and (now_ts - cached[0] < _TABLE_ENDPOINT_CACHE_TTL_SEC):
+            return safe_jsonify(cached[1])
+
+        window_hours = request.args.get("window_hours", 24, type=int)
+        payload = PacketRepository.get_mqtt_overlap_statistics(window_hours=window_hours)
+        _TABLE_ENDPOINT_CACHE[cache_key] = (now_ts, payload)
+        return safe_jsonify(payload)
+    except Exception as e:
+        logger.error(f"Error in API MQTT overlap: {e}")
+        return jsonify({"error": str(e), "summary": {}, "sources": [], "pairs": []}), 500
+
+
 def safe_jsonify(data, *args, **kwargs):
     """
     A drop-in replacement for Flask's jsonify() that sanitizes NaN/Inf values.

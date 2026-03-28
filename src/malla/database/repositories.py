@@ -1071,6 +1071,153 @@ class PacketRepository:
             return []
 
     @staticmethod
+    def get_mqtt_overlap_statistics(window_hours: int = 24) -> dict[str, Any]:
+        """Get overlap statistics between MQTT sources based on distinct mesh packet IDs."""
+        allowed_windows = {24, 72, 168, 336, 720}
+        if window_hours not in allowed_windows:
+            window_hours = 24
+
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cutoff = time.time() - (window_hours * 3600)
+            params = (cutoff,)
+            base_cte = """
+                WITH distinct_packets AS (
+                    SELECT DISTINCT mesh_packet_id, mqtt_source
+                    FROM packet_history
+                    WHERE mesh_packet_id IS NOT NULL
+                      AND mesh_packet_id != 0
+                      AND mqtt_source IS NOT NULL
+                      AND mqtt_source != ''
+                      AND timestamp >= ?
+                )
+            """
+
+            cursor.execute(
+                base_cte
+                + """
+                SELECT mqtt_source, COUNT(*) AS packet_count
+                FROM distinct_packets
+                GROUP BY mqtt_source
+                ORDER BY packet_count DESC, mqtt_source ASC
+                """,
+                params,
+            )
+            source_rows = cursor.fetchall()
+            source_stats = [
+                {
+                    "mqtt_source": row["mqtt_source"],
+                    "packet_count": int(row["packet_count"] or 0),
+                }
+                for row in source_rows
+            ]
+            source_counts = {
+                row["mqtt_source"]: int(row["packet_count"] or 0) for row in source_rows
+            }
+
+            cursor.execute(
+                base_cte
+                + """
+                SELECT COUNT(DISTINCT mesh_packet_id) AS total_mesh_packets
+                FROM distinct_packets
+                """,
+                params,
+            )
+            total_mesh_packets = int(cursor.fetchone()["total_mesh_packets"] or 0)
+
+            cursor.execute(
+                base_cte
+                + """
+                SELECT COUNT(*) AS overlapping_mesh_packets
+                FROM (
+                    SELECT mesh_packet_id
+                    FROM distinct_packets
+                    GROUP BY mesh_packet_id
+                    HAVING COUNT(*) > 1
+                ) overlap_ids
+                """,
+                params,
+            )
+            overlapping_mesh_packets = int(
+                cursor.fetchone()["overlapping_mesh_packets"] or 0
+            )
+
+            cursor.execute(
+                base_cte
+                + """
+                SELECT
+                    a.mqtt_source AS source_a,
+                    b.mqtt_source AS source_b,
+                    COUNT(*) AS shared_packets
+                FROM distinct_packets a
+                INNER JOIN distinct_packets b
+                    ON a.mesh_packet_id = b.mesh_packet_id
+                   AND a.mqtt_source < b.mqtt_source
+                GROUP BY a.mqtt_source, b.mqtt_source
+                ORDER BY shared_packets DESC, source_a ASC, source_b ASC
+                """,
+                params,
+            )
+            pair_stats = []
+            for row in cursor.fetchall():
+                source_a = row["source_a"]
+                source_b = row["source_b"]
+                shared_packets = int(row["shared_packets"] or 0)
+                source_a_packets = source_counts.get(source_a, 0)
+                source_b_packets = source_counts.get(source_b, 0)
+                pair_stats.append(
+                    {
+                        "source_a": source_a,
+                        "source_b": source_b,
+                        "shared_packets": shared_packets,
+                        "source_a_packets": source_a_packets,
+                        "source_b_packets": source_b_packets,
+                        "overlap_pct_a": round(
+                            (shared_packets / source_a_packets) * 100, 2
+                        )
+                        if source_a_packets
+                        else 0.0,
+                        "overlap_pct_b": round(
+                            (shared_packets / source_b_packets) * 100, 2
+                        )
+                        if source_b_packets
+                        else 0.0,
+                    }
+                )
+
+            conn.close()
+            return {
+                "window_hours": window_hours,
+                "summary": {
+                    "source_count": len(source_stats),
+                    "total_mesh_packets": total_mesh_packets,
+                    "overlapping_mesh_packets": overlapping_mesh_packets,
+                    "overlap_ratio_pct": round(
+                        (overlapping_mesh_packets / total_mesh_packets) * 100, 2
+                    )
+                    if total_mesh_packets
+                    else 0.0,
+                },
+                "sources": source_stats,
+                "pairs": pair_stats,
+            }
+        except Exception as e:
+            logger.error(f"Error getting MQTT overlap statistics: {e}")
+            return {
+                "window_hours": window_hours,
+                "summary": {
+                    "source_count": 0,
+                    "total_mesh_packets": 0,
+                    "overlapping_mesh_packets": 0,
+                    "overlap_ratio_pct": 0.0,
+                },
+                "sources": [],
+                "pairs": [],
+                "error": str(e),
+            }
+
+    @staticmethod
     def get_gateway_comparison_data(
         gateway1_id: str, gateway2_id: str, filters: dict | None = None
     ) -> dict[str, Any]:

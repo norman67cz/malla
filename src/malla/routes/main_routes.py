@@ -182,6 +182,19 @@ def line_of_sight():
         return f"Line of sight error: {e}", 500
 
 
+@main_bp.route("/mqtt-overlap")
+def mqtt_overlap():
+    """MQTT source overlap analysis page."""
+    try:
+        return render_template(
+            "mqtt_overlap.html",
+            seo_title=translate("page.mqtt_overlap_title", normalize_language(session.get("lang"))),
+        )
+    except Exception as e:
+        logger.error(f"Error in MQTT overlap route: {e}")
+        return f"MQTT overlap error: {e}", 500
+
+
 @main_bp.route("/help")
 def help_page():
     """Simple help page describing the main menu sections."""

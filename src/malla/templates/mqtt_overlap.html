@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('page.mqtt_overlap_title') }} - Malla{% endblock %}
+
+{% block extra_css %}
+<style>
+    .mqtt-overlap-card h4 {
+        margin-bottom: 0.25rem;
+    }
+    .mqtt-overlap-loading {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+    }
+    .mqtt-overlap-empty {
+        color: #6c757d;
+        text-align: center;
+        padding: 1.5rem;
+    }
+    .mqtt-overlap-table td,
+    .mqtt-overlap-table th {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="bi bi-intersect"></i> {{ t('page.mqtt_overlap_title') }}</h1>
+        <p class="text-muted">{{ t('mqtt_overlap.subtitle') }}</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-funnel"></i> {{ t('common.filters') }}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-sm-6">
+                        <label for="window-hours" class="form-label">{{ t('mqtt_overlap.filter_window') }}</label>
+                        <select id="window-hours" class="form-select">
+                            <option value="24">24h</option>
+                            <option value="72">3d</option>
+                            <option value="168" selected>7d</option>
+                            <option value="336">14d</option>
+                            <option value="720">30d</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-6">
+                        <button id="refresh-overlap" class="btn btn-primary">
+                            <i class="bi bi-arrow-clockwise"></i> {{ t('mqtt_overlap.refresh') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-info-circle"></i> {{ t('mqtt_overlap.analysis_info_title') }}</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ t('mqtt_overlap.analysis_info_text') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center mqtt-overlap-card">
+            <div class="card-body">
+                <h4 id="summary-source-count" class="text-primary">-</h4>
+                <small class="text-muted">{{ t('mqtt_overlap.source_count') }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center mqtt-overlap-card">
+            <div class="card-body">
+                <h4 id="summary-total-packets" class="text-info">-</h4>
+                <small class="text-muted">{{ t('mqtt_overlap.total_mesh_packets') }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center mqtt-overlap-card">
+            <div class="card-body">
+                <h4 id="summary-overlap-packets" class="text-warning">-</h4>
+                <small class="text-muted">{{ t('mqtt_overlap.overlapping_packets') }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center mqtt-overlap-card">
+            <div class="card-body">
+                <h4 id="summary-overlap-ratio" class="text-success">-</h4>
+                <small class="text-muted">{{ t('mqtt_overlap.overlap_ratio') }}</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="mqtt-overlap-loading" class="mqtt-overlap-loading">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2">{{ t('common.loading') }}</p>
+</div>
+
+<div class="row">
+    <div class="col-lg-5 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-diagram-2"></i> {{ t('mqtt_overlap.sources_title') }}</h6>
+                <span class="badge bg-primary" id="sources-count">0</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 mqtt-overlap-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>{{ t('mqtt_overlap.source') }}</th>
+                                <th class="text-end">{{ t('mqtt_overlap.distinct_packets') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sources-table-body"></tbody>
+                    </table>
+                </div>
+                <div id="sources-empty" class="mqtt-overlap-empty" style="display:none;">
+                    {{ t('mqtt_overlap.no_sources') }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-intersect"></i> {{ t('mqtt_overlap.pairs_title') }}</h6>
+                <span class="badge bg-primary" id="pairs-count">0</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 mqtt-overlap-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>{{ t('mqtt_overlap.source_a') }}</th>
+                                <th>{{ t('mqtt_overlap.source_b') }}</th>
+                                <th class="text-end">{{ t('mqtt_overlap.shared_packets') }}</th>
+                                <th class="text-end">{{ t('mqtt_overlap.overlap_vs_a') }}</th>
+                                <th class="text-end">{{ t('mqtt_overlap.overlap_vs_b') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pairs-table-body"></tbody>
+                    </table>
+                </div>
+                <div id="pairs-empty" class="mqtt-overlap-empty" style="display:none;">
+                    {{ t('mqtt_overlap.no_pairs') }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const windowHoursSelect = document.getElementById('window-hours');
+    const refreshOverlapButton = document.getElementById('refresh-overlap');
+    const loadingEl = document.getElementById('mqtt-overlap-loading');
+    const sourcesTableBody = document.getElementById('sources-table-body');
+    const pairsTableBody = document.getElementById('pairs-table-body');
+    const sourcesEmptyEl = document.getElementById('sources-empty');
+    const pairsEmptyEl = document.getElementById('pairs-empty');
+
+    function formatNumber(value) {
+        return new Intl.NumberFormat().format(value || 0);
+    }
+
+    function setLoading(isLoading) {
+        loadingEl.style.display = isLoading ? 'block' : 'none';
+    }
+
+    function renderSummary(summary) {
+        document.getElementById('summary-source-count').textContent = formatNumber(summary.source_count || 0);
+        document.getElementById('summary-total-packets').textContent = formatNumber(summary.total_mesh_packets || 0);
+        document.getElementById('summary-overlap-packets').textContent = formatNumber(summary.overlapping_mesh_packets || 0);
+        document.getElementById('summary-overlap-ratio').textContent = `${Number(summary.overlap_ratio_pct || 0).toFixed(2)}%`;
+    }
+
+    function renderSources(sources) {
+        document.getElementById('sources-count').textContent = formatNumber(sources.length);
+        if (!sources.length) {
+            sourcesTableBody.innerHTML = '';
+            sourcesEmptyEl.style.display = 'block';
+            return;
+        }
+        sourcesEmptyEl.style.display = 'none';
+        sourcesTableBody.innerHTML = sources.map((source) => `
+            <tr>
+                <td><span class="badge text-bg-secondary">${escapeHtml(source.mqtt_source || '')}</span></td>
+                <td class="text-end">${formatNumber(source.packet_count)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderPairs(pairs) {
+        document.getElementById('pairs-count').textContent = formatNumber(pairs.length);
+        if (!pairs.length) {
+            pairsTableBody.innerHTML = '';
+            pairsEmptyEl.style.display = 'block';
+            return;
+        }
+        pairsEmptyEl.style.display = 'none';
+        pairsTableBody.innerHTML = pairs.map((pair) => `
+            <tr>
+                <td><span class="badge text-bg-secondary">${escapeHtml(pair.source_a || '')}</span></td>
+                <td><span class="badge text-bg-secondary">${escapeHtml(pair.source_b || '')}</span></td>
+                <td class="text-end">${formatNumber(pair.shared_packets)}</td>
+                <td class="text-end">${Number(pair.overlap_pct_a || 0).toFixed(2)}%</td>
+                <td class="text-end">${Number(pair.overlap_pct_b || 0).toFixed(2)}%</td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadOverlap() {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({ window_hours: windowHoursSelect.value });
+            const response = await fetch(`/api/mqtt-overlap?${params.toString()}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            renderSummary(data.summary || {});
+            renderSources(data.sources || []);
+            renderPairs(data.pairs || []);
+        } catch (error) {
+            console.error('Error loading MQTT overlap:', error);
+            renderSummary({});
+            renderSources([]);
+            renderPairs([]);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    refreshOverlapButton.addEventListener('click', loadOverlap);
+    windowHoursSelect.addEventListener('change', loadOverlap);
+    document.addEventListener('DOMContentLoaded', loadOverlap);
+</script>
+{% endblock %}
