@@ -229,10 +229,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize URL filter manager AFTER sidebar content is moved
     const urlManager = new URLFilterManager();
 
-    // Load primary channels for filter select
-    loadMqttSources();
-    loadPrimaryChannels();
-
     async function loadMqttSources() {
         try {
             const response = await fetch('/api/meshtastic/mqtt-sources');
@@ -249,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.textContent = source;
                     select.appendChild(option);
                 });
-                select.value = selectedValue || '';
+                select.value = selectedValue || (data.mqtt_sources.includes('cz') ? 'cz' : '');
             }
         } catch (err) {
             console.error('Error loading MQTT sources:', err);
@@ -305,6 +301,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize page with filters and load data
     async function initializePageWithFilters() {
+        await Promise.all([loadMqttSources(), loadPrimaryChannels()]);
+
         // Small delay to ensure DOM is updated and sidebar content is moved
         await new Promise(resolve => setTimeout(resolve, 100));
 

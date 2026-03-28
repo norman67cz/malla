@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', function() {
         defaultSort: { column: 'node_name', direction: 'asc' },
         filters: {
             period: '1d',
-            mqtt_source: ''
+            mqtt_source: 'cz'
         },
         columns: [
             {
@@ -166,12 +166,15 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/meshtastic/mqtt-sources')
         .then((response) => response.json())
         .then((data) => {
-            (data.mqtt_sources || []).forEach((source) => {
+            const sources = data.mqtt_sources || [];
+            sources.forEach((source) => {
                 const option = document.createElement('option');
                 option.value = source;
                 option.textContent = source;
                 mqttSourceSelect.appendChild(option);
             });
+            mqttSourceSelect.value = sources.includes('cz') ? 'cz' : '';
+            table.setFilters({ period: getActivePeriod(), mqtt_source: mqttSourceSelect.value || '' });
         })
         .catch((error) => console.error('Error loading MQTT sources:', error));
 

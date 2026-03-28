@@ -260,6 +260,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateFilterOptions(data) {
         if (!data.filters) return;
         const selected = data.filters.selected || {};
+        const availableMqttSources = data.filters.available_mqtt_sources || [];
         populateSelectOptions(
             channelFilter,
             data.filters.available_channels || [],
@@ -274,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
         );
         populateSelectOptions(
             mqttSourceFilter,
-            data.filters.available_mqtt_sources || [],
+            availableMqttSources,
             '{{ t("common.all_sources") }}',
             selected.mqtt_source
         );
@@ -287,6 +288,14 @@ document.addEventListener('DOMContentLoaded', function() {
         fromFilter.value = selected.from_filter || fromFilter.value || '';
         toFilter.value = selected.to_filter || toFilter.value || '';
         groupByMeshIdFilter.checked = Boolean(selected.group_by_mesh_id);
+
+        if (!filtersInitialized && !selected.mqtt_source && availableMqttSources.includes('cz')) {
+            filtersInitialized = true;
+            mqttSourceFilter.value = 'cz';
+            loadPackets();
+            return;
+        }
+
         filtersInitialized = true;
     }
 
@@ -416,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function() {
     clearFiltersBtn.addEventListener('click', function() {
         channelFilter.value = '';
         gatewaySourceFilter.value = '';
-        mqttSourceFilter.value = '';
+        mqttSourceFilter.value = Array.from(mqttSourceFilter.options).some(option => option.value === 'cz') ? 'cz' : '';
         typeFilter.value = '';
         fromFilter.value = '';
         toFilter.value = '';

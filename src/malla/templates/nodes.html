@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     select.appendChild(option);
                 });
 
-                select.value = selectedValue || '';
+                select.value = selectedValue || (data.mqtt_sources.includes('cz') ? 'cz' : '');
             }
         } catch (error) {
             console.error('Error loading MQTT sources:', error);

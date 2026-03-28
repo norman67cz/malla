@@ -496,7 +496,7 @@ let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
 const DASHBOARD_REFRESH_MS = 30000;
 let temporalWindowHours = 24;
-let selectedMqttSource = '';
+let selectedMqttSource = 'cz';
 
 // Get theme-aware colors for charts
 function getChartColors() {
@@ -608,12 +608,16 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch('/api/meshtastic/mqtt-sources')
             .then((response) => response.json())
             .then((data) => {
-                (data.mqtt_sources || []).forEach((source) => {
+                const sources = data.mqtt_sources || [];
+                sources.forEach((source) => {
                     const option = document.createElement('option');
                     option.value = source;
                     option.textContent = source;
                     dashboardMqttSource.appendChild(option);
                 });
+                selectedMqttSource = sources.includes('cz') ? 'cz' : '';
+                dashboardMqttSource.value = selectedMqttSource;
+                refreshDashboardData();
             })
             .catch((error) => console.error('Error loading dashboard MQTT sources:', error));
     }

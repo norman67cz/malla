@@ -359,16 +359,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     select.appendChild(option);
                 });
 
-                select.value = selectedValue || '';
+                select.value = selectedValue || (data.mqtt_sources.includes('cz') ? 'cz' : '');
             }
         } catch (error) {
             console.error('Error loading MQTT sources:', error);
         }
     }
-
-    // Load primary channels for select
-    loadMqttSources();
-    loadPrimaryChannels();
 
     function getSelectedPrimaryChannels() {
         return Array.from(document.querySelectorAll('.primary-channel-checkbox:checked'))
@@ -430,8 +426,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize page with filters and load data
     async function initializePageWithFilters() {
-        // Load packet types first
-        await loadPacketTypes();
+        // Load dynamic filter data first
+        await Promise.all([loadPacketTypes(), loadMqttSources(), loadPrimaryChannels()]);
 
         // Small delay to ensure DOM is updated
         await new Promise(resolve => setTimeout(resolve, 100));
