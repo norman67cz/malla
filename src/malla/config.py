@@ -102,6 +102,7 @@ class AppConfig:
             normalized_sources.append(
                 {
                     "name": name,
+                    "enabled": bool(source.get("enabled", True)),
                     "broker_address": broker_address,
                     "port": int(source.get("port", source.get("mqtt_port", 1883))),
                     "username": source.get("username", source.get("mqtt_username")),
@@ -114,6 +115,11 @@ class AppConfig:
                         source.get("topic_suffix", source.get("mqtt_topic_suffix", "/+/+/+/#"))
                     ).strip()
                     or "/+/+/+/#",
+                    "allowed_channels": [
+                        str(channel).strip()
+                        for channel in source.get("allowed_channels", [])
+                        if str(channel).strip()
+                    ],
                 }
             )
 
@@ -123,12 +129,14 @@ class AppConfig:
         return [
             {
                 "name": "default",
+                "enabled": True,
                 "broker_address": self.mqtt_broker_address,
                 "port": self.mqtt_port,
                 "username": self.mqtt_username,
                 "password": self.mqtt_password,
                 "topic_prefix": self.mqtt_topic_prefix,
                 "topic_suffix": self.mqtt_topic_suffix,
+                "allowed_channels": [],
             }
         ]
 

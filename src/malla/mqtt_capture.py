@@ -1379,23 +1379,50 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
 
     logging.debug(f"Processing protobuf message on topic {msg.topic}")
 
+    # Extract routing metadata from topic before parsing so we can drop
+    # disallowed channels early and avoid unnecessary DB writes/work.
+    message_type = None
+    topic_parts = []
+    channel_name = ""
+    try:
+        topic_parts = msg.topic.split("/")
+        if len(topic_parts) >= 4:
+            message_type = topic_parts[3]  # Should be 'e', 'c', 'p', etc.
+            logging.debug(f"Message type from topic: {message_type}")
+        if len(topic_parts) >= 5:
+            potential_channel = topic_parts[4]
+            if potential_channel and not potential_channel.startswith("!"):
+                channel_name = potential_channel
+    except Exception:
+        pass
+
+    allowed_channels = source.get("allowed_channels") or []
+    if allowed_channels:
+        normalized_allowed_channels = {
+            str(channel).strip().lower()
+            for channel in allowed_channels
+            if str(channel).strip()
+        }
+        normalized_channel_name = channel_name.strip().lower()
+        if (
+            not normalized_channel_name
+            or normalized_channel_name not in normalized_allowed_channels
+        ):
+            logging.debug(
+                "Skipping message from %s on topic %s due to channel filter (channel=%s, allowed=%s)",
+                source_name,
+                msg.topic,
+                channel_name or "<missing>",
+                ", ".join(sorted(normalized_allowed_channels)),
+            )
+            return
+
     # Always store the raw message data first, regardless of parsing success
     raw_service_envelope_data = msg.payload
     service_envelope = None
     mesh_packet = None
     processed_successfully = False
     parsing_error = None
-
-    # Extract message type from topic for logging
-    message_type = None
-    topic_parts = []
-    try:
-        topic_parts = msg.topic.split("/")
-        if len(topic_parts) >= 4:
-            message_type = topic_parts[3]  # Should be 'e', 'c', 'p', etc.
-            logging.debug(f"Message type from topic: {message_type}")
-    except Exception:
-        pass
 
     try:
         # Attempt to parse the ServiceEnvelope
@@ -1422,16 +1449,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
 
             # Extract channel name from topic if available (for key derivation)
             # Topic format: msh/region/gateway_id/message_type/channel_name/gateway_hex
-            channel_name = ""
-            try:
-                if len(topic_parts) >= 5:
-                    # The 5th part (index 4) might be channel name like "LongFast"
-                    potential_channel = topic_parts[4]
-                    if not potential_channel.startswith("!"):
-                        channel_name = potential_channel
-                        logging.debug(f"Using channel name from topic: {channel_name}")
-            except Exception:
-                pass
+            if channel_name:
+                logging.debug(f"Using channel name from topic: {channel_name}")
 
             # Try decryption with primary channel keys (most common case)
             decryption_successful = try_decrypt_mesh_packet(
@@ -1809,6 +1828,15 @@ def main() -> None:
     mqtt_clients: list[mqtt.Client] = []
 
     for source in MQTT_SOURCES:
+        if not source.get("enabled", True):
+            logging.info(
+                "Skipping disabled MQTT source %s (%s:%s)",
+                source.get("name", "default"),
+                source.get("broker_address", "unknown"),
+                source.get("port", 1883),
+            )
+            continue
+
         mqtt_client = mqtt.Client(
             CallbackAPIVersion.VERSION2,
             userdata=source,

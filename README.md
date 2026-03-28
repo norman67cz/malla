@@ -42,13 +42,19 @@ Made by codex:
 ```yaml
 mqtt_sources:
   - name: cz-west
+    enabled: true
     broker_address: mqtt-west.example.net
     port: 1883
     username: user1
     password: pass1
     topic_prefix: msh
     topic_suffix: /+/+/+/#
+    allowed_channels:
+      - LongFast
+      - MediumFast
+      - ShortFast
   - name: cz-east
+    enabled: true
     broker_address: mqtt-east.example.net
     port: 1883
     username: user2
@@ -59,6 +65,10 @@ mqtt_sources:
 
   If `mqtt_sources` is not defined, the existing single-broker config from `.env`
   is used as a backward-compatible fallback.
+  Set `enabled: false` to keep a source definition in `config.yaml` without
+  connecting to that broker.
+  Each source may optionally define `allowed_channels` to accept only selected
+  topic channel names before messages are parsed and inserted into the database.
   Raw receptions are kept per broker and stored with `mqtt_source`.
   Grouped views deduplicate packets across sources by `mesh_packet_id` when available.
 
