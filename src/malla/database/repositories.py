@@ -2516,13 +2516,30 @@ class NodeRepository:
 
             # Get protocol breakdown with a selectable time window.
             protocol_query = """
+            WITH dedup_packets AS (
+                SELECT
+                    portnum_name,
+                    CASE
+                        WHEN mesh_packet_id IS NOT NULL AND mesh_packet_id != 0 THEN CAST(mesh_packet_id AS TEXT)
+                        ELSE CAST(id AS TEXT)
+                    END AS packet_key,
+                    AVG(CAST(rssi AS FLOAT)) AS avg_rssi_per_packet,
+                    AVG(CAST(snr AS FLOAT)) AS avg_snr_per_packet
+                FROM packet_history
+                WHERE from_node_id = ?{time_filter}
+                GROUP BY
+                    portnum_name,
+                    CASE
+                        WHEN mesh_packet_id IS NOT NULL AND mesh_packet_id != 0 THEN CAST(mesh_packet_id AS TEXT)
+                        ELSE CAST(id AS TEXT)
+                    END
+            )
             SELECT
                 portnum_name,
                 COUNT(*) as count,
-                AVG(CAST(rssi AS FLOAT)) as avg_rssi,
-                AVG(CAST(snr AS FLOAT)) as avg_snr
-            FROM packet_history
-            WHERE from_node_id = ?{time_filter}
+                AVG(avg_rssi_per_packet) as avg_rssi,
+                AVG(avg_snr_per_packet) as avg_snr
+            FROM dedup_packets
             GROUP BY portnum_name
             ORDER BY count DESC
             """
