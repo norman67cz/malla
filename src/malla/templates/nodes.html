@@ -105,6 +105,12 @@
                 </select>
             </div>
             <div class="col-12 nodes-inline-field">
+                <label for="mqtt_source" class="form-label">{{ t('common.mqtt_source') }}</label>
+                <select class="form-select form-select-sm" id="mqtt_source" name="mqtt_source">
+                    <option value="">{{ t('common.all_sources') }}</option>
+                </select>
+            </div>
+            <div class="col-12 nodes-inline-field">
                 <label for="primary_channel" class="form-label">{{ t('common.primary_channel') }}</label>
                 <div>
                     <input type="hidden" id="primary_channel" name="primary_channel">
@@ -308,6 +314,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    async function loadMqttSources() {
+        try {
+            const response = await fetch('/api/meshtastic/mqtt-sources');
+            const data = await response.json();
+
+            if (data.mqtt_sources) {
+                const select = document.getElementById('mqtt_source');
+                const allOption = select.querySelector('option[value=""]');
+                const selectedValue = select.value;
+                select.innerHTML = '';
+                select.appendChild(allOption);
+
+                data.mqtt_sources.forEach((value) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
+                });
+
+                select.value = selectedValue || '';
+            }
+        } catch (error) {
+            console.error('Error loading MQTT sources:', error);
+        }
+    }
+
     function getSelectedPrimaryChannels() {
         return Array.from(document.querySelectorAll('.primary-channel-checkbox:checked'))
             .map((input) => input.value)
@@ -380,7 +412,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Load supporting data, then initialize the server-side table
-    Promise.all([loadHardwareModels(), loadNodeRoles(), loadPrimaryChannels()]).then(async () => {
+    Promise.all([loadHardwareModels(), loadNodeRoles(), loadMqttSources(), loadPrimaryChannels()]).then(async () => {
         initializePageWithFilters();
     });
 

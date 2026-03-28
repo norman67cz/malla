@@ -2,6 +2,10 @@
 
 {% block title %}{{ t('page.dashboard_title') }} - {{ APP_NAME }}{% endblock %}
 
+{% block vendor_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <style>
@@ -24,7 +28,12 @@
 
     <div class="row mb-4">
         <div class="col">
-            <h1 class="h2">{{ t('dashboard.mesh_metrics') }}</h1>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h1 class="h2 mb-0">{{ t('dashboard.mesh_metrics') }}</h1>
+                <select class="form-select form-select-sm" id="dashboardMqttSource" style="max-width: 16rem;">
+                    <option value="">{{ t('common.all_sources') }}</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -487,6 +496,7 @@ let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
 const DASHBOARD_REFRESH_MS = 30000;
 let temporalWindowHours = 24;
+let selectedMqttSource = '';
 
 // Get theme-aware colors for charts
 function getChartColors() {
@@ -577,6 +587,8 @@ function updateChartsForTheme() {
 
 // Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', function () {
+    const dashboardMqttSource = document.getElementById('dashboardMqttSource');
+
     document.querySelectorAll('.temporal-window-btn').forEach((button) => {
         button.addEventListener('click', function() {
             const nextHours = Number(this.dataset.hours || '24');
@@ -586,6 +598,26 @@ document.addEventListener('DOMContentLoaded', function () {
             refreshDashboardData();
         });
     });
+
+    if (dashboardMqttSource) {
+        dashboardMqttSource.addEventListener('change', function() {
+            selectedMqttSource = this.value || '';
+            refreshDashboardData();
+        });
+
+        fetch('/api/meshtastic/mqtt-sources')
+            .then((response) => response.json())
+            .then((data) => {
+                (data.mqtt_sources || []).forEach((source) => {
+                    const option = document.createElement('option');
+                    option.value = source;
+                    option.textContent = source;
+                    dashboardMqttSource.appendChild(option);
+                });
+            })
+            .catch((error) => console.error('Error loading dashboard MQTT sources:', error));
+    }
+
     updateTemporalWindowButtons();
     refreshDashboardData();
     startDashboardAutoRefresh();
@@ -613,7 +645,11 @@ async function refreshDashboardData() {
     dashboardRefreshInFlight = true;
 
     try {
-        const dashboardResponse = await fetch(`/api/dashboard-data?temporal_window_hours=${temporalWindowHours}`);
+        const params = new URLSearchParams({ temporal_window_hours: String(temporalWindowHours) });
+        if (selectedMqttSource) {
+            params.set('mqtt_source', selectedMqttSource);
+        }
+        const dashboardResponse = await fetch(`/api/dashboard-data?${params.toString()}`);
         if (!dashboardResponse.ok) {
             throw new Error(`Dashboard HTTP error! status: ${dashboardResponse.status}`);
         }
@@ -1098,6 +1134,4 @@ function populateTopNodesTable(topNodes) {
 }
 </script>
 
-<!-- Chart.js for analytics charts -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}

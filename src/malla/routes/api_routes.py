@@ -35,10 +35,11 @@ from ..utils.traceroute_utils import parse_traceroute_payload
 logger = logging.getLogger(__name__)
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
-_STATS_CACHE: dict[str | None, tuple[float, dict[str, Any]]] = {}
+_STATS_CACHE: dict[tuple[str | None, str | None], tuple[float, dict[str, Any]]] = {}
 _STATS_CACHE_TTL_SEC = 30
 _DASHBOARD_PAYLOAD_CACHE: dict[
-    tuple[str | None, int | None, int | None, int], tuple[float, dict[str, Any]]
+    tuple[str | None, int | None, int | None, int, str | None],
+    tuple[float, dict[str, Any]],
 ] = {}
 _DASHBOARD_PAYLOAD_CACHE_TTL_SEC = 30
 _MAP_GRAPH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -66,25 +67,23 @@ def _get_dashboard_payload(
     from_node: int | None = None,
     hop_count: int | None = None,
     temporal_window_hours: int = 24,
+    mqtt_source: str | None = None,
 ) -> dict[str, Any]:
-    cache_key = (gateway_id, from_node, hop_count, temporal_window_hours)
+    cache_key = (gateway_id, from_node, hop_count, temporal_window_hours, mqtt_source)
     now_ts = time.time()
     cached = _DASHBOARD_PAYLOAD_CACHE.get(cache_key)
     if cached and (now_ts - cached[0] < _DASHBOARD_PAYLOAD_CACHE_TTL_SEC):
         return cached[1]
 
-    stats = DashboardRepository.get_stats(gateway_id=gateway_id)
-    from ..services.gateway_service import GatewayService
-
-    gateway_stats = GatewayService.get_gateway_statistics(hours=24)
-    stats["gateway_count"] = gateway_stats.get("total_gateways", 0)
-    _STATS_CACHE[gateway_id] = (now_ts, stats)
+    stats = DashboardRepository.get_stats(gateway_id=gateway_id, mqtt_source=mqtt_source)
+    _STATS_CACHE[(gateway_id, mqtt_source)] = (now_ts, stats)
 
     analytics = AnalyticsService.get_analytics_data(
         gateway_id=gateway_id,
         from_node=from_node,
         hop_count=hop_count,
         temporal_window_hours=temporal_window_hours,
+        mqtt_source=mqtt_source,
     )
 
     payload = {
@@ -133,12 +132,15 @@ def api_stats():
     logger.info("API stats endpoint accessed")
     try:
         gateway_id = request.args.get("gateway_id")
+        mqtt_source = request.args.get("mqtt_source")
         now_ts = time.time()
-        cached = _STATS_CACHE.get(gateway_id)
+        cached = _STATS_CACHE.get((gateway_id, mqtt_source))
         if cached and (now_ts - cached[0] < _STATS_CACHE_TTL_SEC):
             return safe_jsonify(cached[1])
 
-        return safe_jsonify(_get_dashboard_payload(gateway_id=gateway_id)["stats"])
+        return safe_jsonify(
+            _get_dashboard_payload(gateway_id=gateway_id, mqtt_source=mqtt_source)["stats"]
+        )
     except Exception as e:
         logger.error(f"Error in API stats: {e}")
         return jsonify({"error": str(e)}), 500
@@ -188,6 +190,7 @@ def api_analytics():
         gateway_id = request.args.get("gateway_id")
         from_node = request.args.get("from_node", type=int)
         hop_count = request.args.get("hop_count", type=int)
+        mqtt_source = request.args.get("mqtt_source")
         temporal_window_hours = request.args.get("temporal_window_hours", 24, type=int)
         if temporal_window_hours not in {24, 72, 168, 336}:
             temporal_window_hours = 24
@@ -197,6 +200,7 @@ def api_analytics():
             from_node=from_node,
             hop_count=hop_count,
             temporal_window_hours=temporal_window_hours,
+            mqtt_source=mqtt_source,
         )
         return safe_jsonify(analytics_data)
     except Exception as e:
@@ -212,6 +216,7 @@ def api_dashboard_data():
         gateway_id = request.args.get("gateway_id")
         from_node = request.args.get("from_node", type=int)
         hop_count = request.args.get("hop_count", type=int)
+        mqtt_source = request.args.get("mqtt_source")
         temporal_window_hours = request.args.get("temporal_window_hours", 24, type=int)
         if temporal_window_hours not in {24, 72, 168, 336}:
             temporal_window_hours = 24
@@ -221,6 +226,7 @@ def api_dashboard_data():
                 from_node=from_node,
                 hop_count=hop_count,
                 temporal_window_hours=temporal_window_hours,
+                mqtt_source=mqtt_source,
             )
         )
     except Exception as e:
@@ -2071,6 +2077,9 @@ def api_nodes_data():
         role = request.args.get("role", "").strip()
         if role:
             filters["role"] = role
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source:
+            filters["mqtt_source"] = mqtt_source
 
         primary_channel = request.args.get("primary_channel", "").strip()
         if primary_channel:

@@ -21,7 +21,8 @@ class AnalyticsService:
 
     # (gateway_id, from_node, hop_count) → (timestamp, data)
     _CACHE: dict[
-        tuple[str | None, int | None, int | None, int], tuple[float, dict[str, Any]]
+        tuple[str | None, int | None, int | None, int, str | None],
+        tuple[float, dict[str, Any]],
     ] = {}
     _CACHE_TTL_SEC: int = 120  # two minute cache window
 
@@ -31,10 +32,11 @@ class AnalyticsService:
         from_node: int | None = None,
         hop_count: int | None = None,
         temporal_window_hours: int = 24,
+        mqtt_source: str | None = None,
     ) -> dict[str, Any]:
         """Get comprehensive analytics data for the dashboard with simple in-memory caching."""
 
-        cache_key = (gateway_id, from_node, hop_count, temporal_window_hours)
+        cache_key = (gateway_id, from_node, hop_count, temporal_window_hours, mqtt_source)
         now_ts = time.time()
 
         # Return cached value if still valid
@@ -58,6 +60,8 @@ class AnalyticsService:
                 filters["from_node"] = from_node
             if hop_count is not None:
                 filters["hop_count"] = hop_count
+            if mqtt_source:
+                filters["mqtt_source"] = mqtt_source
 
             twenty_four_hours_ago = now_ts - 24 * 3600
             seven_days_ago = now_ts - 7 * 24 * 3600
@@ -78,7 +82,7 @@ class AnalyticsService:
             routing_patterns = AnalyticsService._get_routing_patterns(
                 filters, twenty_four_hours_ago
             )
-            hardware_models = AnalyticsService._get_hardware_model_distribution()
+            hardware_models = AnalyticsService._get_hardware_model_distribution(filters)
             top_nodes = AnalyticsService._get_top_active_nodes(filters, seven_days_ago)
             packet_types = AnalyticsService._get_packet_type_distribution(
                 filters, twenty_four_hours_ago
@@ -121,6 +125,9 @@ class AnalyticsService:
         if filters.get("gateway_id"):
             where_conditions.append("gateway_id = ?")
             params.append(filters["gateway_id"])
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         if filters.get("from_node"):
             where_conditions.append("from_node_id = ?")
@@ -171,8 +178,17 @@ class AnalyticsService:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Get total node count
-        cursor.execute("SELECT COUNT(*) as total_nodes FROM node_info")
+        if filters.get("mqtt_source"):
+            cursor.execute(
+                """
+                SELECT COUNT(DISTINCT from_node_id) as total_nodes
+                FROM packet_history
+                WHERE from_node_id IS NOT NULL AND mqtt_source = ?
+                """,
+                [filters["mqtt_source"]],
+            )
+        else:
+            cursor.execute("SELECT COUNT(*) as total_nodes FROM node_info")
         total_nodes = cursor.fetchone()["total_nodes"]
 
         # Build WHERE clause for packet filtering
@@ -182,6 +198,9 @@ class AnalyticsService:
         if filters.get("gateway_id"):
             where_conditions.append("gateway_id = ?")
             params.append(filters["gateway_id"])
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         where_clause = " AND ".join(where_conditions)
 
@@ -243,6 +262,9 @@ class AnalyticsService:
         if filters.get("gateway_id"):
             where_conditions.append("gateway_id = ?")
             params.append(filters["gateway_id"])
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         if filters.get("from_node"):
             where_conditions.append("from_node_id = ?")
@@ -439,6 +461,9 @@ class AnalyticsService:
         if filters.get("gateway_id"):
             where_conditions.append("ph.gateway_id = ?")
             params.append(filters["gateway_id"])
+        if filters.get("mqtt_source"):
+            where_conditions.append("ph.mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         if filters.get("from_node"):
             where_conditions.append("ph.from_node_id = ?")
@@ -511,6 +536,9 @@ class AnalyticsService:
         if filters.get("gateway_id"):
             where_conditions.append("gateway_id = ?")
             params.append(filters["gateway_id"])
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         if filters.get("from_node"):
             where_conditions.append("from_node_id = ?")
@@ -606,34 +634,67 @@ class AnalyticsService:
         return packet_types
 
     @staticmethod
-    def _get_hardware_model_distribution() -> list[dict[str, Any]]:
+    def _get_hardware_model_distribution(filters: dict | None = None) -> list[dict[str, Any]]:
         """Get hardware model distribution across all known nodes."""
         from ..database.connection import get_db_connection
+
+        filters = filters or {}
 
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            WITH hw_counts AS (
+        if filters.get("mqtt_source"):
+            cursor.execute(
+                """
+                WITH source_nodes AS (
+                    SELECT DISTINCT from_node_id AS node_id
+                    FROM packet_history
+                    WHERE from_node_id IS NOT NULL
+                      AND mqtt_source = ?
+                ),
+                hw_counts AS (
+                    SELECT
+                        COALESCE(NULLIF(ni.hw_model, ''), 'Unknown') AS hw_model,
+                        COUNT(*) AS count
+                    FROM source_nodes sn
+                    JOIN node_info ni ON ni.node_id = sn.node_id
+                    GROUP BY COALESCE(NULLIF(ni.hw_model, ''), 'Unknown')
+                ),
+                total_count AS (
+                    SELECT SUM(count) AS total FROM hw_counts
+                )
                 SELECT
-                    COALESCE(NULLIF(hw_model, ''), 'Unknown') AS hw_model,
-                    COUNT(*) AS count
-                FROM node_info
-                GROUP BY COALESCE(NULLIF(hw_model, ''), 'Unknown')
-            ),
-            total_count AS (
-                SELECT SUM(count) AS total FROM hw_counts
+                    hc.hw_model,
+                    hc.count,
+                    ROUND(hc.count * 100.0 / NULLIF(t.total, 0), 2) AS percentage
+                FROM hw_counts hc, total_count t
+                ORDER BY hc.count DESC, hc.hw_model ASC
+                LIMIT 12
+                """,
+                [filters["mqtt_source"]],
             )
-            SELECT
-                hc.hw_model,
-                hc.count,
-                ROUND(hc.count * 100.0 / NULLIF(t.total, 0), 2) AS percentage
-            FROM hw_counts hc, total_count t
-            ORDER BY hc.count DESC, hc.hw_model ASC
-            LIMIT 12
-        """
-        )
+        else:
+            cursor.execute(
+                """
+                WITH hw_counts AS (
+                    SELECT
+                        COALESCE(NULLIF(hw_model, ''), 'Unknown') AS hw_model,
+                        COUNT(*) AS count
+                    FROM node_info
+                    GROUP BY COALESCE(NULLIF(hw_model, ''), 'Unknown')
+                ),
+                total_count AS (
+                    SELECT SUM(count) AS total FROM hw_counts
+                )
+                SELECT
+                    hc.hw_model,
+                    hc.count,
+                    ROUND(hc.count * 100.0 / NULLIF(t.total, 0), 2) AS percentage
+                FROM hw_counts hc, total_count t
+                ORDER BY hc.count DESC, hc.hw_model ASC
+                LIMIT 12
+                """
+            )
 
         hardware_models = [dict(row) for row in cursor.fetchall()]
         conn.close()
@@ -653,6 +714,9 @@ class AnalyticsService:
         if filters.get("from_node"):
             where_conditions.append("from_node_id = ?")
             params.append(filters["from_node"])
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         where_clause = " AND ".join(where_conditions)
 

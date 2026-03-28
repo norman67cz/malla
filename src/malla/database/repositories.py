@@ -304,9 +304,15 @@ class DashboardRepository:
     """Repository for dashboard statistics."""
 
     @staticmethod
-    def get_stats(gateway_id: str | None = None) -> dict[str, Any]:
+    def get_stats(
+        gateway_id: str | None = None, mqtt_source: str | None = None
+    ) -> dict[str, Any]:
         """Get overview statistics for the dashboard using optimized single query."""
-        logger.info(f"Getting dashboard stats with gateway_id={gateway_id}")
+        logger.info(
+            "Getting dashboard stats with gateway_id=%s mqtt_source=%s",
+            gateway_id,
+            mqtt_source,
+        )
 
         try:
             conn = get_db_connection()
@@ -316,19 +322,33 @@ class DashboardRepository:
             twenty_four_hours_ago = time.time() - (24 * 3600)
             one_hour_ago = time.time() - 3600
 
-            # Build WHERE clause for gateway filtering
-            gateway_filter = ""
-            gateway_params = []
+            packet_filters = []
+            packet_params: list[Any] = []
             if gateway_id:
-                gateway_filter = " AND gateway_id = ?"
-                gateway_params = [gateway_id]
+                packet_filters.append("gateway_id = ?")
+                packet_params.append(gateway_id)
+            if mqtt_source:
+                packet_filters.append("mqtt_source = ?")
+                packet_params.append(mqtt_source)
+            packet_filter_sql = (
+                " AND " + " AND ".join(packet_filters) if packet_filters else ""
+            )
 
-            # Get basic node count (this is fast and separate)
-            cursor.execute("SELECT COUNT(*) as total_nodes FROM node_info")
+            if mqtt_source:
+                cursor.execute(
+                    """
+                    SELECT COUNT(DISTINCT from_node_id) as total_nodes
+                    FROM packet_history
+                    WHERE from_node_id IS NOT NULL AND mqtt_source = ?
+                    """,
+                    [mqtt_source],
+                )
+            else:
+                cursor.execute("SELECT COUNT(*) as total_nodes FROM node_info")
             total_nodes = cursor.fetchone()["total_nodes"]
 
             # Single optimized query for all packet statistics
-            params = [one_hour_ago, twenty_four_hours_ago] + gateway_params
+            params = [one_hour_ago, twenty_four_hours_ago] + packet_params
 
             cursor.execute(
                 f"""
@@ -343,7 +363,7 @@ class DashboardRepository:
                          THEN ROUND(SUM(CASE WHEN processed_successfully IS TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)
                          ELSE 0 END as success_rate
                 FROM packet_history
-                WHERE timestamp > ?{gateway_filter}
+                WHERE timestamp > ?{packet_filter_sql}
             """,
                 params,
             )
@@ -352,8 +372,8 @@ class DashboardRepository:
 
             # Get total packet count (all time) separately
             cursor.execute(
-                f"SELECT COUNT(*) as total FROM packet_history WHERE 1=1{gateway_filter}",
-                gateway_params,
+                f"SELECT COUNT(*) as total FROM packet_history WHERE 1=1{packet_filter_sql}",
+                packet_params,
             )
             total_packets_all_time = cursor.fetchone()["total"]
 
@@ -362,14 +382,27 @@ class DashboardRepository:
                 f"""
                 SELECT portnum_name, COUNT(*) as count
                 FROM packet_history
-                WHERE portnum_name IS NOT NULL AND timestamp > ?{gateway_filter}
+                WHERE portnum_name IS NOT NULL AND timestamp > ?{packet_filter_sql}
                 GROUP BY portnum_name
                 ORDER BY count DESC
             """,
-                [twenty_four_hours_ago] + gateway_params,
+                [twenty_four_hours_ago] + packet_params,
             )
 
             packet_types = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute(
+                f"""
+                SELECT COUNT(DISTINCT gateway_id) as gateway_count
+                FROM packet_history
+                WHERE timestamp > ?
+                  AND gateway_id IS NOT NULL
+                  AND gateway_id != ''
+                  {packet_filter_sql}
+                """,
+                [twenty_four_hours_ago] + packet_params,
+            )
+            gateway_count = cursor.fetchone()["gateway_count"] or 0
 
             conn.close()
 
@@ -382,6 +415,7 @@ class DashboardRepository:
                 "avg_snr": round(stats_row["avg_snr"] or 0, 1),
                 "packet_types": packet_types,
                 "success_rate": stats_row["success_rate"] or 0,
+                "gateway_count": gateway_count,
             }
 
         except Exception as e:
@@ -1455,6 +1489,20 @@ class NodeRepository:
                 where_conditions.append("ni.role = ?")
                 params.append(filters["role"])
 
+            mqtt_source = filters.get("mqtt_source")
+            if mqtt_source:
+                where_conditions.append(
+                    """
+                    EXISTS (
+                        SELECT 1
+                        FROM packet_history ph_src
+                        WHERE ph_src.from_node_id = ni.node_id
+                          AND ph_src.mqtt_source = ?
+                    )
+                    """
+                )
+                params.append(mqtt_source)
+
             if filters.get("primary_channel"):
                 primary_channels = filters["primary_channel"]
                 if isinstance(primary_channels, (list, tuple, set)):
@@ -1557,11 +1605,13 @@ class NodeRepository:
                             MAX(timestamp) as last_packet_time
                         FROM packet_history
                         WHERE timestamp > (strftime('%s', 'now') - 86400)
+                          {"AND mqtt_source = ?" if mqtt_source else ""}
                         GROUP BY from_node_id
                     ) stats ON ni.node_id = stats.node_id
                     {where_clause}
                 """
-                cursor.execute(count_query, params)
+                count_params = ([mqtt_source] if mqtt_source else []) + params
+                cursor.execute(count_query, count_params)
                 total_count = cursor.fetchone()["total"]
 
                 query = f"""
@@ -1597,6 +1647,7 @@ class NodeRepository:
                             MAX(timestamp) as last_packet_time
                         FROM packet_history
                         WHERE timestamp > (strftime('%s', 'now') - 86400)
+                          {"AND mqtt_source = ?" if mqtt_source else ""}
                         GROUP BY from_node_id
                     ) stats ON ni.node_id = stats.node_id
                     LEFT JOIN (
@@ -1605,6 +1656,7 @@ class NodeRepository:
                             COUNT(*) as gateway_packet_count_24h
                         FROM packet_history
                         WHERE timestamp > (strftime('%s', 'now') - 86400)
+                          {"AND mqtt_source = ?" if mqtt_source else ""}
                           AND gateway_id IS NOT NULL AND gateway_id != ''
                         GROUP BY gateway_id
                     ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
@@ -1682,6 +1734,7 @@ class NodeRepository:
                                 MAX(timestamp) as last_packet_time
                             FROM packet_history
                             WHERE timestamp > (strftime('%s', 'now') - 86400)
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
                             GROUP BY from_node_id
                         ) stats ON ni.node_id = stats.node_id
                         LEFT JOIN (
@@ -1690,6 +1743,7 @@ class NodeRepository:
                                 COUNT(*) as gateway_packet_count_24h
                             FROM packet_history
                             WHERE timestamp > (strftime('%s', 'now') - 86400)
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
                               AND gateway_id IS NOT NULL AND gateway_id != ''
                             GROUP BY gateway_id
                         ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
@@ -1699,6 +1753,8 @@ class NodeRepository:
                                 COUNT(*) as packet_count_total,
                                 SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
                             FROM packet_history
+                            WHERE 1=1
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
                             GROUP BY from_node_id
                         ) alltime ON ni.node_id = alltime.node_id
                         {where_clause}
@@ -1730,12 +1786,20 @@ class NodeRepository:
                                 COUNT(*) as packet_count_total,
                                 SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
                             FROM packet_history
+                            WHERE 1=1
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
                             GROUP BY from_node_id
                         ) alltime ON ni.node_id = alltime.node_id
                         {where_clause}
                         ORDER BY {order_column} {order_dir}
                     """
-                cursor.execute(query_no_paging, params)
+                query_no_paging_params: list[Any] = []
+                if mqtt_source and needs_24h_stats:
+                    query_no_paging_params.extend([mqtt_source, mqtt_source, mqtt_source])
+                elif mqtt_source:
+                    query_no_paging_params.append(mqtt_source)
+                query_no_paging_params.extend(params)
+                cursor.execute(query_no_paging, query_no_paging_params)
                 all_nodes = [dict(row) for row in cursor.fetchall()]
                 public_key_presence = _get_latest_nodeinfo_public_key_presence(
                     cursor,
@@ -1807,7 +1871,11 @@ class NodeRepository:
                 filtered_nodes.sort(key=_node_sort_key, reverse=reverse)
                 nodes = filtered_nodes[offset : offset + limit]
             else:
-                query_params = params + [limit, offset]
+                query_params: list[Any] = []
+                if mqtt_source and needs_24h_stats:
+                    query_params.extend([mqtt_source, mqtt_source])
+                query_params.extend(params)
+                query_params.extend([limit, offset])
                 cursor.execute(query, query_params)
                 nodes = [dict(row) for row in cursor.fetchall()]
 
