@@ -44,7 +44,7 @@ _DASHBOARD_PAYLOAD_CACHE_TTL_SEC = 30
 _MAP_GRAPH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _MAP_GRAPH_CACHE_TTL_SEC = 30
 _LIVE_PACKETS_CACHE: dict[
-    tuple[int, str, str, str], tuple[float, dict[str, Any]]
+    tuple[int, str, str, str, str, str, str, bool], tuple[float, dict[str, Any]]
 ] = {}
 _LIVE_PACKETS_CACHE_TTL_SEC = 2.5
 _LIVE_PACKET_RECEPTIONS_LOOKBACK_ROWS = 5000
@@ -331,6 +331,7 @@ def api_live_packets():
         limit = max(1, min(limit, 200))
         channel_id = request.args.get("channel_id", "").strip()
         gateway_source = request.args.get("gateway_source", "").strip()
+        mqtt_source = request.args.get("mqtt_source", "").strip()
         packet_type = request.args.get("packet_type", "").strip()
         from_filter = request.args.get("from_filter", "").strip()
         to_filter = request.args.get("to_filter", "").strip()
@@ -345,6 +346,7 @@ def api_live_packets():
             limit,
             channel_id,
             gateway_source,
+            mqtt_source,
             packet_type,
             from_filter.lower(),
             to_filter.lower(),
@@ -367,6 +369,9 @@ def api_live_packets():
         if gateway_source:
             where_conditions.append("p.gateway_id = ?")
             params.append(gateway_source)
+        if mqtt_source:
+            where_conditions.append("p.mqtt_source = ?")
+            params.append(mqtt_source)
         if from_filter:
             where_conditions.append(
                 """
@@ -408,6 +413,7 @@ def api_live_packets():
                 p.mesh_packet_id,
                 p.portnum_name,
                 p.gateway_id,
+                p.mqtt_source,
                 p.payload_length,
                 p.rssi,
                 p.snr,
@@ -469,6 +475,16 @@ def api_live_packets():
             available_gateway_sources.append(
                 {"value": gateway_id_value, "label": gateway_label}
             )
+
+        cursor.execute(
+            """
+            SELECT DISTINCT mqtt_source
+            FROM packet_history
+            WHERE mqtt_source IS NOT NULL AND mqtt_source != ''
+            ORDER BY mqtt_source
+            """
+        )
+        available_mqtt_sources = [row[0] for row in cursor.fetchall() if row[0]]
 
         cursor.execute(
             """
@@ -621,6 +637,7 @@ def api_live_packets():
                     "portnum_name": row["portnum_name"] or "Unknown",
                     "channel_id": row["channel_id"] or "",
                     "gateway_id": row["gateway_id"],
+                    "mqtt_source": row["mqtt_source"] or "",
                     "payload_length": row["payload_length"],
                     "rssi": row["rssi"],
                     "snr": row["snr"],
@@ -651,10 +668,12 @@ def api_live_packets():
             "filters": {
                 "available_channels": available_channels,
                 "available_gateway_sources": available_gateway_sources,
+                "available_mqtt_sources": available_mqtt_sources,
                 "available_packet_types": available_packet_types,
                 "selected": {
                     "channel_id": channel_id,
                     "gateway_source": gateway_source,
+                    "mqtt_source": mqtt_source,
                     "packet_type": packet_type,
                     "from_filter": from_filter,
                     "to_filter": to_filter,
@@ -1767,6 +1786,9 @@ def api_packets_data():
         pki_filter = request.args.get("pki_filter", "").strip()
         if pki_filter in {"only", "exclude"}:
             filters["pki_filter"] = pki_filter
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source:
+            filters["mqtt_source"] = mqtt_source
         min_rssi_str = request.args.get("min_rssi")
         if min_rssi_str:
             try:
@@ -1976,6 +1998,7 @@ def api_packets_data():
                 "to_node_short": to_node_short,
                 "portnum_name": packet.get("portnum_name") or "Unknown",
                 "gateway": gateway_display,
+                "mqtt_source": packet.get("mqtt_source") or "",
                 "gateway_sort_value": gateway_sort_value,
                 "rssi": rssi_display,
                 "snr": snr_display,
@@ -2144,6 +2167,7 @@ def api_statistic_data():
         sort_by = request.args.get("sort_by", default="node_name")
         sort_order = request.args.get("sort_order", default="asc")
         period = request.args.get("period", default="1d")
+        mqtt_source = request.args.get("mqtt_source", "").strip()
         offset = (page - 1) * limit
 
         result = NodeRepository.get_packet_type_statistics(
@@ -2153,6 +2177,7 @@ def api_statistic_data():
             order_by=sort_by,
             order_dir=sort_order,
             search=search,
+            mqtt_source=mqtt_source or None,
         )
 
         response = {
@@ -2161,6 +2186,7 @@ def api_statistic_data():
             "page": page,
             "limit": limit,
             "period": result["period"],
+            "mqtt_source": mqtt_source,
             "total_pages": (result["total_count"] + limit - 1) // limit,
         }
         _TABLE_ENDPOINT_CACHE[cache_key] = (now_ts, response)
@@ -2224,6 +2250,9 @@ def api_traceroute_data():
         gateway_id_arg = request.args.get("gateway_id")
         if gateway_id_arg:
             filters["gateway_id"] = gateway_id_arg
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source:
+            filters["mqtt_source"] = mqtt_source
         from_node_str = request.args.get("from_node", "").strip()
         if from_node_str:
             try:
@@ -2474,6 +2503,7 @@ def api_traceroute_data():
                 "route_nodes": route_nodes,  # Node IDs in the route
                 "route_names": route_names,  # Node names/displays in the route
                 "gateway": gateway_display,
+                "mqtt_source": tr.get("mqtt_source") or "",
                 "gateway_sort_value": gateway_sort_value,
                 "rssi": rssi_display,
                 "snr": snr_display,
@@ -2681,6 +2711,18 @@ def api_channels():
     except Exception as e:
         logger.error(f"Error in API channels: {e}")
         return jsonify({"error": str(e), "channels": []}), 500
+
+
+@api_bp.route("/meshtastic/mqtt-sources")
+def api_mqtt_sources():
+    """API endpoint for available MQTT source names."""
+    logger.info("API MQTT sources endpoint accessed")
+    try:
+        sources = PacketRepository.get_unique_mqtt_sources()
+        return jsonify({"mqtt_sources": sources})
+    except Exception as e:
+        logger.error(f"Error in API MQTT sources: {e}")
+        return jsonify({"error": str(e), "mqtt_sources": []}), 500
 
 
 def safe_jsonify(data, *args, **kwargs):

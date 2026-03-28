@@ -484,6 +484,10 @@ class PacketRepository:
                 where_conditions.append("gateway_id = ?")
                 params.append(filters["gateway_id"])
 
+            if filters.get("mqtt_source"):
+                where_conditions.append("mqtt_source = ?")
+                params.append(filters["mqtt_source"])
+
             if filters.get("mesh_packet_id"):
                 where_conditions.append("mesh_packet_id = ?")
                 params.append(filters["mesh_packet_id"])
@@ -528,13 +532,14 @@ class PacketRepository:
                 search_condition = """(
                     portnum_name LIKE ? OR
                     gateway_id LIKE ? OR
+                    mqtt_source LIKE ? OR
                     channel_id LIKE ? OR
                     CAST(from_node_id AS TEXT) LIKE ? OR
                     CAST(to_node_id AS TEXT) LIKE ?
                 )"""
                 where_conditions.append(search_condition)
                 search_param = f"%{search}%"
-                params.extend([search_param] * 5)
+                params.extend([search_param] * 6)
 
             where_clause = (
                 "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
@@ -588,7 +593,7 @@ class PacketRepository:
                 query = f"""
                     SELECT
                         id, timestamp, from_node_id, to_node_id, portnum, portnum_name,
-                        gateway_id, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start,
+                        gateway_id, mqtt_source, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start,
                         payload_length, processed_successfully, raw_payload,
                         via_mqtt, want_ack, priority, delayed, channel_index, rx_time,
                         pki_encrypted, next_hop, relay_node, tx_after,
@@ -679,6 +684,7 @@ class PacketRepository:
                         "portnum": portnum,
                         "portnum_name": portnum_name,
                         "mesh_packet_id": mesh_packet_id,
+                        "mqtt_source": dict(representative_packet).get("mqtt_source"),
                         "channel_id": dict(representative_packet).get("channel_id"),
                         "gateway_count": len(gateway_ids),
                         "gateway_list": ",".join(gateway_ids),
@@ -822,7 +828,7 @@ class PacketRepository:
                 query = f"""
                     SELECT
                         id, timestamp, from_node_id, to_node_id, portnum, portnum_name,
-                        gateway_id, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start,
+                        gateway_id, mqtt_source, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start,
                         payload_length, processed_successfully, raw_payload,
                         via_mqtt, want_ack, priority, delayed, channel_index, rx_time,
                         pki_encrypted, next_hop, relay_node, tx_after,
@@ -1005,6 +1011,30 @@ class PacketRepository:
         except Exception as e:
             logger.error(f"Error getting gateway count: {e}")
             raise
+
+    @staticmethod
+    def get_unique_mqtt_sources() -> list[str]:
+        """Get list of unique MQTT source names."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT DISTINCT mqtt_source
+                FROM packet_history
+                WHERE mqtt_source IS NOT NULL AND mqtt_source != ''
+                ORDER BY mqtt_source
+                """
+            )
+
+            sources = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return sources
+
+        except Exception as e:
+            logger.error(f"Error getting MQTT sources: {e}")
+            return []
 
     @staticmethod
     def get_gateway_comparison_data(
@@ -1220,6 +1250,7 @@ class NodeRepository:
         order_by: str = "node_name",
         order_dir: str = "asc",
         search: str | None = None,
+        mqtt_source: str | None = None,
     ) -> dict[str, Any]:
         """Get per-node packet type counts for a selected time period."""
         period_map = {
@@ -1256,6 +1287,10 @@ class NodeRepository:
                 "p.from_node_id IS NOT NULL",
             ]
             params: list[Any] = [since_ts]
+
+            if mqtt_source:
+                where_conditions.append("p.mqtt_source = ?")
+                params.append(mqtt_source)
 
             if search:
                 search_param = f"%{search.strip()}%"
@@ -3774,6 +3809,7 @@ class TracerouteRepository:
             if search:
                 search_conditions = [
                     "gateway_id LIKE ?",
+                    "mqtt_source LIKE ?",
                     "CAST(from_node_id AS TEXT) LIKE ?",
                     "CAST(to_node_id AS TEXT) LIKE ?",
                 ]
@@ -3828,7 +3864,7 @@ class TracerouteRepository:
                 # Fetch individual packets using efficient ORDER BY timestamp DESC LIMIT
                 query = f"""
                     SELECT
-                        id, timestamp, from_node_id, to_node_id, gateway_id,
+                        id, timestamp, from_node_id, to_node_id, gateway_id, mqtt_source,
                         hop_start, hop_limit, rssi, snr, payload_length, raw_payload,
                         processed_successfully, mesh_packet_id,
                         datetime(timestamp, 'unixepoch') as timestamp_str
@@ -3910,6 +3946,7 @@ class TracerouteRepository:
                         "from_node_id": base_packet["from_node_id"],
                         "to_node_id": base_packet["to_node_id"],
                         "mesh_packet_id": base_packet["mesh_packet_id"],
+                        "mqtt_source": base_packet.get("mqtt_source"),
                         "gateway_count": len(unique_gateways),
                         "gateway_list": ",".join(unique_gateways),
                         "reception_count": len(packets_in_group),
@@ -4147,7 +4184,7 @@ class TracerouteRepository:
 
                 query = f"""
                     SELECT
-                        id, timestamp, from_node_id, to_node_id, gateway_id,
+                        id, timestamp, from_node_id, to_node_id, gateway_id, mqtt_source,
                         hop_start, hop_limit, rssi, snr, payload_length, raw_payload,
                         processed_successfully, mesh_packet_id,
                         datetime(timestamp, 'unixepoch') as timestamp_str,

@@ -186,6 +186,12 @@
                 ) }}
             </div>
             <div class="col-12 packets-inline-field">
+                <label for="mqtt_source" class="form-label">{{ t('common.mqtt_source') }}</label>
+                <select class="form-select form-select-sm" id="mqtt_source" name="mqtt_source">
+                    <option value="">{{ t('common.all_sources') }}</option>
+                </select>
+            </div>
+            <div class="col-12 packets-inline-field">
                 <label for="portnum" class="form-label">{{ t('common.packet_type') }}</label>
                 <select class="form-select form-select-sm" id="portnum" name="portnum">
                     <option value="">{{ t('common.all_types') }}</option>
@@ -334,7 +340,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    async function loadMqttSources() {
+        try {
+            const response = await fetch('/api/meshtastic/mqtt-sources');
+            const data = await response.json();
+
+            if (data.mqtt_sources) {
+                const select = document.getElementById('mqtt_source');
+                const allOption = select.querySelector('option[value=""]');
+                const selectedValue = select.value;
+                select.innerHTML = '';
+                select.appendChild(allOption);
+
+                data.mqtt_sources.forEach((value) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
+                });
+
+                select.value = selectedValue || '';
+            }
+        } catch (error) {
+            console.error('Error loading MQTT sources:', error);
+        }
+    }
+
     // Load primary channels for select
+    loadMqttSources();
     loadPrimaryChannels();
 
     function getSelectedPrimaryChannels() {
@@ -558,6 +591,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         return value || 'N/A';
                     }
                 }
+            },
+            {
+                key: 'mqtt_source',
+                title: 'MQTT',
+                sortable: true,
+                render: (value) => value
+                    ? `<span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">${value}</span>`
+                    : '<span class="text-muted">-</span>'
             },
             {
                 key: 'rssi',

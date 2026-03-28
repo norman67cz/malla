@@ -65,12 +65,7 @@ _cfg = get_config()
 DATABASE_BACKEND: str = _cfg.database_backend.lower()
 
 # MQTT Broker details
-MQTT_BROKER_ADDRESS: str = _cfg.mqtt_broker_address
-MQTT_PORT: int = _cfg.mqtt_port
-MQTT_USERNAME: str | None = _cfg.mqtt_username
-MQTT_PASSWORD: str | None = _cfg.mqtt_password
-MQTT_TOPIC_PREFIX: str = _cfg.mqtt_topic_prefix
-MQTT_TOPIC_SUFFIX: str = _cfg.mqtt_topic_suffix
+MQTT_SOURCES: list[dict[str, Any]] = _cfg.get_mqtt_sources()
 
 # Database file path
 DATABASE_FILE: str = _cfg.database_file
@@ -340,6 +335,7 @@ def init_database() -> None:
                 portnum BIGINT,
                 portnum_name TEXT,
                 gateway_id TEXT,
+                mqtt_source TEXT,
                 channel_id TEXT,
                 mesh_packet_id BIGINT,
                 rssi BIGINT,
@@ -377,6 +373,7 @@ def init_database() -> None:
                 portnum INTEGER,
                 portnum_name TEXT,
                 gateway_id TEXT,
+                mqtt_source TEXT,
                 channel_id TEXT,
                 mesh_packet_id INTEGER,
                 rssi INTEGER,
@@ -406,6 +403,7 @@ def init_database() -> None:
         ("relay_node", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
         ("tx_after", "INTEGER" if DATABASE_BACKEND == "sqlite" else "BIGINT"),
         ("message_type", "TEXT"),
+        ("mqtt_source", "TEXT"),
         (
             "raw_service_envelope",
             "BLOB" if DATABASE_BACKEND == "sqlite" else "BYTEA",
@@ -462,6 +460,9 @@ def init_database() -> None:
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_packet_history_gateway_stats ON packet_history(timestamp, gateway_id)"
     )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_packet_history_mqtt_source_stats ON packet_history(timestamp, mqtt_source)"
+    )
 
     # Additional proven performance indexes (20-40% improvements, cache-aware benchmarked)
     cursor.execute(
@@ -481,6 +482,9 @@ def init_database() -> None:
     # Keep mesh_packet_id index (used for packet lookups)
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_packet_mesh_id ON packet_history(mesh_packet_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_packet_history_mqtt_source_mesh_id ON packet_history(mqtt_source, mesh_packet_id)"
     )
 
     # Drop old redundant indexes (composite indexes above can serve the same queries via leftmost prefix)
@@ -1032,6 +1036,7 @@ def log_packet_to_database(
     processed_successfully: bool = True,
     raw_service_envelope_data: bytes | None = None,
     parsing_error: str | None = None,
+    mqtt_source: str | None = None,
 ) -> None:
     """Log received packet to database for history tracking."""
     current_time = time.time()
@@ -1107,11 +1112,11 @@ def log_packet_to_database(
             """
             INSERT INTO packet_history
             (timestamp, topic, from_node_id, to_node_id, portnum, portnum_name,
-             gateway_id, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start, payload_length,
+             gateway_id, mqtt_source, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start, payload_length,
              raw_payload, processed_successfully, via_mqtt, want_ack, priority, delayed,
              channel_index, rx_time, pki_encrypted, next_hop, relay_node, tx_after,
              message_type, raw_service_envelope, parsing_error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 current_time,
@@ -1121,6 +1126,7 @@ def log_packet_to_database(
                 portnum,
                 portnum_name,
                 gateway_id,
+                mqtt_source,
                 channel_id,
                 mesh_packet_id,
                 rssi,
@@ -1321,14 +1327,30 @@ def on_connect(
     properties: Any | None = None,
 ) -> None:
     """Callback for when the client receives a CONNACK response from the server."""
+    source = userdata or {}
+    source_name = source.get("name", "default")
+    broker_address = source.get("broker_address", "unknown")
+    topic_to_subscribe = f"{source.get('topic_prefix', 'msh')}{source.get('topic_suffix', '/+/+/+/#')}"
+
     if rc == 0:
-        logging.info(f"Connected successfully to MQTT Broker: {MQTT_BROKER_ADDRESS}")
-        # Subscribe to the Meshtastic topics
-        topic_to_subscribe = f"{MQTT_TOPIC_PREFIX}{MQTT_TOPIC_SUFFIX}"
+        logging.info(
+            "Connected successfully to MQTT Broker %s (%s)",
+            source_name,
+            broker_address,
+        )
         client.subscribe(topic_to_subscribe)
-        logging.info(f"Subscribed to MQTT topic: {topic_to_subscribe}")
+        logging.info(
+            "Subscribed %s to MQTT topic: %s",
+            source_name,
+            topic_to_subscribe,
+        )
     else:
-        logging.error(f"Failed to connect to MQTT Broker, return code {rc}")
+        logging.error(
+            "Failed to connect to MQTT Broker %s (%s), return code %s",
+            source_name,
+            broker_address,
+            rc,
+        )
         if rc == 3:
             logging.error("Connection refused: Server unavailable.")
         elif rc == 4:
@@ -1341,7 +1363,14 @@ def on_connect(
 
 def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
     """Callback for when a PUBLISH message is received from the server."""
-    logging.debug(f"Received message on topic {msg.topic}: {len(msg.payload)} bytes")
+    source = userdata or {}
+    source_name = source.get("name", "default")
+    logging.debug(
+        "Received message from %s on topic %s: %s bytes",
+        source_name,
+        msg.topic,
+        len(msg.payload),
+    )
 
     # Skip JSON messages - we only want protobuf messages
     if "/json/" in msg.topic:
@@ -1686,6 +1715,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             processed_successfully,
             raw_service_envelope_data,
             parsing_error,
+            source_name,
         )
     except Exception as db_error:
         logging.error(f"Failed to log packet to database: {db_error}")
@@ -1710,9 +1740,23 @@ def on_disconnect(
     properties: Any | None = None,
 ) -> None:
     """Callback for when the client disconnects from the broker."""
-    logging.info(f"Disconnected from MQTT Broker with result code {rc}")
+    source = userdata or {}
+    source_name = source.get("name", "default")
+    broker_address = source.get("broker_address", "unknown")
+    broker_port = source.get("port", 1883)
+
+    logging.info(
+        "Disconnected from MQTT Broker %s (%s:%s) with result code %s",
+        source_name,
+        broker_address,
+        broker_port,
+        rc,
+    )
     if rc != 0:
-        logging.error("Unexpected MQTT disconnection. Will attempt to reconnect.")
+        logging.error(
+            "Unexpected MQTT disconnection for %s. Will attempt to reconnect.",
+            source_name,
+        )
 
         # Implement exponential backoff retry logic
         max_retries = 10
@@ -1728,10 +1772,13 @@ def on_disconnect(
 
             try:
                 logging.info(
-                    f"Attempting to reconnect to MQTT broker at {MQTT_BROKER_ADDRESS}:{MQTT_PORT}..."
+                    "Attempting to reconnect %s to MQTT broker at %s:%s...",
+                    source_name,
+                    broker_address,
+                    broker_port,
                 )
                 client.reconnect()
-                logging.info("Successfully reconnected to MQTT broker")
+                logging.info("Successfully reconnected %s to MQTT broker", source_name)
                 return
             except ConnectionRefusedError:
                 logging.warning(
@@ -1759,39 +1806,65 @@ def main() -> None:
     init_database()
     load_node_cache()
 
-    # Initialize MQTT Client
-    mqtt_client = mqtt.Client(CallbackAPIVersion.VERSION2)
+    mqtt_clients: list[mqtt.Client] = []
 
-    if MQTT_USERNAME:
-        mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_message = on_message
-    mqtt_client.on_disconnect = on_disconnect  # type: ignore[assignment]
-
-    # Attempt to connect
-    try:
-        logging.info(
-            f"Connecting to MQTT broker at {MQTT_BROKER_ADDRESS}:{MQTT_PORT}..."
+    for source in MQTT_SOURCES:
+        mqtt_client = mqtt.Client(
+            CallbackAPIVersion.VERSION2,
+            userdata=source,
         )
-        mqtt_client.connect(MQTT_BROKER_ADDRESS, MQTT_PORT, 60)
-    except ConnectionRefusedError:
-        logging.error(
-            f"Connection to MQTT broker {MQTT_BROKER_ADDRESS}:{MQTT_PORT} refused. Check address/port and broker status."
-        )
-        return
-    except socket.gaierror:
-        logging.error(
-            f"Cannot resolve hostname for MQTT broker: {MQTT_BROKER_ADDRESS}. Check DNS or network."
-        )
-        return
-    except Exception as e:
-        logging.error(f"Failed to connect to MQTT broker: {e}")
+
+        if source.get("username"):
+            mqtt_client.username_pw_set(source.get("username"), source.get("password"))
+
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_message = on_message
+        mqtt_client.on_disconnect = on_disconnect  # type: ignore[assignment]
+
+        try:
+            logging.info(
+                "Connecting source %s to MQTT broker at %s:%s...",
+                source["name"],
+                source["broker_address"],
+                source["port"],
+            )
+            mqtt_client.connect(source["broker_address"], int(source["port"]), 60)
+        except ConnectionRefusedError:
+            logging.error(
+                "Connection to MQTT broker %s (%s:%s) refused. Check address/port and broker status.",
+                source["name"],
+                source["broker_address"],
+                source["port"],
+            )
+            continue
+        except socket.gaierror:
+            logging.error(
+                "Cannot resolve hostname for MQTT broker %s: %s. Check DNS or network.",
+                source["name"],
+                source["broker_address"],
+            )
+            continue
+        except Exception as e:
+            logging.error(
+                "Failed to connect source %s to MQTT broker %s:%s: %s",
+                source["name"],
+                source["broker_address"],
+                source["port"],
+                e,
+            )
+            continue
+
+        mqtt_client.loop_start()
+        mqtt_clients.append(mqtt_client)
+
+    if not mqtt_clients:
+        logging.error("No MQTT sources connected successfully. Exiting.")
         return
 
-    # Start the MQTT client loop
-    mqtt_client.loop_start()
-    logging.info("MQTT client loop started. Capturing packets to SQLite database...")
+    logging.info(
+        "Started %s MQTT client loop(s). Capturing packets to database...",
+        len(mqtt_clients),
+    )
 
     # Print initial statistics
     stats = get_node_statistics()
@@ -1827,10 +1900,12 @@ def main() -> None:
             if cleanup_thread.is_alive():
                 logging.warning("Cleanup thread did not finish gracefully")
 
-        logging.info("Stopping MQTT client loop...")
-        mqtt_client.loop_stop()
-        logging.info("Disconnecting from MQTT broker...")
-        mqtt_client.disconnect()
+        logging.info("Stopping MQTT client loops...")
+        for mqtt_client in mqtt_clients:
+            mqtt_client.loop_stop()
+        logging.info("Disconnecting from MQTT brokers...")
+        for mqtt_client in mqtt_clients:
+            mqtt_client.disconnect()
         logging.info("Meshtastic MQTT to SQLite capture tool stopped.")
 
 

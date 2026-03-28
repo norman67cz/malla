@@ -34,6 +34,34 @@ Made by codex:
   if both are set, `MALLA_DATA_RETENTION_HOURS` wins
   `0` means keep everything forever
 
+## Multiple MQTT Servers
+  The first version supports ingest from multiple MQTT brokers in one capture process.
+  Configure them in `config.yaml` using `mqtt_sources:`.
+  Example:
+
+```yaml
+mqtt_sources:
+  - name: cz-west
+    broker_address: mqtt-west.example.net
+    port: 1883
+    username: user1
+    password: pass1
+    topic_prefix: msh
+    topic_suffix: /+/+/+/#
+  - name: cz-east
+    broker_address: mqtt-east.example.net
+    port: 1883
+    username: user2
+    password: pass2
+    topic_prefix: msh
+    topic_suffix: /+/+/+/#
+```
+
+  If `mqtt_sources` is not defined, the existing single-broker config from `.env`
+  is used as a backward-compatible fallback.
+  Raw receptions are kept per broker and stored with `mqtt_source`.
+  Grouped views deduplicate packets across sources by `mesh_packet_id` when available.
+
 ## Uninstall
   sudo ./scripts/uninstall_malla_instance.sh --force
   PURGE_POSTGRES=1 sudo ./scripts/uninstall_malla_instance.sh --force

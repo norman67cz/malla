@@ -43,6 +43,7 @@ class AppConfig:
     mqtt_password: str | None = None
     mqtt_topic_prefix: str = "msh"
     mqtt_topic_suffix: str = "/+/+/+/#"
+    mqtt_sources: list[dict[str, Any]] = field(default_factory=list)
 
     # Meshtastic channel default key (for optional packet decryption)
     # Supports comma-separated list of base64-encoded keys
@@ -82,6 +83,54 @@ class AppConfig:
 
         # Filter out empty keys
         return [key for key in keys if key]
+
+    def get_mqtt_sources(self) -> list[dict[str, Any]]:
+        """Return normalized MQTT source definitions with single-broker fallback."""
+        normalized_sources: list[dict[str, Any]] = []
+
+        for index, source in enumerate(self.mqtt_sources):
+            if not isinstance(source, dict):
+                continue
+
+            name = str(source.get("name") or f"source-{index + 1}").strip()
+            broker_address = str(
+                source.get("broker_address") or source.get("mqtt_broker_address") or ""
+            ).strip()
+            if not broker_address:
+                continue
+
+            normalized_sources.append(
+                {
+                    "name": name,
+                    "broker_address": broker_address,
+                    "port": int(source.get("port", source.get("mqtt_port", 1883))),
+                    "username": source.get("username", source.get("mqtt_username")),
+                    "password": source.get("password", source.get("mqtt_password")),
+                    "topic_prefix": str(
+                        source.get("topic_prefix", source.get("mqtt_topic_prefix", "msh"))
+                    ).strip()
+                    or "msh",
+                    "topic_suffix": str(
+                        source.get("topic_suffix", source.get("mqtt_topic_suffix", "/+/+/+/#"))
+                    ).strip()
+                    or "/+/+/+/#",
+                }
+            )
+
+        if normalized_sources:
+            return normalized_sources
+
+        return [
+            {
+                "name": "default",
+                "broker_address": self.mqtt_broker_address,
+                "port": self.mqtt_port,
+                "username": self.mqtt_username,
+                "password": self.mqtt_password,
+                "topic_prefix": self.mqtt_topic_prefix,
+                "topic_suffix": self.mqtt_topic_suffix,
+            }
+        ]
 
 
 # ---------------------------------------------------------------------------
