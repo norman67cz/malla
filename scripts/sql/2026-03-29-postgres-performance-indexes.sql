@@ -28,6 +28,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ph_port_from_timestamp_desc
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ph_port_source_from_timestamp_desc
     ON packet_history (portnum_name, mqtt_source, from_node_id, timestamp DESC);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ph_position_source_node_time_desc
+    ON packet_history (mqtt_source, from_node_id, timestamp DESC)
+    WHERE portnum = 3
+      AND raw_payload IS NOT NULL
+      AND from_node_id IS NOT NULL;
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ph_mesh_timestamp_desc
     ON packet_history (mesh_packet_id, timestamp DESC)
     WHERE mesh_packet_id IS NOT NULL AND mesh_packet_id != 0;

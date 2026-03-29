@@ -1907,47 +1907,6 @@ class NodeRepository:
                 )
 
                 if needs_24h_stats:
-                    count_query = f"""
-                        SELECT COUNT(*) as total
-                        {firmware_from_clause}
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_24h,
-                                SUM(
-                                    CASE
-                                        WHEN hop_start IS NOT NULL
-                                         AND hop_limit IS NOT NULL
-                                         AND (hop_start - hop_limit) = 0
-                                        THEN 1
-                                        ELSE 0
-                                    END
-                                ) as direct_packet_count_24h,
-                                MAX(timestamp) as last_packet_time
-                            FROM packet_history
-                            WHERE timestamp > (strftime('%s', 'now') - 86400)
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) stats ON ni.node_id = stats.node_id
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_total,
-                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) alltime ON ni.node_id = alltime.node_id
-                        {firmware_where_clause}
-                    """
-                    count_params: list[Any] = []
-                    if mqtt_source:
-                        count_params.extend([mqtt_source, mqtt_source])
-                    count_params.extend(params)
-                    cursor.execute(count_query, count_params)
-                    total_count = cursor.fetchone()["total"]
-
                     firmware_query = f"""
                         SELECT
                             ni.node_id,
@@ -1963,7 +1922,8 @@ class NodeRepository:
                             COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                             COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
                             COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
-                            datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str
+                            datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str,
+                            COUNT(*) OVER() as total_count
                         {firmware_from_clause}
                         LEFT JOIN (
                             SELECT
@@ -2014,28 +1974,6 @@ class NodeRepository:
                     query_params.extend(params)
                     query_params.extend([limit, offset])
                 else:
-                    count_query = f"""
-                        SELECT COUNT(*) as total
-                        {firmware_from_clause}
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_total,
-                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) alltime ON ni.node_id = alltime.node_id
-                        {firmware_where_clause}
-                    """
-                    count_params = []
-                    if mqtt_source:
-                        count_params.append(mqtt_source)
-                    count_params.extend(params)
-                    cursor.execute(count_query, count_params)
-                    total_count = cursor.fetchone()["total"]
-
                     firmware_query = f"""
                         SELECT
                             ni.node_id,
@@ -2051,7 +1989,8 @@ class NodeRepository:
                             0 as direct_packet_count_24h,
                             0 as gateway_packet_count_24h,
                             ni.last_updated as last_packet_time,
-                            datetime(ni.last_updated, 'unixepoch') as last_packet_str
+                            datetime(ni.last_updated, 'unixepoch') as last_packet_str,
+                            COUNT(*) OVER() as total_count
                         {firmware_from_clause}
                         LEFT JOIN (
                             SELECT
@@ -2075,7 +2014,9 @@ class NodeRepository:
 
                 cursor.execute(firmware_query, query_params)
                 nodes = [dict(row) for row in cursor.fetchall()]
+                total_count = nodes[0]["total_count"] if nodes else 0
                 for node in nodes:
+                    node.pop("total_count", None)
                     node["firmware_info_state"] = firmware_info_filter
             elif firmware_info_filter == "older_than_2_6":
                 older_than_where_conditions = list(where_conditions)
@@ -4928,16 +4869,6 @@ class LocationRepository:
                 AND ph.raw_payload IS NOT NULL
                 ORDER BY ph.timestamp DESC
             """
-
-            # Ensure we have optimal indexes for this query
-            try:
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_packet_history_position_lookup
-                    ON packet_history(portnum, from_node_id, timestamp DESC)
-                    WHERE portnum = 3 AND raw_payload IS NOT NULL
-                """)
-            except Exception as e:
-                logger.debug(f"Index creation skipped or failed: {e}")
 
             query_start = time.time()
             cursor.execute(query, mqtt_source_params + node_ids_params)

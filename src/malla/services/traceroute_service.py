@@ -36,6 +36,18 @@ class TracerouteService:
     _NETWORK_GRAPH_CACHE_TTL_SEC = 30
 
     @staticmethod
+    def _normalize_network_graph_cache_filters(
+        filters: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Round highly volatile time filters so cache survives page refreshes."""
+        normalized = dict(filters)
+        for key in ("start_time", "end_time"):
+            value = normalized.get(key)
+            if isinstance(value, (int, float)):
+                normalized[key] = int(value // 60) * 60
+        return normalized
+
+    @staticmethod
     def get_traceroutes(
         page: int = 1,
         per_page: int = 50,
@@ -975,12 +987,15 @@ class TracerouteService:
             else:
                 filters = dict(filters)
 
+            normalized_filters = (
+                TracerouteService._normalize_network_graph_cache_filters(filters)
+            )
             cache_key = json.dumps(
                 {
                     "hours": hours,
                     "min_snr": min_snr,
                     "include_indirect": include_indirect,
-                    "filters": filters,
+                    "filters": normalized_filters,
                     "limit_packets": limit_packets,
                 },
                 sort_keys=True,

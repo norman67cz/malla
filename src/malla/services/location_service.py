@@ -413,6 +413,8 @@ class LocationService:
                     network_filters["end_time"] = filters["end_time"]
                 if filters.get("gateway_id"):
                     network_filters["gateway_id"] = filters["gateway_id"]
+                if filters.get("mqtt_source"):
+                    network_filters["mqtt_source"] = filters["mqtt_source"]
 
                 network_data = TracerouteService.get_network_graph_data(
                     hours=hours,
