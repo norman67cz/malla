@@ -491,7 +491,13 @@ def api_live_packets():
             ORDER BY mqtt_source
             """
         )
-        available_mqtt_sources = [row[0] for row in cursor.fetchall() if row[0]]
+        available_mqtt_sources = {row[0] for row in cursor.fetchall() if row[0]}
+        available_mqtt_sources.update(
+            str(source.get("name", "")).strip()
+            for source in get_config().get_mqtt_sources()
+            if str(source.get("name", "")).strip()
+        )
+        available_mqtt_sources = sorted(available_mqtt_sources)
 
         cursor.execute(
             """
