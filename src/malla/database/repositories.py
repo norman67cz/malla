@@ -335,6 +335,58 @@ class DashboardRepository:
     """Repository for dashboard statistics."""
 
     @staticmethod
+    def get_cleanup_status() -> dict[str, Any] | None:
+        """Get the latest persisted cleanup run status for dashboard display."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    last_run,
+                    cutoff_time,
+                    retention_hours,
+                    packets_deleted,
+                    nodes_deleted
+                FROM cleanup_status
+                WHERE status_key = ?
+                """,
+                ("default",),
+            )
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row:
+                return None
+
+            retention_hours = int(row["retention_hours"] or 0)
+            retention_days = retention_hours / 24 if retention_hours else 0
+            last_run = float(row["last_run"] or 0)
+            cutoff_time = float(row["cutoff_time"] or 0)
+
+            return {
+                "last_run": last_run,
+                "last_run_str": datetime.fromtimestamp(last_run, UTC).strftime(
+                    "%Y-%m-%d %H:%M UTC"
+                )
+                if last_run
+                else None,
+                "cutoff_time": cutoff_time,
+                "cutoff_time_str": datetime.fromtimestamp(cutoff_time, UTC).strftime(
+                    "%Y-%m-%d %H:%M UTC"
+                )
+                if cutoff_time
+                else None,
+                "retention_hours": retention_hours,
+                "retention_days": retention_days,
+                "packets_deleted": int(row["packets_deleted"] or 0),
+                "nodes_deleted": int(row["nodes_deleted"] or 0),
+            }
+        except Exception as e:
+            logger.error(f"Error getting cleanup status: {e}")
+            return None
+
+    @staticmethod
     def get_stats(
         gateway_id: str | None = None, mqtt_source: str | None = None
     ) -> dict[str, Any]:

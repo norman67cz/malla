@@ -737,6 +737,19 @@ def init_database() -> None:
     """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cleanup_status (
+            status_key TEXT PRIMARY KEY,
+            last_run DOUBLE PRECISION NOT NULL,
+            cutoff_time DOUBLE PRECISION NOT NULL,
+            retention_hours BIGINT NOT NULL,
+            packets_deleted BIGINT NOT NULL,
+            nodes_deleted BIGINT NOT NULL
+        )
+    """
+    )
+
     # Composite indexes for /api/nodes aggregation queries (96% faster than single-column indexes)
     # These covering indexes allow SQLite to perform aggregations using only the index
     cursor.execute(
@@ -1548,6 +1561,34 @@ def cleanup_old_data() -> None:
                 (cutoff_time,),
             )
             nodes_deleted = cursor.rowcount
+
+            cursor.execute(
+                """
+                INSERT INTO cleanup_status (
+                    status_key,
+                    last_run,
+                    cutoff_time,
+                    retention_hours,
+                    packets_deleted,
+                    nodes_deleted
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(status_key) DO UPDATE SET
+                    last_run = excluded.last_run,
+                    cutoff_time = excluded.cutoff_time,
+                    retention_hours = excluded.retention_hours,
+                    packets_deleted = excluded.packets_deleted,
+                    nodes_deleted = excluded.nodes_deleted
+                """,
+                (
+                    "default",
+                    current_time,
+                    cutoff_time,
+                    DATA_RETENTION_HOURS,
+                    packets_deleted,
+                    nodes_deleted,
+                ),
+            )
 
             conn.commit()
 

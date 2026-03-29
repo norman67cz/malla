@@ -150,6 +150,7 @@ def dashboard():
     try:
         # Get basic dashboard stats
         stats = DashboardRepository.get_stats()
+        cleanup_status = DashboardRepository.get_cleanup_status()
 
         # Get gateway statistics from the new cached service
         from ..services.gateway_service import GatewayService
@@ -161,16 +162,19 @@ def dashboard():
             "dashboard.html",
             stats=stats,
             gateway_count=gateway_count,
+            cleanup_status=cleanup_status,
             seo_title=translate("page.dashboard_title", normalize_language(session.get("lang"))),
         )
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}")
         # Fallback to basic stats without gateway info
         stats = DashboardRepository.get_stats()
+        cleanup_status = DashboardRepository.get_cleanup_status()
         return render_template(
             "dashboard.html",
             stats=stats,
             gateway_count=0,
+            cleanup_status=cleanup_status,
             error_message="Some dashboard features may be unavailable",
             seo_title=translate("page.dashboard_title", normalize_language(session.get("lang"))),
         )
