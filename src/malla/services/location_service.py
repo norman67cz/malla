@@ -1127,19 +1127,23 @@ class LocationService:
 
             where_sql = " AND ".join(where_clauses)
             query = f"""
-                SELECT ph.from_node_id, ph.timestamp, ph.raw_payload
-                FROM packet_history ph
-                INNER JOIN (
-                    SELECT from_node_id, MAX(timestamp) AS max_timestamp
-                    FROM packet_history ph2
-                    WHERE {where_sql.replace('ph.', 'ph2.')}
-                    GROUP BY from_node_id
-                ) latest
-                    ON latest.from_node_id = ph.from_node_id
-                   AND latest.max_timestamp = ph.timestamp
-                WHERE {where_sql}
+                WITH ranked_neighborinfo AS (
+                    SELECT
+                        ph.from_node_id,
+                        ph.timestamp,
+                        ph.raw_payload,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY ph.from_node_id
+                            ORDER BY ph.timestamp DESC, ph.id DESC
+                        ) AS row_rank
+                    FROM packet_history ph
+                    WHERE {where_sql}
+                )
+                SELECT from_node_id, timestamp, raw_payload
+                FROM ranked_neighborinfo
+                WHERE row_rank = 1
             """
-            cursor.execute(query, params * 2)
+            cursor.execute(query, params)
             rows = [dict(r) for r in cursor.fetchall()]
             conn.close()
 
