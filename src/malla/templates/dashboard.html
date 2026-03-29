@@ -496,8 +496,13 @@ let chartInstances = {}; // Store chart instances for theme updates
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
 const DASHBOARD_REFRESH_MS = 30000;
-let temporalWindowHours = 24;
-let selectedMqttSource = 'cz';
+const dashboardUrlParams = new URLSearchParams(window.location.search);
+let temporalWindowHours = [24, 72, 168, 336].includes(Number(dashboardUrlParams.get('temporal_window_hours')))
+    ? Number(dashboardUrlParams.get('temporal_window_hours'))
+    : 24;
+let selectedMqttSource = dashboardUrlParams.has('mqtt_source')
+    ? (dashboardUrlParams.get('mqtt_source') || '')
+    : 'cz';
 
 // Get theme-aware colors for charts
 function getChartColors() {
@@ -586,6 +591,30 @@ function updateChartsForTheme() {
     }
 }
 
+function syncDashboardUrl() {
+    const url = new URL(window.location);
+    if (selectedMqttSource) {
+        url.searchParams.set('mqtt_source', selectedMqttSource);
+    } else {
+        url.searchParams.delete('mqtt_source');
+    }
+    if (temporalWindowHours !== 24) {
+        url.searchParams.set('temporal_window_hours', String(temporalWindowHours));
+    } else {
+        url.searchParams.delete('temporal_window_hours');
+    }
+    window.history.replaceState({}, '', url);
+}
+
+function ensureDashboardSourceOption(select, value) {
+    if (!select || !value) return;
+    if (Array.from(select.options).some((option) => option.value === value)) return;
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    select.insertBefore(option, select.querySelector('option[value=""]') || null);
+}
+
 // Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', function () {
     const dashboardMqttSource = document.getElementById('dashboardMqttSource');
@@ -596,13 +625,17 @@ document.addEventListener('DOMContentLoaded', function () {
             if (nextHours === temporalWindowHours) return;
             temporalWindowHours = nextHours;
             updateTemporalWindowButtons();
+            syncDashboardUrl();
             refreshDashboardData();
         });
     });
 
     if (dashboardMqttSource) {
+        ensureDashboardSourceOption(dashboardMqttSource, selectedMqttSource);
+        dashboardMqttSource.value = selectedMqttSource;
         dashboardMqttSource.addEventListener('change', function() {
             selectedMqttSource = this.value || '';
+            syncDashboardUrl();
             refreshDashboardData();
         });
 
@@ -619,8 +652,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     option.textContent = source;
                     dashboardMqttSource.appendChild(option);
                 });
-                selectedMqttSource = sources.includes('cz') ? 'cz' : '';
+                if (selectedMqttSource && !sources.includes(selectedMqttSource)) {
+                    selectedMqttSource = sources.includes('cz') ? 'cz' : '';
+                } else if (!selectedMqttSource && sources.includes('cz')) {
+                    selectedMqttSource = 'cz';
+                }
                 dashboardMqttSource.value = selectedMqttSource;
+                syncDashboardUrl();
                 refreshDashboardData();
             })
             .catch((error) => console.error('Error loading dashboard MQTT sources:', error));

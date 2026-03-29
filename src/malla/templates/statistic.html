@@ -85,6 +85,7 @@
 <script src="{{ url_for('static', filename='js/modern-table.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
     const periodButtons = document.querySelectorAll('[data-period]');
     const periodLabel = document.getElementById('statisticPeriodLabel');
     const refreshButton = document.getElementById('refreshStatisticTable');
@@ -130,6 +131,30 @@ document.addEventListener('DOMContentLoaded', function() {
         ]
     });
 
+    function ensureStatisticSourceOption(value) {
+        if (!value) return;
+        if (Array.from(mqttSourceSelect.options).some((option) => option.value === value)) return;
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        mqttSourceSelect.appendChild(option);
+    }
+
+    function syncStatisticUrl(period, mqttSource) {
+        const url = new URL(window.location);
+        if (period && period !== '1d') {
+            url.searchParams.set('period', period);
+        } else {
+            url.searchParams.delete('period');
+        }
+        if (mqttSource) {
+            url.searchParams.set('mqtt_source', mqttSource);
+        } else {
+            url.searchParams.delete('mqtt_source');
+        }
+        window.history.replaceState({}, '', url);
+    }
+
     function renderCount(value) {
         const count = Number(value) || 0;
         return `<span class="statistic-count">${count}</span>`;
@@ -143,6 +168,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const normalized = periodLabels[period] ? period : '1d';
         table.setFilters({ period: normalized, mqtt_source: mqttSourceSelect.value || '' });
         periodLabel.textContent = periodLabels[normalized];
+        syncStatisticUrl(normalized, mqttSourceSelect.value || '');
 
         periodButtons.forEach(button => {
             const isActive = button.dataset.period === normalized;
@@ -162,6 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     mqttSourceSelect.addEventListener('change', function() {
         table.setFilters({ period: getActivePeriod(), mqtt_source: this.value || '' });
+        syncStatisticUrl(getActivePeriod(), this.value || '');
     });
 
     fetch('/api/meshtastic/mqtt-sources')
@@ -177,12 +204,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 option.textContent = source;
                 mqttSourceSelect.appendChild(option);
             });
-            mqttSourceSelect.value = sources.includes('cz') ? 'cz' : '';
+            const requestedSource = urlParams.get('mqtt_source') || '';
+            if (requestedSource && sources.includes(requestedSource)) {
+                mqttSourceSelect.value = requestedSource;
+            } else {
+                mqttSourceSelect.value = sources.includes('cz') ? 'cz' : '';
+            }
             table.setFilters({ period: getActivePeriod(), mqtt_source: mqttSourceSelect.value || '' });
+            syncStatisticUrl(getActivePeriod(), mqttSourceSelect.value || '');
         })
         .catch((error) => console.error('Error loading MQTT sources:', error));
 
-    setPeriod('1d');
+    ensureStatisticSourceOption(urlParams.get('mqtt_source') || '');
+    if (urlParams.get('mqtt_source')) {
+        mqttSourceSelect.value = urlParams.get('mqtt_source') || '';
+    }
+    setPeriod(urlParams.get('period') || '1d');
 });
 </script>
 {% endblock %}

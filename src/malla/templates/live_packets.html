@@ -194,6 +194,7 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const liveLogUrlParams = new URLSearchParams(window.location.search);
     const headerMeta = document.getElementById('liveLogHeaderMeta');
     const tableHeaderRow = document.querySelector('.table-header > .d-flex');
     if (headerMeta && tableHeaderRow) {
@@ -250,6 +251,59 @@ document.addEventListener('DOMContentLoaded', function() {
     let isLoading = false;
     let refreshTimer = null;
     let filtersInitialized = false;
+
+    function ensureLiveLogSelectOption(select, value) {
+        if (!select || !value) return;
+        if (Array.from(select.options).some((option) => option.value === value)) return;
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+    }
+
+    function applyFiltersFromUrl() {
+        ensureLiveLogSelectOption(channelFilter, liveLogUrlParams.get('channel_id') || '');
+        ensureLiveLogSelectOption(gatewaySourceFilter, liveLogUrlParams.get('gateway_source') || '');
+        ensureLiveLogSelectOption(mqttSourceFilter, liveLogUrlParams.get('mqtt_source') || '');
+        ensureLiveLogSelectOption(typeFilter, liveLogUrlParams.get('packet_type') || '');
+        channelFilter.value = liveLogUrlParams.get('channel_id') || '';
+        gatewaySourceFilter.value = liveLogUrlParams.get('gateway_source') || '';
+        mqttSourceFilter.value = liveLogUrlParams.get('mqtt_source') || '';
+        typeFilter.value = liveLogUrlParams.get('packet_type') || '';
+        fromFilter.value = liveLogUrlParams.get('from_filter') || '';
+        toFilter.value = liveLogUrlParams.get('to_filter') || '';
+        groupByMeshIdFilter.checked = ['1', 'true', 'on'].includes(
+            (liveLogUrlParams.get('group_by_mesh_id') || '').toLowerCase()
+        );
+    }
+
+    function syncLiveLogUrl() {
+        const url = new URL(window.location);
+        const filters = [
+            ['channel_id', channelFilter.value],
+            ['gateway_source', gatewaySourceFilter.value],
+            ['mqtt_source', mqttSourceFilter.value],
+            ['packet_type', typeFilter.value],
+            ['from_filter', fromFilter.value.trim()],
+            ['to_filter', toFilter.value.trim()],
+        ];
+
+        filters.forEach(([key, value]) => {
+            if (value) {
+                url.searchParams.set(key, value);
+            } else {
+                url.searchParams.delete(key);
+            }
+        });
+
+        if (groupByMeshIdFilter.checked) {
+            url.searchParams.set('group_by_mesh_id', '1');
+        } else {
+            url.searchParams.delete('group_by_mesh_id');
+        }
+
+        window.history.replaceState({}, '', url);
+    }
 
     function escapeHtml(value) {
         const div = document.createElement('div');
@@ -318,11 +372,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!filtersInitialized && !selected.mqtt_source && availableMqttSources.includes('cz')) {
             filtersInitialized = true;
             mqttSourceFilter.value = 'cz';
+            syncLiveLogUrl();
             loadPackets();
             return;
         }
 
         filtersInitialized = true;
+        syncLiveLogUrl();
     }
 
     function renderPackets(packets) {
@@ -435,17 +491,24 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     [channelFilter, gatewaySourceFilter, mqttSourceFilter, typeFilter, groupByMeshIdFilter].forEach(filterEl => {
-        filterEl.addEventListener('change', loadPackets);
+        filterEl.addEventListener('change', function() {
+            syncLiveLogUrl();
+            loadPackets();
+        });
     });
 
     [fromFilter, toFilter].forEach(inputEl => {
         inputEl.addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
+                syncLiveLogUrl();
                 loadPackets();
             }
         });
-        inputEl.addEventListener('change', loadPackets);
+        inputEl.addEventListener('change', function() {
+            syncLiveLogUrl();
+            loadPackets();
+        });
     });
 
     clearFiltersBtn.addEventListener('click', function() {
@@ -456,11 +519,13 @@ document.addEventListener('DOMContentLoaded', function() {
         fromFilter.value = '';
         toFilter.value = '';
         groupByMeshIdFilter.checked = false;
+        syncLiveLogUrl();
         loadPackets();
     });
 
     refreshNowBtn.addEventListener('click', loadPackets);
 
+    applyFiltersFromUrl();
     loadPackets();
     startAutoRefresh();
 });
