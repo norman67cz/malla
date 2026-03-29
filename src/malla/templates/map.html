@@ -862,6 +862,8 @@ function initializeInterface() {
             const select = document.getElementById('mqttSourceFilter');
             if (!select) return;
 
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasExplicitUrlValue = urlParams.has('mqtt_source');
             const selectedValue = select.value;
             (data.mqtt_sources || []).forEach((source) => {
                 const option = document.createElement('option');
@@ -870,7 +872,13 @@ function initializeInterface() {
                 select.appendChild(option);
             });
 
-            select.value = selectedValue || ((data.mqtt_sources || []).includes('cz') ? 'cz' : '');
+            if (hasExplicitUrlValue) {
+                select.value = urlParams.get('mqtt_source') || '';
+            } else if (selectedValue) {
+                select.value = selectedValue;
+            } else {
+                select.value = (data.mqtt_sources || []).includes('cz') ? 'cz' : '';
+            }
         } catch (error) {
             console.error('Error loading MQTT sources:', error);
         }
@@ -1013,6 +1021,16 @@ function buildFilterParams() {
 }
 
 function getMapMqttSourceValue(formData = null) {
+    if (formData) {
+        return (formData.get('mqtt_source') || '').trim();
+    }
+
+    const form = document.getElementById('locationFilterForm');
+    if (form) {
+        formData = new FormData(form);
+        return (formData.get('mqtt_source') || '').trim();
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('mqtt_source')) {
         return urlParams.get('mqtt_source') || '';
