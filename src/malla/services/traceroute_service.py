@@ -469,6 +469,7 @@ class TracerouteService:
             logger.info(
                 f"TIMING: Data fetch took {fetch_duration:.3f}s for {len(result['packets'])} packets"
             )
+            packets_by_id = {packet["id"]: packet for packet in result["packets"]}
 
             # ------------------------------------------------------------------
             # Pre-fetch node location history using a single query per node
@@ -610,7 +611,8 @@ class TracerouteService:
 
                         tr_packet = TraceroutePacket(
                             packet_data=packet,
-                            resolve_names=True,
+                            resolve_names=False,
+                            pre_parsed_route_data=parsed_route_cache.get(packet["id"]),
                         )
 
                         # Track cache performance before distance calculation
@@ -787,6 +789,7 @@ class TracerouteService:
                 build_start = time.time()
                 analyzed_links: list[dict[str, Any]] = []
                 analyzed_paths: list[dict[str, Any]] = []
+                final_node_ids: set[int] = set()
 
                 for (node1_id, node2_id), stats in link_stats.items():
                     if stats["traceroute_count"] == 0:
@@ -799,9 +802,7 @@ class TracerouteService:
                     last_seen = None
                     if stats["recent_packets"] and len(stats["recent_packets"]) > 0:
                         packet_id = stats["recent_packets"][0]
-                        pkt = next(
-                            (p for p in result["packets"] if p["id"] == packet_id), None
-                        )
+                        pkt = packets_by_id.get(packet_id)
                         if pkt and "timestamp" in pkt:
                             last_seen = pkt["timestamp"]
 
@@ -829,6 +830,7 @@ class TracerouteService:
                             "last_seen": last_seen,
                         }
                     )
+                    final_node_ids.update([node1_id, node2_id])
 
                 # Build indirect paths results
                 for (from_id, to_id), stats in path_stats.items():
@@ -846,9 +848,7 @@ class TracerouteService:
                     last_seen = None
                     if stats["recent_packets"]:
                         pkt_id = stats["recent_packets"][0]
-                        pkt_obj = next(
-                            (p for p in result["packets"] if p["id"] == pkt_id), None
-                        )
+                        pkt_obj = packets_by_id.get(pkt_id)
                         if pkt_obj and "timestamp" in pkt_obj:
                             last_seen = pkt_obj["timestamp"]
 
@@ -881,6 +881,26 @@ class TracerouteService:
                             "packet_url": pkt_url,
                             "last_seen": last_seen,
                         }
+                    )
+                    final_node_ids.update([from_id, to_id])
+
+                # Resolve names only for nodes that actually made it into the
+                # aggregated result sets, instead of once per input packet.
+                resolved_final_names = get_bulk_node_names(list(final_node_ids))
+                for link in analyzed_links:
+                    link["from_node_name"] = resolved_final_names.get(
+                        link["from_node_id"], f"!{link['from_node_id']:08x}"
+                    )
+                    link["to_node_name"] = resolved_final_names.get(
+                        link["to_node_id"], f"!{link['to_node_id']:08x}"
+                    )
+
+                for path in analyzed_paths:
+                    path["from_node_name"] = resolved_final_names.get(
+                        path["from_node_id"], f"!{path['from_node_id']:08x}"
+                    )
+                    path["to_node_name"] = resolved_final_names.get(
+                        path["to_node_id"], f"!{path['to_node_id']:08x}"
                     )
 
                 # Sort and trim results to the requested maximum
