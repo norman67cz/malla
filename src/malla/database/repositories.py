@@ -4078,6 +4078,10 @@ class TracerouteRepository:
                 where_conditions.append("gateway_id = ?")
                 params.append(filters["gateway_id"])
 
+            if filters.get("mqtt_source"):
+                where_conditions.append("mqtt_source = ?")
+                params.append(filters["mqtt_source"])
+
             # New: Optional filtering by primary_channel (matches packet.channel_id field)
             if filters.get("primary_channel"):
                 where_conditions.append("channel_id = ?")
