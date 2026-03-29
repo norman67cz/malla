@@ -26,6 +26,7 @@
 
     .live-log-header-meta {
         white-space: nowrap;
+        margin-right: 0.75rem;
     }
 
     .sidebar-content.live-log-sidebar-compact .sidebar-section > h6 {
@@ -100,16 +101,6 @@
 
 <div class="live-log-layout">
     {% call fullscreen_table_container("livePacketsTableWrap", t('page.live_log_title'), "bi bi-activity", "toggleSidebar") %}
-        <div class="table-header border-top-0 pt-0 px-0 pb-3">
-            <div class="d-flex justify-content-end align-items-center flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2 ms-md-auto live-log-header-meta">
-                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
-                        {{ t('live_log.auto_refresh_on') }}
-                    </span>
-                    <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
-                </div>
-            </div>
-        </div>
         <div class="modern-table-container">
             <div class="table-responsive">
                 <table class="modern-table mb-0 align-middle">
@@ -189,11 +180,27 @@
     ] %}
     {{ table_controls_section(live_log_controls) }}
 </div>
+
+<div id="liveLogHeaderMeta" class="d-none">
+    <div class="d-flex align-items-center gap-2 ms-md-auto live-log-header-meta">
+        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
+            {{ t('live_log.auto_refresh_on') }}
+        </span>
+        <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const headerMeta = document.getElementById('liveLogHeaderMeta');
+    const tableHeaderRow = document.querySelector('.table-header > .d-flex');
+    if (headerMeta && tableHeaderRow) {
+        tableHeaderRow.insertBefore(headerMeta.firstElementChild, document.getElementById('toggleSidebar'));
+        headerMeta.remove();
+    }
+
     const sidebarContent = document.getElementById('sidebarContent');
     const sidebarContainer = document.querySelector('.sidebar-content');
     if (sidebarContent && sidebarContainer) {

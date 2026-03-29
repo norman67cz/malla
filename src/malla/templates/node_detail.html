@@ -165,6 +165,21 @@
                                     <td>{{ node.primary_channel }}</td>
                                 </tr>
                                 {% endif %}
+                                {% if node.last_mqtt_source or node.mqtt_sources %}
+                                <tr>
+                                    <th>MQTT Source:</th>
+                                    <td class="text-nowrap">
+                                        {% if node.last_mqtt_source %}
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">{{ node.last_mqtt_source }}</span>
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                        {% if node.mqtt_sources and node.mqtt_sources|length > 1 %}
+                                            <br><small class="text-muted">Seen on: {{ node.mqtt_sources|join(', ') }}</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
                                 <tr>
                                     <th>Firmware Version:</th>
                                     <td>

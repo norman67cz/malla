@@ -2194,6 +2194,8 @@ class NodeRepository:
                     "avg_rssi": None,
                     "avg_snr": None,
                     "avg_hops": None,
+                    "last_mqtt_source": None,
+                    "mqtt_sources": [],
                     "firmware_generation_hint": _infer_firmware_generation(
                         cursor, node_id, 0
                     ),
@@ -2296,10 +2298,46 @@ class NodeRepository:
                 "avg_hops": round(node_row["avg_hops"], 1)
                 if node_row["avg_hops"]
                 else None,
+                "last_mqtt_source": None,
+                "mqtt_sources": [],
                 "firmware_generation_hint": _infer_firmware_generation(
                     cursor, node_id, node_row["total_packets"]
                 ),
             }
+
+            cursor.execute(
+                """
+                SELECT mqtt_source
+                FROM packet_history
+                WHERE from_node_id = ?
+                  AND mqtt_source IS NOT NULL
+                  AND mqtt_source != ''
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (node_id,),
+            )
+            latest_mqtt_source_row = cursor.fetchone()
+            node_info["last_mqtt_source"] = (
+                latest_mqtt_source_row["mqtt_source"]
+                if latest_mqtt_source_row and latest_mqtt_source_row["mqtt_source"]
+                else None
+            )
+
+            cursor.execute(
+                """
+                SELECT DISTINCT mqtt_source
+                FROM packet_history
+                WHERE from_node_id = ?
+                  AND mqtt_source IS NOT NULL
+                  AND mqtt_source != ''
+                ORDER BY mqtt_source
+                """,
+                (node_id,),
+            )
+            node_info["mqtt_sources"] = [
+                row["mqtt_source"] for row in cursor.fetchall() if row["mqtt_source"]
+            ]
 
             # Get recent packets from this node
             recent_packets_query = """
