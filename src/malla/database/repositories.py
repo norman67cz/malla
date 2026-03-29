@@ -1668,18 +1668,17 @@ class NodeRepository:
                 params.append(filters["role"])
 
             mqtt_source = filters.get("mqtt_source")
+            base_from_clause = "FROM node_info ni"
+            base_params: list[Any] = []
             if mqtt_source:
-                where_conditions.append(
-                    """
-                    EXISTS (
-                        SELECT 1
-                        FROM packet_history ph_src
-                        WHERE ph_src.from_node_id = ni.node_id
-                          AND ph_src.mqtt_source = ?
-                    )
-                    """
-                )
-                params.append(mqtt_source)
+                base_from_clause += """
+                    INNER JOIN (
+                        SELECT DISTINCT from_node_id AS node_id
+                        FROM packet_history
+                        WHERE mqtt_source = ?
+                    ) source_nodes ON ni.node_id = source_nodes.node_id
+                """
+                base_params.append(mqtt_source)
 
             if filters.get("primary_channel"):
                 primary_channels = filters["primary_channel"]
@@ -1708,10 +1707,10 @@ class NodeRepository:
             # Fast count query using only node_info
             count_query = f"""
                 SELECT COUNT(*) as total
-                FROM node_info ni
+                {base_from_clause}
                 {where_clause}
             """
-            cursor.execute(count_query, params)
+            cursor.execute(count_query, base_params + params)
             total_count = cursor.fetchone()["total"]
 
             # Determine sort column mapping
@@ -1766,7 +1765,7 @@ class NodeRepository:
 
                 count_query = f"""
                     SELECT COUNT(*) as total
-                    FROM node_info ni
+                    {base_from_clause}
                     LEFT JOIN (
                         SELECT
                             from_node_id as node_id,
@@ -1788,7 +1787,7 @@ class NodeRepository:
                     ) stats ON ni.node_id = stats.node_id
                     {where_clause}
                 """
-                count_params = ([mqtt_source] if mqtt_source else []) + params
+                count_params = base_params + ([mqtt_source] if mqtt_source else []) + params
                 cursor.execute(count_query, count_params)
                 total_count = cursor.fetchone()["total"]
 
@@ -1808,7 +1807,7 @@ class NodeRepository:
                         COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
                         COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
                         datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str
-                    FROM node_info ni
+                    {base_from_clause}
                     LEFT JOIN (
                         SELECT
                             from_node_id as node_id,
@@ -1868,7 +1867,7 @@ class NodeRepository:
                         0 as gateway_packet_count_24h,
                         ni.last_updated as last_packet_time,
                         datetime(ni.last_updated, 'unixepoch') as last_packet_str
-                    FROM node_info ni
+                    {base_from_clause}
                     {where_clause}
                     ORDER BY {order_column} {order_dir}
                     LIMIT ? OFFSET ?
@@ -1971,7 +1970,7 @@ class NodeRepository:
                         {where_clause}
                         ORDER BY {order_column} {order_dir}
                     """
-                query_no_paging_params: list[Any] = []
+                query_no_paging_params: list[Any] = base_params.copy()
                 if mqtt_source and needs_24h_stats:
                     query_no_paging_params.extend([mqtt_source, mqtt_source, mqtt_source])
                 elif mqtt_source:
@@ -2049,7 +2048,7 @@ class NodeRepository:
                 filtered_nodes.sort(key=_node_sort_key, reverse=reverse)
                 nodes = filtered_nodes[offset : offset + limit]
             else:
-                query_params: list[Any] = []
+                query_params: list[Any] = base_params.copy()
                 if mqtt_source and needs_24h_stats:
                     query_params.extend([mqtt_source, mqtt_source])
                 query_params.extend(params)

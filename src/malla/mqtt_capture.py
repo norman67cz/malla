@@ -748,6 +748,15 @@ def init_database() -> None:
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_packet_history_mqtt_source_stats ON packet_history(timestamp, mqtt_source)"
     )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_packet_history_source_node ON packet_history(mqtt_source, from_node_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_packet_history_source_time_node ON packet_history(mqtt_source, timestamp, from_node_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_packet_history_source_time_gateway ON packet_history(mqtt_source, timestamp, gateway_id)"
+    )
 
     # Additional proven performance indexes (20-40% improvements, cache-aware benchmarked)
     cursor.execute(
