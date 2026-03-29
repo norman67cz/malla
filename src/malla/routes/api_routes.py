@@ -24,6 +24,7 @@ from ..services.location_service import LocationService
 from ..services.meshtastic_service import MeshtasticService
 from ..services.node_service import NodeService
 from ..services.traceroute_service import TracerouteService
+from ..config import get_config
 from ..utils.node_utils import (
     convert_node_id,
     get_bulk_node_names,
@@ -2733,8 +2734,15 @@ def api_mqtt_sources():
     """API endpoint for available MQTT source names."""
     logger.info("API MQTT sources endpoint accessed")
     try:
-        sources = PacketRepository.get_unique_mqtt_sources()
-        return jsonify({"mqtt_sources": sources})
+        sources = set(PacketRepository.get_unique_mqtt_sources())
+        configured_sources = {
+            source.get("name", "").strip()
+            for source in get_config().get_mqtt_sources()
+            if str(source.get("name", "")).strip()
+        }
+        sources.update(configured_sources)
+        ordered_sources = sorted(sources)
+        return jsonify({"mqtt_sources": ordered_sources})
     except Exception as e:
         logger.error(f"Error in API MQTT sources: {e}")
         return jsonify({"error": str(e), "mqtt_sources": []}), 500
