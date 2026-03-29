@@ -66,6 +66,7 @@ DATABASE_BACKEND: str = _cfg.database_backend.lower()
 
 # MQTT Broker details
 MQTT_SOURCES: list[dict[str, Any]] = _cfg.get_mqtt_sources()
+PACKET_REPLAY_DEDUPE_WINDOW_SEC = 15 * 60
 
 # Database file path
 DATABASE_FILE: str = _cfg.database_file
@@ -485,6 +486,9 @@ def init_database() -> None:
     )
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_packet_history_mqtt_source_mesh_id ON packet_history(mqtt_source, mesh_packet_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_packet_history_source_gateway_mesh_time ON packet_history(mqtt_source, gateway_id, mesh_packet_id, timestamp)"
     )
 
     # Drop old redundant indexes (composite indexes above can serve the same queries via leftmost prefix)
@@ -1107,6 +1111,33 @@ def log_packet_to_database(
     with db_lock:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        if mqtt_source and gateway_id and mesh_packet_id not in (None, 0):
+            cursor.execute(
+                """
+                SELECT timestamp
+                FROM packet_history
+                WHERE mqtt_source = ?
+                  AND gateway_id = ?
+                  AND mesh_packet_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (mqtt_source, gateway_id, mesh_packet_id),
+            )
+            existing = cursor.fetchone()
+            if existing:
+                last_seen_ts = float(existing["timestamp"])
+                if current_time - last_seen_ts <= PACKET_REPLAY_DEDUPE_WINDOW_SEC:
+                    logging.info(
+                        "Skipping replayed packet mesh_id=%s from source=%s gateway=%s (seen %.1fs ago)",
+                        mesh_packet_id,
+                        mqtt_source,
+                        gateway_id,
+                        current_time - last_seen_ts,
+                    )
+                    conn.close()
+                    return
 
         cursor.execute(
             """

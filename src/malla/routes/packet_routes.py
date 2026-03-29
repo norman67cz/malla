@@ -44,7 +44,7 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
             """
             SELECT
                 id, timestamp, from_node_id, to_node_id, portnum, portnum_name,
-                gateway_id, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start,
+                gateway_id, mqtt_source, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start,
                 payload_length, processed_successfully, raw_payload,
                 via_mqtt, want_ack, priority, delayed, channel_index, rx_time,
                 pki_encrypted, next_hop, relay_node, tx_after

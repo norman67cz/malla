@@ -4581,6 +4581,12 @@ class LocationRepository:
                     node_ids_params = node_ids_int
 
             # Optimized query using window function instead of correlated subquery
+            mqtt_source_clause = ""
+            mqtt_source_params: list[Any] = []
+            if filters.get("mqtt_source"):
+                mqtt_source_clause = "AND mqtt_source = ?"
+                mqtt_source_params = [filters["mqtt_source"]]
+
             query = f"""
                 WITH max_timestamps AS (
                     SELECT
@@ -4590,6 +4596,7 @@ class LocationRepository:
                     WHERE portnum = 3  -- POSITION_APP
                     AND raw_payload IS NOT NULL
                     AND from_node_id IS NOT NULL
+                    {mqtt_source_clause}
                     {node_ids_clause}
                     GROUP BY from_node_id
                 )
@@ -4623,7 +4630,7 @@ class LocationRepository:
                 logger.debug(f"Index creation skipped or failed: {e}")
 
             query_start = time.time()
-            cursor.execute(query, node_ids_params)
+            cursor.execute(query, mqtt_source_params + node_ids_params)
             raw_rows = cursor.fetchall()
             timing_breakdown["sql_query"] = time.time() - query_start
 

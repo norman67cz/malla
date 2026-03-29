@@ -4,12 +4,16 @@ Main routes for the Meshtastic Mesh Health Web UI
 
 import hashlib
 import hmac
+import json
 import logging
+import re
 import secrets
 import time
+from pathlib import Path
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     flash,
     redirect,
@@ -33,6 +37,32 @@ _WIKI_UNLOCK_ATTEMPTS: dict[str, list[float]] = {}
 _WIKI_UNLOCK_MAX_ATTEMPTS = 5
 _WIKI_UNLOCK_WINDOW_SECONDS = 900
 _WIKI_UNLOCK_LOCK_SECONDS = 900
+
+
+def _build_software_application_schema() -> str:
+    return json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "Malla",
+            "applicationCategory": "NetworkMonitoringApplication",
+            "operatingSystem": "Web",
+            "description": translate("about.summary", normalize_language(session.get("lang"))),
+            "url": url_for("main.about_page", _external=True),
+        },
+        ensure_ascii=False,
+    )
+
+
+def _strip_markdown_preview(text: str, limit: int = 180) -> str:
+    stripped = re.sub(r"!\[[^\]]*]\([^)]+\)", " ", text or "")
+    stripped = re.sub(r"\[[^\]]+]\([^)]+\)", " ", stripped)
+    stripped = re.sub(r"\[\[[^\]]+]]", " ", stripped)
+    stripped = re.sub(r"[#>*_`~-]", " ", stripped)
+    stripped = re.sub(r"\s+", " ", stripped).strip()
+    if len(stripped) <= limit:
+        return stripped
+    return stripped[: limit - 1].rstrip() + "…"
 
 
 def _tr(key: str, **kwargs) -> str:
@@ -131,6 +161,7 @@ def dashboard():
             "dashboard.html",
             stats=stats,
             gateway_count=gateway_count,
+            seo_title=translate("page.dashboard_title", normalize_language(session.get("lang"))),
         )
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}")
@@ -141,6 +172,7 @@ def dashboard():
             stats=stats,
             gateway_count=0,
             error_message="Some dashboard features may be unavailable",
+            seo_title=translate("page.dashboard_title", normalize_language(session.get("lang"))),
         )
 
 
@@ -199,7 +231,10 @@ def mqtt_overlap():
 def help_page():
     """Simple help page describing the main menu sections."""
     try:
-        return render_template("help.html")
+        return render_template(
+            "help.html",
+            seo_title=translate("help.title", normalize_language(session.get("lang"))),
+        )
     except Exception as e:
         logger.error(f"Error in help route: {e}")
         return f"Help error: {e}", 500
@@ -209,7 +244,14 @@ def help_page():
 def about_page():
     """Short about page describing the application."""
     try:
-        return render_template("about.html")
+        return render_template(
+            "about.html",
+            seo_title=f"{translate('page.about_title', normalize_language(session.get('lang')))} - Malla",
+            seo_description=translate("seo.about_description", normalize_language(session.get("lang"))),
+            seo_robots="index,follow",
+            seo_canonical_url=url_for("main.about_page", _external=True),
+            seo_structured_data=_build_software_application_schema(),
+        )
     except Exception as e:
         logger.error(f"Error in about route: {e}")
         return f"About error: {e}", 500
@@ -219,7 +261,10 @@ def about_page():
 def statistic_page():
     """Per-node packet type statistics page."""
     try:
-        return render_template("statistic.html")
+        return render_template(
+            "statistic.html",
+            seo_title=translate("page.statistic_title", normalize_language(session.get("lang"))),
+        )
     except Exception as e:
         logger.error(f"Error in statistic route: {e}")
         return f"Statistic error: {e}", 500
@@ -242,6 +287,35 @@ def wiki_page():
 
         selected_page, page_content, page_exists = WikiService.read_page(page, cfg)
         rendered_page_content = WikiService.render_internal_links(page_content)
+        wiki_title = (
+            Path(selected_page).stem
+            if selected_page
+            else translate("page.wiki_title", normalize_language(session.get("lang")))
+        )
+        wiki_description = _strip_markdown_preview(page_content) or translate(
+            "seo.wiki_description", normalize_language(session.get("lang"))
+        )
+        wiki_canonical_url = (
+            url_for("main.wiki_page", page=selected_page, _external=True)
+            if selected_page
+            else url_for("main.wiki_page", _external=True)
+        )
+        wiki_schema = json.dumps(
+            {
+                "@context": "https://schema.org",
+                "@type": "TechArticle",
+                "headline": wiki_title,
+                "description": wiki_description,
+                "inLanguage": normalize_language(session.get("lang")),
+                "url": wiki_canonical_url,
+                "isPartOf": {
+                    "@type": "WebSite",
+                    "name": "Malla Wiki",
+                    "url": url_for("main.wiki_page", _external=True),
+                },
+            },
+            ensure_ascii=False,
+        )
 
         return render_template(
             "wiki.html",
@@ -256,6 +330,12 @@ def wiki_page():
             wiki_edit_allowed=_wiki_edit_allowed(),
             wiki_base_dir=str(WikiService.get_base_dir(cfg)),
             wiki_csrf_token=_wiki_csrf_token(),
+            wiki_page_title=wiki_title,
+            seo_title=f"{wiki_title} - Wiki - Malla",
+            seo_description=wiki_description,
+            seo_robots="index,follow",
+            seo_canonical_url=wiki_canonical_url,
+            seo_structured_data=wiki_schema,
         )
     except ValueError as e:
         logger.warning(f"Invalid wiki path requested: {e}")
@@ -264,6 +344,42 @@ def wiki_page():
     except Exception as e:
         logger.error(f"Error in wiki route: {e}")
         return f"Wiki error: {e}", 500
+
+
+@main_bp.route("/robots.txt")
+def robots_txt():
+    """Return robots rules for search engines."""
+    lines = [
+        "User-agent: *",
+        "Allow: /about",
+        "Allow: /wiki",
+        "Disallow: /api/",
+        "Disallow: /health",
+        "Disallow: /info",
+        f"Sitemap: {url_for('main.sitemap_xml', _external=True)}",
+    ]
+    return Response("\n".join(lines) + "\n", mimetype="text/plain")
+
+
+@main_bp.route("/sitemap.xml")
+def sitemap_xml():
+    """Return a sitemap for indexable public pages."""
+    from ..config import get_config
+
+    cfg = get_config()
+    wiki_pages = WikiService.list_pages(cfg)
+    urls = [
+        url_for("main.about_page", _external=True),
+        *[url_for("main.wiki_page", page=page.path, _external=True) for page in wiki_pages],
+    ]
+    body = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for loc in urls:
+        body.extend(["  <url>", f"    <loc>{loc}</loc>", "  </url>"])
+    body.append("</urlset>")
+    return Response("\n".join(body) + "\n", mimetype="application/xml")
 
 
 @main_bp.route("/wiki/media/<path:media_path>")

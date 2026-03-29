@@ -1136,6 +1136,10 @@ def api_locations():
             except ValueError:
                 return jsonify({"error": "Invalid gateway_id format"}), 400
 
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source:
+            filters["mqtt_source"] = mqtt_source
+
         # Search filter (keep this server-side for performance)
         if request.args.get("search"):
             filters["search"] = request.args.get("search")
@@ -1165,6 +1169,8 @@ def api_locations():
             network_filters["end_time"] = filters["end_time"]
         if filters.get("gateway_id"):
             network_filters["gateway_id"] = filters["gateway_id"]
+        if filters.get("mqtt_source"):
+            network_filters["mqtt_source"] = filters["mqtt_source"]
 
         network_data = _get_traceroute_graph_payload(
             hours=hours,

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components/table_layout_macros.html" import table_layout_styles %}
+{% from "components/table_layout_macros.html" import fullscreen_table_container, filter_section, table_controls_section, grouping_section, table_layout_styles %}
 
 {% block title %}{{ t('page.live_log_title') }} - Malla{% endblock %}
 
@@ -7,15 +7,6 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-table.css') }}">
 {{ table_layout_styles() }}
 <style>
-    .live-log-layout .table-sidebar,
-    .live-log-layout #toggleSidebar {
-        display: none !important;
-    }
-
-    .live-log-layout .table-main {
-        width: 100%;
-    }
-
     .live-log-layout .table-content {
         padding: 0;
         overflow: auto;
@@ -37,42 +28,67 @@
         white-space: nowrap;
     }
 
-    .live-log-toolbar {
-        padding: 0.75rem 1.5rem;
-        border-bottom: 1px solid var(--bs-border-color);
+    .sidebar-content.live-log-sidebar-compact .sidebar-section > h6 {
+        display: none;
     }
 
-    .live-log-toolbar h5 {
-        margin: 0;
+    .sidebar-content.live-log-sidebar-compact .sidebar-section {
+        padding: 0.75rem 0.875rem;
     }
 
-    .live-log-filters {
-        padding: 0.5rem 1.5rem;
-        border-bottom: 1px solid var(--bs-border-color);
-        background: var(--bs-tertiary-bg);
+    .sidebar-content.live-log-sidebar-compact .row.g-3 {
+        --bs-gutter-y: 0.4rem;
+        --bs-gutter-x: 0;
     }
 
-    .live-log-filter-group .input-group-text {
-        min-width: 6.5rem;
-        justify-content: flex-start;
-        font-size: 0.875rem;
+    .sidebar-content.live-log-sidebar-compact .live-log-inline-field {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 
-    .live-log-filter-group input.form-control {
+    .sidebar-content.live-log-sidebar-compact .live-log-inline-field > .form-label {
+        width: 8rem;
+        margin-bottom: 0;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+
+    .sidebar-content.live-log-sidebar-compact .live-log-inline-field > .form-control,
+    .sidebar-content.live-log-sidebar-compact .live-log-inline-field > .form-select,
+    .sidebar-content.live-log-sidebar-compact .live-log-inline-field > .form-check,
+    .sidebar-content.live-log-sidebar-compact .live-log-inline-field > div {
+        flex: 1;
         min-width: 0;
     }
 
+    .sidebar-content.live-log-sidebar-compact .form-check-input {
+        margin-top: 0;
+    }
+
+    .sidebar-content.live-log-sidebar-compact .form-label,
+    .sidebar-content.live-log-sidebar-compact .form-check-label,
+    .sidebar-content.live-log-sidebar-compact .form-control,
+    .sidebar-content.live-log-sidebar-compact .form-select,
+    .sidebar-content.live-log-sidebar-compact .btn,
+    .sidebar-content.live-log-sidebar-compact .small {
+        font-size: 0.85rem;
+    }
+
+    .sidebar-content.live-log-sidebar-compact .form-control.form-control-sm,
+    .sidebar-content.live-log-sidebar-compact .form-select.form-select-sm {
+        min-height: calc(1.5em + 0.4rem + 2px);
+        padding-top: 0.2rem;
+        padding-bottom: 0.2rem;
+    }
+
+    .sidebar-content.live-log-sidebar-compact .d-grid.gap-2 {
+        gap: 0.4rem !important;
+    }
+
     @media (max-width: 768px) {
-        .live-log-toolbar {
-            padding: 0.75rem 1rem;
-        }
-
-        .live-log-filters {
-            padding: 0.5rem 1rem;
-        }
-
-        .live-log-filter-group .input-group-text {
-            min-width: 5.75rem;
+        .sidebar-content.live-log-sidebar-compact .live-log-inline-field > .form-label {
+            width: 7rem;
         }
     }
 </style>
@@ -83,128 +99,131 @@
 </div> <!-- Close the base template's container -->
 
 <div class="live-log-layout">
-    <div class="table-container">
-        <div class="table-main">
-            <div class="table-header">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div class="d-flex align-items-center">
-                        <h2><i class="bi bi-activity"></i> {{ t('page.live_log_title') }}</h2>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 ms-md-auto live-log-header-meta">
-                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
-                            {{ t('live_log.auto_refresh_on') }}
-                        </span>
-                        <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleRefresh">
-                                {{ t('live_log.pause') }}
-                            </button>
-                            <button type="button" class="btn btn-sm btn-primary" id="refreshNow">
-                                {{ t('common.refresh') }}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="table-content">
-                <div class="live-log-filters">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-lg-2 col-md-6">
-                            <div class="input-group input-group-sm live-log-filter-group">
-                                <span class="input-group-text">From</span>
-                                <input type="text" class="form-control" id="liveLogFromFilter" placeholder="Node ID or name">
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-6">
-                            <div class="input-group input-group-sm live-log-filter-group">
-                                <span class="input-group-text">To</span>
-                                <input type="text" class="form-control" id="liveLogToFilter" placeholder="Node ID, name, Broadcast">
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-4">
-                            <div class="input-group input-group-sm live-log-filter-group">
-                                <span class="input-group-text">Type</span>
-                                <select class="form-select" id="liveLogTypeFilter">
-                                    <option value="">All Types</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-4">
-                            <div class="input-group input-group-sm live-log-filter-group">
-                                <span class="input-group-text">Channel</span>
-                                <select class="form-select" id="liveLogChannelFilter">
-                                    <option value="">All Channels</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-4">
-                            <div class="input-group input-group-sm live-log-filter-group">
-                                <span class="input-group-text">Gateway</span>
-                                <select class="form-select" id="liveLogGatewaySourceFilter">
-                                    <option value="">All Gateways</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-4">
-                            <div class="input-group input-group-sm live-log-filter-group">
-                                <span class="input-group-text">{{ t('common.mqtt_source') }}</span>
-                                <select class="form-select" id="liveLogMqttSourceFilter">
-                                    <option value="">{{ t('common.all_sources') }}</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-6">
-                            <div class="form-check form-switch form-check-sm mt-1">
-                                <input class="form-check-input" type="checkbox" id="liveLogGroupByMeshId">
-                                <label class="form-check-label small" for="liveLogGroupByMeshId">
-                                    Group by Mesh Packet ID
-                                </label>
-                            </div>
-                        </div>
-                        <div class="col-lg-2 col-md-6 d-flex gap-2 justify-content-md-end">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearLiveLogFilters">
-                                Clear Filters
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="modern-table-container">
-                    <div class="table-responsive">
-                        <table class="modern-table mb-0 align-middle">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>{{ t('common.time') }}</th>
-                                    <th>{{ t('common.from') }}</th>
-                                    <th>{{ t('common.to') }}</th>
-                                    <th>{{ t('common.protocol') }}</th>
-                                    <th>{{ t('common.gateway') }}</th>
-                                    <th>{{ t('common.mqtt_source') }}</th>
-                                    <th>{{ t('live_log.receptions') }}</th>
-                                    <th>{{ t('live_log.size') }}</th>
-                                    <th>RSSI</th>
-                                    <th>SNR</th>
-                                    <th>{{ t('common.hops') }}</th>
-                                    <th>{{ t('common.status') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody id="livePacketsTable">
-                                <tr>
-                                    <td colspan="13" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+    {% call fullscreen_table_container("livePacketsTableWrap", t('page.live_log_title'), "bi bi-activity", "toggleSidebar") %}
+        <div class="table-header border-top-0 pt-0 px-0 pb-3">
+            <div class="d-flex justify-content-end align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 ms-md-auto live-log-header-meta">
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle me-2 live-log-status" id="refreshState">
+                        {{ t('live_log.auto_refresh_on') }}
+                    </span>
+                    <span class="text-muted small">{{ t('common.last_update') }}: <span id="lastUpdate" class="live-log-last-update">--</span></span>
                 </div>
             </div>
         </div>
-    </div>
+        <div class="modern-table-container">
+            <div class="table-responsive">
+                <table class="modern-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>{{ t('common.time') }}</th>
+                            <th>{{ t('common.from') }}</th>
+                            <th>{{ t('common.to') }}</th>
+                            <th>{{ t('common.protocol') }}</th>
+                            <th>{{ t('common.gateway') }}</th>
+                            <th>{{ t('common.mqtt_source') }}</th>
+                            <th>{{ t('live_log.receptions') }}</th>
+                            <th>{{ t('live_log.size') }}</th>
+                            <th>RSSI</th>
+                            <th>SNR</th>
+                            <th>{{ t('common.hops') }}</th>
+                            <th>{{ t('common.status') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="livePacketsTable">
+                        <tr>
+                            <td colspan="13" class="text-center py-4 text-muted">{{ t('common.loading') }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endcall %}
+</div>
+
+<div id="sidebarContent" class="live-log-sidebar-compact" style="display: none;">
+    {% call filter_section("liveLogFiltersForm", t('packets.packet_filters')) %}
+        <div class="row g-3">
+            <div class="col-12 live-log-inline-field">
+                <label for="liveLogFromFilter" class="form-label">From</label>
+                <input type="text" class="form-control form-control-sm" id="liveLogFromFilter" placeholder="Node ID or name">
+            </div>
+            <div class="col-12 live-log-inline-field">
+                <label for="liveLogToFilter" class="form-label">To</label>
+                <input type="text" class="form-control form-control-sm" id="liveLogToFilter" placeholder="Node ID, name, Broadcast">
+            </div>
+            <div class="col-12 live-log-inline-field">
+                <label for="liveLogGatewaySourceFilter" class="form-label">Gateway</label>
+                <select class="form-select form-select-sm" id="liveLogGatewaySourceFilter">
+                    <option value="">All Gateways</option>
+                </select>
+            </div>
+            <div class="col-12 live-log-inline-field">
+                <label for="liveLogMqttSourceFilter" class="form-label">{{ t('common.mqtt_source') }}</label>
+                <select class="form-select form-select-sm" id="liveLogMqttSourceFilter">
+                    <option value="cz" selected>cz</option>
+                    <option value="">{{ t('common.all_sources') }}</option>
+                </select>
+            </div>
+            <div class="col-12 live-log-inline-field">
+                <label for="liveLogTypeFilter" class="form-label">Type</label>
+                <select class="form-select form-select-sm" id="liveLogTypeFilter">
+                    <option value="">All Types</option>
+                </select>
+            </div>
+            <div class="col-12 live-log-inline-field">
+                <label for="liveLogChannelFilter" class="form-label">Channel</label>
+                <select class="form-select form-select-sm" id="liveLogChannelFilter">
+                    <option value="">All Channels</option>
+                </select>
+            </div>
+        </div>
+    {% endcall %}
+
+    {{ grouping_section("liveLogGroupByMeshId", t('common.group_by_packet_id'), "") }}
+
+    {% set live_log_controls = [
+        {"class": "btn-primary", "id": "refreshNow", "icon": "bi bi-arrow-clockwise", "text": t('common.refresh'), "type": "button"},
+        {"class": "btn-outline-secondary", "id": "clearLiveLogFilters", "icon": "bi bi-x-circle", "text": t('common.clear_filters'), "type": "button"},
+        {"class": "btn-outline-secondary", "id": "toggleRefresh", "icon": "bi bi-pause-circle", "text": t('live_log.pause'), "type": "button"},
+    ] %}
+    {{ table_controls_section(live_log_controls) }}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const sidebarContent = document.getElementById('sidebarContent');
+    const sidebarContainer = document.querySelector('.sidebar-content');
+    if (sidebarContent && sidebarContainer) {
+        sidebarContainer.innerHTML = sidebarContent.innerHTML;
+        sidebarContainer.classList.add('live-log-sidebar-compact');
+        sidebarContent.remove();
+    }
+
+    const sidebarTitle = document.querySelector('.sidebar-header h5');
+    if (sidebarTitle) {
+        sidebarTitle.innerHTML = '<i class="bi bi-funnel"></i> Packet Filters';
+    }
+
+    const toggleBtn = document.getElementById('toggleSidebar');
+    const closeBtn = document.getElementById('closeSidebar');
+    const sidebar = document.querySelector('.table-sidebar');
+
+    function toggleSidebar() {
+        sidebar.classList.toggle('collapsed');
+        const icon = toggleBtn.querySelector('i');
+        if (sidebar.classList.contains('collapsed')) {
+            icon.className = 'bi bi-layout-sidebar-inset';
+        } else {
+            icon.className = 'bi bi-layout-sidebar-inset-reverse';
+        }
+    }
+
+    toggleBtn.addEventListener('click', toggleSidebar);
+    closeBtn.addEventListener('click', toggleSidebar);
+
     const LIVE_LOG_REFRESH_INTERVAL_MS = 3000;
     const tableBody = document.getElementById('livePacketsTable');
     const lastUpdate = document.getElementById('lastUpdate');

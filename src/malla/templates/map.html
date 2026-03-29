@@ -86,6 +86,12 @@
                     </select>
                 </div>
                 <div class="mb-3">
+                    <label for="mqttSourceFilter" class="form-label">{{ t('common.mqtt_source') }}</label>
+                    <select class="form-select form-select-sm" id="mqttSourceFilter" name="mqtt_source">
+                        <option value="">{{ t('common.all_sources') }}</option>
+                    </select>
+                </div>
+                <div class="mb-3">
                     <label for="roleFilter" class="form-label">{{ t('map.node_role') }}</label>
                     <select class="form-select form-select-sm" id="roleFilter" name="roleFilter">
                         <option value="">{{ t('common.all_roles') }}</option>
@@ -729,7 +735,7 @@ function initializeInterface() {
     // Handle filter form submission
     $('#locationFilterForm').on('submit', function(e) {
         e.preventDefault();
-        applyClientSideFilters();
+        loadNodeLocations();
     });
 
     // Link type checkbox handlers
@@ -802,6 +808,10 @@ function initializeInterface() {
         applyClientSideFilters();
     });
 
+    $('#mqttSourceFilter').on('change', function() {
+        loadNodeLocations();
+    });
+
     // Clear dates button
     $('#clearDateRange').on('click', function() {
         $('#maxAge').val('72').trigger('change');
@@ -842,6 +852,27 @@ function initializeInterface() {
             }
         } catch (error) {
             console.error('Error loading primary channels:', error);
+        }
+    }
+
+    async function loadMqttSources() {
+        try {
+            const response = await fetch('/api/meshtastic/mqtt-sources');
+            const data = await response.json();
+            const select = document.getElementById('mqttSourceFilter');
+            if (!select) return;
+
+            const selectedValue = select.value;
+            (data.mqtt_sources || []).forEach((source) => {
+                const option = document.createElement('option');
+                option.value = source;
+                option.textContent = source;
+                select.appendChild(option);
+            });
+
+            select.value = selectedValue || ((data.mqtt_sources || []).includes('cz') ? 'cz' : '');
+        } catch (error) {
+            console.error('Error loading MQTT sources:', error);
         }
     }
 
@@ -886,8 +917,9 @@ function initializeInterface() {
         }
     }
 
-    // Load channels on interface init
+    // Load channels and MQTT sources on interface init
     loadPrimaryChannels();
+    loadMqttSources();
     initializeDefaultMaxAge();
 
     // Trigger change events for all form fields to initialize them based on default values
@@ -972,7 +1004,26 @@ function buildFilterParams() {
         params.set('include_mobile_bts', '1');
     }
 
+    const mqttSource = getMapMqttSourceValue(formData);
+    if (mqttSource) {
+        params.set('mqtt_source', mqttSource);
+    }
+
     return params;
+}
+
+function getMapMqttSourceValue(formData = null) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('mqtt_source')) {
+        return urlParams.get('mqtt_source') || '';
+    }
+
+    if (!formData) {
+        const form = document.getElementById('locationFilterForm');
+        formData = new FormData(form);
+    }
+
+    return (formData.get('mqtt_source') || '').trim() || 'cz';
 }
 
 // Load node locations from API

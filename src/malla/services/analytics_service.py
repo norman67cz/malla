@@ -370,6 +370,10 @@ class AnalyticsService:
             where_conditions.append("gateway_id = ?")
             params.append(filters["gateway_id"])
 
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
+
         if filters.get("from_node"):
             where_conditions.append("from_node_id = ?")
             params.append(filters["from_node"])
@@ -593,6 +597,10 @@ class AnalyticsService:
         if filters.get("gateway_id"):
             where_conditions.append("gateway_id = ?")
             params.append(filters["gateway_id"])
+
+        if filters.get("mqtt_source"):
+            where_conditions.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
 
         if filters.get("from_node"):
             where_conditions.append("from_node_id = ?")

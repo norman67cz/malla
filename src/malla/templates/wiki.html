@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ t('page.wiki_title') }} - Malla{% endblock %}
+{% block title %}{{ wiki_page_title or t('page.wiki_title') }} - Wiki - Malla{% endblock %}
 
 {% block content %}
 <div class="row g-4">

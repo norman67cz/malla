@@ -49,6 +49,10 @@ class LocationService:
             where_clauses.append("gateway_id = ?")
             params.append(gateway_value)
 
+        if filters.get("mqtt_source") is not None:
+            where_clauses.append("mqtt_source = ?")
+            params.append(filters["mqtt_source"])
+
         query = f"""
             SELECT DISTINCT gateway_id
             FROM packet_history
@@ -154,6 +158,8 @@ class LocationService:
                     network_filters["end_time"] = filters["end_time"]
                 if filters.get("gateway_id"):
                     network_filters["gateway_id"] = filters["gateway_id"]
+                if filters.get("mqtt_source"):
+                    network_filters["mqtt_source"] = filters["mqtt_source"]
 
                 network_data = TracerouteService.get_network_graph_data(
                     hours=hours,
@@ -962,6 +968,10 @@ class LocationService:
                 where_clauses.append("gateway_id = ?")
                 params.append(gw_hex)
 
+            if filters.get("mqtt_source") is not None:
+                where_clauses.append("mqtt_source = ?")
+                params.append(filters["mqtt_source"])
+
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
             query = f"""
@@ -1111,6 +1121,9 @@ class LocationService:
             if filters.get("end_time") is not None:
                 where_clauses.append("ph.timestamp <= ?")
                 params.append(filters["end_time"])
+            if filters.get("mqtt_source") is not None:
+                where_clauses.append("ph.mqtt_source = ?")
+                params.append(filters["mqtt_source"])
 
             where_sql = " AND ".join(where_clauses)
             query = f"""

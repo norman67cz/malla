@@ -31,6 +31,7 @@
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h1 class="h2 mb-0">{{ t('dashboard.mesh_metrics') }}</h1>
                 <select class="form-select form-select-sm" id="dashboardMqttSource" style="max-width: 16rem;">
+                    <option value="cz" selected>cz</option>
                     <option value="">{{ t('common.all_sources') }}</option>
                 </select>
             </div>
@@ -575,13 +576,13 @@ function updateChartsForTheme() {
         chartInstances = {};
 
         // Recreate charts with new theme
-        createTimeSeriesChart(analyticsData.temporal_patterns);
-        createNodeActivityChart(analyticsData.node_statistics);
-        createGatewayActivityChart(analyticsData.gateway_distribution);
-        createSignalDistributionChart(analyticsData.signal_quality);
-        createHopDistributionChart(analyticsData.routing_patterns);
-        createHardwareModelChart(analyticsData.hardware_models);
-        createPacketTypesChart(analyticsData.packet_types);
+        safeRenderChart('timeSeriesChart', () => createTimeSeriesChart(analyticsData.temporal_patterns));
+        safeRenderChart('nodeActivityChart', () => createNodeActivityChart(analyticsData.node_statistics));
+        safeRenderChart('gatewayActivityChart', () => createGatewayActivityChart(analyticsData.gateway_distribution));
+        safeRenderChart('signalDistributionChart', () => createSignalDistributionChart(analyticsData.signal_quality));
+        safeRenderChart('hopDistributionChart', () => createHopDistributionChart(analyticsData.routing_patterns));
+        safeRenderChart('hardwareModelChart', () => createHardwareModelChart(analyticsData.hardware_models));
+        safeRenderChart('packetTypesChart', () => createPacketTypesChart(analyticsData.packet_types));
     }
 }
 
@@ -610,6 +611,9 @@ document.addEventListener('DOMContentLoaded', function () {
             .then((data) => {
                 const sources = data.mqtt_sources || [];
                 sources.forEach((source) => {
+                    if (Array.from(dashboardMqttSource.options).some((option) => option.value === source)) {
+                        return;
+                    }
                     const option = document.createElement('option');
                     option.value = source;
                     option.textContent = source;
@@ -708,13 +712,13 @@ function renderAnalyticsData() {
     });
     chartInstances = {};
 
-    createTimeSeriesChart(analyticsData.temporal_patterns);
-    createNodeActivityChart(analyticsData.node_statistics);
-    createGatewayActivityChart(analyticsData.gateway_distribution);
-    createSignalDistributionChart(analyticsData.signal_quality);
-    createHopDistributionChart(analyticsData.routing_patterns);
-    createHardwareModelChart(analyticsData.hardware_models);
-    createPacketTypesChart(analyticsData.packet_types);
+    safeRenderChart('timeSeriesChart', () => createTimeSeriesChart(analyticsData.temporal_patterns));
+    safeRenderChart('nodeActivityChart', () => createNodeActivityChart(analyticsData.node_statistics));
+    safeRenderChart('gatewayActivityChart', () => createGatewayActivityChart(analyticsData.gateway_distribution));
+    safeRenderChart('signalDistributionChart', () => createSignalDistributionChart(analyticsData.signal_quality));
+    safeRenderChart('hopDistributionChart', () => createHopDistributionChart(analyticsData.routing_patterns));
+    safeRenderChart('hardwareModelChart', () => createHardwareModelChart(analyticsData.hardware_models));
+    safeRenderChart('packetTypesChart', () => createPacketTypesChart(analyticsData.packet_types));
     populateTopNodesTable(analyticsData.top_nodes);
 }
 
@@ -794,6 +798,24 @@ function hideLoadingSpinner(chartId) {
     const chart = document.getElementById(chartId);
     if (loading) loading.style.display = 'none';
     if (chart) chart.style.display = 'block';
+}
+
+function showNoDataState(chartId, message = 'No data available') {
+    const loading = document.getElementById(chartId + 'Loading');
+    const chart = document.getElementById(chartId);
+    if (chart) chart.style.display = 'none';
+    if (loading) {
+        loading.style.display = 'block';
+        loading.innerHTML = `<div class="text-center text-muted py-4">${message}</div>`;
+    }
+}
+
+function safeRenderChart(name, renderFn) {
+    try {
+        renderFn();
+    } catch (error) {
+        console.error(`Error rendering ${name}:`, error);
+    }
 }
 
 function hideAllLoadingSpinners() {
@@ -1045,14 +1067,21 @@ function createPacketTypesChart(packetTypes) {
 }
 
 function createHardwareModelChart(hardwareModels) {
-    if (!hardwareModels || hardwareModels.length === 0) return;
+    if (!hardwareModels || hardwareModels.length === 0) {
+        showNoDataState('hardwareModelChart');
+        return;
+    }
 
     hideLoadingSpinner('hardwareModelChart');
     const ctx = document.getElementById('hardwareModelChart');
     if (!ctx) return;
 
     const labels = hardwareModels.map(item => item.hw_model || 'Unknown');
-    const data = hardwareModels.map(item => item.count || 0);
+    const data = hardwareModels.map(item => Number(item.count || 0));
+    if (data.every((value) => value <= 0)) {
+        showNoDataState('hardwareModelChart');
+        return;
+    }
     const colors = getChartColors();
     const themeColors = [
         colors.primary, colors.success, colors.info, colors.warning,
