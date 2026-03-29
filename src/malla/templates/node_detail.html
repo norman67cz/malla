@@ -51,6 +51,15 @@
     #telemetry-chart {
         max-height: 340px;
     }
+    .node-info-table th {
+        width: 10.5rem;
+        white-space: nowrap;
+    }
+    .node-info-break {
+        white-space: normal;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+    }
 </style>
 {% endblock %}
 
@@ -134,7 +143,7 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <table class="table table-sm">
+                            <table class="table table-sm node-info-table">
                                 <tr>
                                     <th>Node Name:</th>
                                     <td><strong>{{ node.node_name }}</strong></td>
@@ -163,21 +172,6 @@
                                 <tr>
                                     <th>Primary Channel:</th>
                                     <td>{{ node.primary_channel }}</td>
-                                </tr>
-                                {% endif %}
-                                {% if node.last_mqtt_source or node.mqtt_sources %}
-                                <tr>
-                                    <th>MQTT Source:</th>
-                                    <td class="text-nowrap">
-                                        {% if node.last_mqtt_source %}
-                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">{{ node.last_mqtt_source }}</span>
-                                        {% else %}
-                                            <span class="text-muted">Unknown</span>
-                                        {% endif %}
-                                        {% if node.mqtt_sources and node.mqtt_sources|length > 1 %}
-                                            <br><small class="text-muted">Seen on: {{ node.mqtt_sources|join(', ') }}</small>
-                                        {% endif %}
-                                    </td>
                                 </tr>
                                 {% endif %}
                                 <tr>
@@ -217,7 +211,7 @@
                             </table>
                         </div>
                         <div class="col-md-6">
-                            <table class="table table-sm">
+                            <table class="table table-sm node-info-table">
                                 <tr>
                                     <th>First Seen:</th>
                                     <td>{{ node.first_seen }}</td>
@@ -258,6 +252,21 @@
                                         {% endif %}
                                     </td>
                                 </tr>
+                                {% if node.last_mqtt_source or node.mqtt_sources %}
+                                <tr>
+                                    <th>MQTT Source:</th>
+                                    <td class="text-nowrap">
+                                        {% if node.last_mqtt_source %}
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">{{ node.last_mqtt_source }}</span>
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                        {% if node.mqtt_sources and node.mqtt_sources|length > 1 %}
+                                            <br><small class="text-muted">Seen on: {{ node.mqtt_sources|join(', ') }}</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
                                 <tr>
                                     <th>Unique Gateways:</th>
                                     <td>{{ node.unique_gateways }}</td>
@@ -279,6 +288,12 @@
                                         {% endif %}
                                     </td>
                                 </tr>
+                                {% if node.public_key %}
+                                <tr>
+                                    <th>Public Key:</th>
+                                    <td class="node-info-break"><code class="small">{{ node.public_key }}</code></td>
+                                </tr>
+                                {% endif %}
                             </table>
                         </div>
                     </div>

@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import time
+from base64 import b64encode
 from datetime import UTC, datetime
 from typing import Any
 
@@ -298,6 +299,36 @@ def _get_latest_nodeinfo_public_key_presence(
         result[node_id] = has_public_key
 
     return result
+
+
+def _get_latest_nodeinfo_public_key(cursor, node_id: int) -> str | None:
+    """Return the latest NODEINFO_APP public key as base64 if present."""
+    cursor.execute(
+        """
+        SELECT raw_payload
+        FROM packet_history
+        WHERE from_node_id = ?
+          AND portnum_name = 'NODEINFO_APP'
+          AND raw_payload IS NOT NULL
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """,
+        (node_id,),
+    )
+    row = cursor.fetchone()
+    if not row or not row["raw_payload"]:
+        return None
+
+    try:
+        user = mesh_pb2.User()
+        user.ParseFromString(row["raw_payload"])
+        public_key = getattr(user, "public_key", b"")
+        if public_key:
+            return b64encode(public_key).decode("ascii")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not extract public key for %s: %s", node_id, exc)
+
+    return None
 
 
 class DashboardRepository:
@@ -2196,6 +2227,7 @@ class NodeRepository:
                     "avg_hops": None,
                     "last_mqtt_source": None,
                     "mqtt_sources": [],
+                    "public_key": _get_latest_nodeinfo_public_key(cursor, node_id),
                     "firmware_generation_hint": _infer_firmware_generation(
                         cursor, node_id, 0
                     ),
@@ -2300,6 +2332,7 @@ class NodeRepository:
                 else None,
                 "last_mqtt_source": None,
                 "mqtt_sources": [],
+                "public_key": _get_latest_nodeinfo_public_key(cursor, node_id),
                 "firmware_generation_hint": _infer_firmware_generation(
                     cursor, node_id, node_row["total_packets"]
                 ),
