@@ -31,11 +31,13 @@ Data Cleanup:
 """
 
 import base64
+import json
 import hashlib
 import logging
 import socket
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -92,6 +94,21 @@ node_cache: dict[
 ] = {}  # In-memory cache: {node_id_numeric: {'hex_id': '!abc123', 'long_name': 'Name', 'short_name': 'Short', 'last_updated': timestamp}}
 cleanup_thread: threading.Thread | None = None  # Background thread for data cleanup
 stop_cleanup = threading.Event()  # Event to signal cleanup thread to stop
+source_allowed_node_ids: dict[str, set[int]] = {}
+source_allow_cache_lock = threading.Lock()
+
+COUNTRY_BOUNDING_BOXES: dict[str, list[tuple[float, float, float, float]]] = {
+    "CZ": [(48.50, 12.05, 51.10, 18.90)],
+    "PL": [(49.00, 14.10, 54.90, 24.20)],
+    "HU": [(45.70, 16.00, 48.70, 22.95)],
+    "SK": [(47.70, 16.80, 49.70, 22.60)],
+    "DE": [(47.20, 5.80, 55.10, 15.10)],
+    "AT": [(46.30, 9.20, 49.10, 17.20)],
+}
+COUNTRY_POLYGONS_PATH = (
+    Path(__file__).resolve().parent / "data" / "country_polygons_110m.json"
+)
+COUNTRY_POLYGONS: dict[str, dict[str, Any]] = {}
 
 
 def format_lora_modem_preset(preset_name: str | None) -> str | None:
@@ -99,6 +116,272 @@ def format_lora_modem_preset(preset_name: str | None) -> str | None:
     if not preset_name:
         return None
     return preset_name.replace("_", "-")
+
+
+def _load_country_polygons() -> None:
+    """Load coarse country polygons bundled with the application."""
+    global COUNTRY_POLYGONS  # noqa: PLW0603
+    if COUNTRY_POLYGONS:
+        return
+    try:
+        COUNTRY_POLYGONS = json.loads(COUNTRY_POLYGONS_PATH.read_text())
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Could not load country polygons from %s: %s", COUNTRY_POLYGONS_PATH, exc)
+        COUNTRY_POLYGONS = {}
+
+
+def _point_in_ring(longitude: float, latitude: float, ring: list[list[float]]) -> bool:
+    """Return whether a point lies inside a polygon ring using ray casting."""
+    inside = False
+    if len(ring) < 3:
+        return False
+    j = len(ring) - 1
+    for i in range(len(ring)):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        intersects = ((yi > latitude) != (yj > latitude)) and (
+            longitude < (xj - xi) * (latitude - yi) / ((yj - yi) or 1e-12) + xi
+        )
+        if intersects:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _point_in_geometry(latitude: float, longitude: float, geometry: dict[str, Any]) -> bool:
+    """Return whether a point lies inside a GeoJSON Polygon or MultiPolygon."""
+    geom_type = geometry.get("type")
+    coordinates = geometry.get("coordinates") or []
+    if geom_type == "Polygon":
+        if not coordinates:
+            return False
+        outer_ring = coordinates[0]
+        if not _point_in_ring(longitude, latitude, outer_ring):
+            return False
+        for hole in coordinates[1:]:
+            if _point_in_ring(longitude, latitude, hole):
+                return False
+        return True
+    if geom_type == "MultiPolygon":
+        for polygon in coordinates:
+            if not polygon:
+                continue
+            outer_ring = polygon[0]
+            if not _point_in_ring(longitude, latitude, outer_ring):
+                continue
+            if any(_point_in_ring(longitude, latitude, hole) for hole in polygon[1:]):
+                continue
+            return True
+    return False
+
+
+def infer_country_from_coordinates(latitude: float, longitude: float) -> str | None:
+    """Infer a country code from the latest known node coordinates.
+
+    Preferred mode uses bundled country polygons. Bounding boxes remain as a
+    lightweight fallback if the polygon bundle is unavailable.
+    """
+    _load_country_polygons()
+    for country_code, geometry in COUNTRY_POLYGONS.items():
+        if _point_in_geometry(latitude, longitude, geometry):
+            return country_code
+
+    for country_code, boxes in COUNTRY_BOUNDING_BOXES.items():
+        for min_lat, min_lon, max_lat, max_lon in boxes:
+            if min_lat <= latitude <= max_lat and min_lon <= longitude <= max_lon:
+                return country_code
+    return None
+
+
+def _extract_position_coordinates(mesh_packet: Any) -> tuple[float, float] | None:
+    """Return decoded latitude/longitude from a POSITION_APP packet if possible."""
+    try:
+        if not mesh_packet or not hasattr(mesh_packet, "decoded"):
+            return None
+        if mesh_packet.decoded.portnum != portnums_pb2.PortNum.POSITION_APP:
+            return None
+        position_data = mesh_pb2.Position()
+        position_data.ParseFromString(mesh_packet.decoded.payload)
+        latitude = position_data.latitude_i / 1e7 if position_data.latitude_i else None
+        longitude = (
+            position_data.longitude_i / 1e7 if position_data.longitude_i else None
+        )
+        if (
+            latitude is None
+            or longitude is None
+            or latitude == 0
+            or longitude == 0
+        ):
+            return None
+        return (latitude, longitude)
+    except Exception as exc:  # noqa: BLE001
+        logging.debug("Could not extract position coordinates: %s", exc)
+        return None
+
+
+def _load_latest_allowed_nodes_from_db() -> None:
+    """Preload source-specific allowed node IDs from latest known positions in DB."""
+    sources_with_country_filters = {
+        source["name"]: set(source.get("allowed_inferred_countries") or [])
+        for source in MQTT_SOURCES
+        if source.get("enabled", True) and source.get("allowed_inferred_countries")
+    }
+    if not sources_with_country_filters:
+        return
+
+    with db_lock:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT ph.from_node_id, ph.raw_payload
+            FROM packet_history ph
+            INNER JOIN (
+                SELECT from_node_id, MAX(timestamp) AS max_timestamp
+                FROM packet_history
+                WHERE portnum = 3
+                  AND raw_payload IS NOT NULL
+                  AND from_node_id IS NOT NULL
+                GROUP BY from_node_id
+            ) latest
+                ON latest.from_node_id = ph.from_node_id
+               AND latest.max_timestamp = ph.timestamp
+            WHERE ph.portnum = 3
+              AND ph.raw_payload IS NOT NULL
+            """
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+    preload: dict[str, set[int]] = {name: set() for name in sources_with_country_filters}
+    for row in rows:
+        try:
+            position = mesh_pb2.Position()
+            position.ParseFromString(row["raw_payload"])
+            latitude = position.latitude_i / 1e7 if position.latitude_i else None
+            longitude = position.longitude_i / 1e7 if position.longitude_i else None
+            if (
+                latitude is None
+                or longitude is None
+                or latitude == 0
+                or longitude == 0
+            ):
+                continue
+            inferred_country = infer_country_from_coordinates(latitude, longitude)
+            if not inferred_country:
+                continue
+            node_id = int(row["from_node_id"])
+            for source_name, allowed_countries in sources_with_country_filters.items():
+                if inferred_country in allowed_countries:
+                    preload[source_name].add(node_id)
+        except Exception as exc:  # noqa: BLE001
+            logging.debug("Could not preload allowed node from DB: %s", exc)
+
+    with source_allow_cache_lock:
+        for source_name, node_ids in preload.items():
+            source_allowed_node_ids[source_name] = node_ids
+
+
+def _node_matches_allowed_country_from_db(
+    node_id: int, allowed_countries: set[str]
+) -> bool:
+    """Check whether a node's latest known location falls within allowed countries."""
+    if not node_id or not allowed_countries:
+        return False
+
+    with db_lock:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT raw_payload
+            FROM packet_history
+            WHERE from_node_id = ?
+              AND portnum = 3
+              AND raw_payload IS NOT NULL
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """,
+            (node_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+    if not row or not row["raw_payload"]:
+        return False
+
+    try:
+        position = mesh_pb2.Position()
+        position.ParseFromString(row["raw_payload"])
+        latitude = position.latitude_i / 1e7 if position.latitude_i else None
+        longitude = position.longitude_i / 1e7 if position.longitude_i else None
+        if (
+            latitude is None
+            or longitude is None
+            or latitude == 0
+            or longitude == 0
+        ):
+            return False
+        inferred_country = infer_country_from_coordinates(latitude, longitude)
+        return inferred_country in allowed_countries if inferred_country else False
+    except Exception as exc:  # noqa: BLE001
+        logging.debug("Could not infer country for node %s from DB: %s", node_id, exc)
+        return False
+
+
+def _source_packet_allowed_by_inferred_country(
+    source: dict[str, Any], mesh_packet: Any | None
+) -> bool:
+    """Return whether a packet is allowed for a source with country inference filtering."""
+    allowed_countries = {
+        str(country).strip().upper()
+        for country in (source.get("allowed_inferred_countries") or [])
+        if str(country).strip()
+    }
+    if not allowed_countries:
+        return True
+
+    source_name = str(source.get("name") or "default")
+    from_node_id = getattr(mesh_packet, "from", None) if mesh_packet else None
+    to_node_id = getattr(mesh_packet, "to", None) if mesh_packet else None
+    portnum = (
+        mesh_packet.decoded.portnum
+        if mesh_packet and hasattr(mesh_packet, "decoded")
+        else None
+    )
+
+    with source_allow_cache_lock:
+        allowed_nodes = source_allowed_node_ids.setdefault(source_name, set())
+
+    if portnum == portnums_pb2.PortNum.POSITION_APP and from_node_id:
+        coords = _extract_position_coordinates(mesh_packet)
+        if not coords:
+            return False
+        inferred_country = infer_country_from_coordinates(coords[0], coords[1])
+        with source_allow_cache_lock:
+            if inferred_country in allowed_countries:
+                allowed_nodes.add(int(from_node_id))
+                return True
+            allowed_nodes.discard(int(from_node_id))
+        return False
+
+    candidate_node_ids = [
+        int(node_id)
+        for node_id in (from_node_id, to_node_id)
+        if node_id not in (None, 0, 0xFFFFFFFF)
+    ]
+
+    with source_allow_cache_lock:
+        if any(node_id in allowed_nodes for node_id in candidate_node_ids):
+            return True
+
+    for node_id in candidate_node_ids:
+        if _node_matches_allowed_country_from_db(node_id, allowed_countries):
+            with source_allow_cache_lock:
+                allowed_nodes.add(node_id)
+            return True
+
+    return False
 
 
 def extract_lora_modem_preset_from_admin(
@@ -1516,6 +1799,16 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     node_id=gateway_numeric_id, hex_id=service_envelope.gateway_id
                 )
 
+        if not _source_packet_allowed_by_inferred_country(source, mesh_packet):
+            logging.debug(
+                "Skipping packet from source %s due to inferred-country filter (from=%s to=%s topic=%s)",
+                source_name,
+                getattr(mesh_packet, "from", None) if mesh_packet else None,
+                getattr(mesh_packet, "to", None) if mesh_packet else None,
+                msg.topic,
+            )
+            return
+
         # Process different packet types
         if mesh_packet.decoded.portnum == portnums_pb2.PortNum.TEXT_MESSAGE_APP:
             text_content = mesh_packet.decoded.payload.decode("utf-8", errors="replace")
@@ -1855,6 +2148,7 @@ def main() -> None:
     logging.info("Initializing database...")
     init_database()
     load_node_cache()
+    _load_latest_allowed_nodes_from_db()
 
     mqtt_clients: list[mqtt.Client] = []
 
@@ -1867,6 +2161,13 @@ def main() -> None:
                 source.get("port", 1883),
             )
             continue
+
+        if source.get("allowed_inferred_countries"):
+            logging.info(
+                "Source %s inferred-country filter enabled for: %s",
+                source.get("name", "default"),
+                ", ".join(source.get("allowed_inferred_countries") or []),
+            )
 
         mqtt_client = mqtt.Client(
             CallbackAPIVersion.VERSION2,

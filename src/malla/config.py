@@ -120,6 +120,11 @@ class AppConfig:
                         for channel in source.get("allowed_channels", [])
                         if str(channel).strip()
                     ],
+                    "allowed_inferred_countries": [
+                        str(country).strip().upper()
+                        for country in source.get("allowed_inferred_countries", [])
+                        if str(country).strip()
+                    ],
                 }
             )
 
@@ -137,6 +142,7 @@ class AppConfig:
                 "topic_prefix": self.mqtt_topic_prefix,
                 "topic_suffix": self.mqtt_topic_suffix,
                 "allowed_channels": [],
+                "allowed_inferred_countries": [],
             }
         ]
 
