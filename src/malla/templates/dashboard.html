@@ -38,40 +38,6 @@
         </div>
     </div>
 
-    {% if cleanup_status %}
-    <div class="row mb-4">
-        <div class="col">
-            <div class="card border-light-subtle">
-                <div class="card-body py-3">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-                        <div>
-                            <div class="fw-semibold">{{ t('dashboard.retention_cleanup') }}</div>
-                            <small class="text-muted">
-                                {{ t('dashboard.retention_window') }}:
-                                {% if cleanup_status.retention_hours and cleanup_status.retention_hours % 24 == 0 %}
-                                    {{ cleanup_status.retention_days|int }} {{ t('dashboard.days_label') }}
-                                {% else %}
-                                    {{ cleanup_status.retention_hours }} {{ t('dashboard.hours_label') }}
-                                {% endif %}
-                                | {{ t('dashboard.last_cleanup') }}: {{ cleanup_status.last_run_str or '--' }}
-                            </small>
-                        </div>
-                        <div class="text-md-end">
-                            <div>
-                                {{ t('dashboard.last_cleanup_deleted_prefix') }} {{ cleanup_status.packets_deleted }}
-                                {{ t('dashboard.packets_label') }} / {{ cleanup_status.nodes_deleted }} {{ t('dashboard.nodes_label') }}
-                            </div>
-                            <small class="text-muted">
-                                {{ t('dashboard.current_cutoff') }}: {{ cleanup_status.cutoff_time_str or '--' }}
-                            </small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     <!-- Network Overview Cards - Redesigned for Heterogeneous Networks -->
     <div class="row mb-4">
         <div class="col-md-2">
@@ -519,6 +485,40 @@
             </div>
         </div>
     </div>
+
+    {% if cleanup_status %}
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card border-light-subtle">
+                <div class="card-body py-3">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div>
+                            <div class="fw-semibold">{{ t('dashboard.retention_cleanup') }}</div>
+                            <small class="text-muted">
+                                {{ t('dashboard.retention_window') }}:
+                                {% if cleanup_status.retention_hours and cleanup_status.retention_hours % 24 == 0 %}
+                                    {{ cleanup_status.retention_days|int }} {{ t('dashboard.days_label') }}
+                                {% else %}
+                                    {{ cleanup_status.retention_hours }} {{ t('dashboard.hours_label') }}
+                                {% endif %}
+                                | {{ t('dashboard.last_cleanup') }}: {{ cleanup_status.last_run_str or '--' }}
+                            </small>
+                        </div>
+                        <div class="text-md-end">
+                            <div>
+                                {{ t('dashboard.last_cleanup_deleted_prefix') }} {{ cleanup_status.packets_deleted }}
+                                {{ t('dashboard.packets_label') }} / {{ cleanup_status.nodes_deleted }} {{ t('dashboard.nodes_label') }}
+                            </div>
+                            <small class="text-muted">
+                                {{ t('dashboard.current_cutoff') }}: {{ cleanup_status.cutoff_time_str or '--' }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
