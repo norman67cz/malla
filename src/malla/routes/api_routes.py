@@ -49,6 +49,8 @@ _LIVE_PACKETS_CACHE: dict[
     tuple[int, str, str, str, str, str, str, bool], tuple[float, dict[str, Any]]
 ] = {}
 _LIVE_PACKETS_CACHE_TTL_SEC = 2.5
+_LIVE_PACKET_FILTER_METADATA_CACHE: tuple[float, dict[str, Any]] | None = None
+_LIVE_PACKET_FILTER_METADATA_CACHE_TTL_SEC = 300
 _LIVE_PACKET_RECEPTIONS_LOOKBACK_ROWS = 5000
 _TABLE_ENDPOINT_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _TABLE_ENDPOINT_CACHE_TTL_SEC = 10
@@ -61,6 +63,109 @@ def _get_table_cache_key(endpoint: str) -> str:
 
 def _get_map_graph_cache_key(kind: str, payload: dict[str, Any]) -> str:
     return f"{kind}:{json.dumps(payload, sort_keys=True, default=str)}"
+
+
+def _get_live_packet_filter_metadata() -> dict[str, Any]:
+    global _LIVE_PACKET_FILTER_METADATA_CACHE
+
+    now_ts = time.time()
+    if (
+        _LIVE_PACKET_FILTER_METADATA_CACHE
+        and now_ts - _LIVE_PACKET_FILTER_METADATA_CACHE[0]
+        < _LIVE_PACKET_FILTER_METADATA_CACHE_TTL_SEC
+    ):
+        return _LIVE_PACKET_FILTER_METADATA_CACHE[1]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT DISTINCT gateway_id
+        FROM packet_history
+        WHERE gateway_id IS NOT NULL AND gateway_id != ''
+        ORDER BY gateway_id
+        """
+    )
+    available_gateway_ids = [row[0] for row in cursor.fetchall() if row[0]]
+
+    gateway_node_ids: list[int] = []
+    for gateway_id_value in available_gateway_ids:
+        if (
+            isinstance(gateway_id_value, str)
+            and gateway_id_value.startswith("!")
+            and len(gateway_id_value) > 1
+        ):
+            try:
+                gateway_node_ids.append(int(gateway_id_value[1:], 16))
+            except ValueError:
+                continue
+
+    gateway_names = (
+        get_bulk_node_names(list(set(gateway_node_ids))) if gateway_node_ids else {}
+    )
+    available_gateway_sources = []
+    for gateway_id_value in available_gateway_ids:
+        gateway_label = gateway_id_value
+        if (
+            isinstance(gateway_id_value, str)
+            and gateway_id_value.startswith("!")
+            and len(gateway_id_value) > 1
+        ):
+            try:
+                gateway_node_id = int(gateway_id_value[1:], 16)
+                gateway_label = gateway_names.get(gateway_node_id, gateway_id_value)
+            except ValueError:
+                gateway_label = gateway_id_value
+
+        available_gateway_sources.append(
+            {"value": gateway_id_value, "label": gateway_label}
+        )
+
+    cursor.execute(
+        """
+        SELECT DISTINCT mqtt_source
+        FROM packet_history
+        WHERE mqtt_source IS NOT NULL AND mqtt_source != ''
+        ORDER BY mqtt_source
+        """
+    )
+    available_mqtt_sources = {row[0] for row in cursor.fetchall() if row[0]}
+    available_mqtt_sources.update(
+        str(source.get("name", "")).strip()
+        for source in get_config().get_mqtt_sources()
+        if str(source.get("name", "")).strip()
+    )
+
+    cursor.execute(
+        """
+        SELECT DISTINCT channel_id
+        FROM packet_history
+        WHERE channel_id IS NOT NULL AND channel_id != ''
+        ORDER BY channel_id
+        """
+    )
+    available_channels = [row[0] for row in cursor.fetchall() if row[0]]
+
+    cursor.execute(
+        """
+        SELECT DISTINCT portnum_name
+        FROM packet_history
+        WHERE portnum_name IS NOT NULL AND portnum_name != ''
+        ORDER BY portnum_name
+        """
+    )
+    available_packet_types = [row[0] for row in cursor.fetchall() if row[0]]
+    conn.close()
+
+    payload = {
+        "available_channels": available_channels,
+        "available_gateway_sources": available_gateway_sources,
+        "available_mqtt_sources": sorted(available_mqtt_sources),
+        "available_packet_types": available_packet_types,
+    }
+    _LIVE_PACKET_FILTER_METADATA_CACHE = (now_ts, payload)
+    return payload
 
 
 def _get_dashboard_payload(
@@ -440,84 +545,7 @@ def api_live_packets():
         )
         fetched_rows = cursor.fetchall()
 
-        cursor.execute(
-            """
-            SELECT DISTINCT gateway_id
-            FROM packet_history
-            WHERE gateway_id IS NOT NULL AND gateway_id != ''
-            ORDER BY gateway_id
-            """
-        )
-        available_gateway_ids = [row[0] for row in cursor.fetchall() if row[0]]
-
-        gateway_node_ids: list[int] = []
-        for gateway_id_value in available_gateway_ids:
-            if (
-                isinstance(gateway_id_value, str)
-                and gateway_id_value.startswith("!")
-                and len(gateway_id_value) > 1
-            ):
-                try:
-                    gateway_node_ids.append(int(gateway_id_value[1:], 16))
-                except ValueError:
-                    continue
-
-        gateway_names = (
-            get_bulk_node_names(list(set(gateway_node_ids))) if gateway_node_ids else {}
-        )
-        available_gateway_sources = []
-        for gateway_id_value in available_gateway_ids:
-            gateway_label = gateway_id_value
-            if (
-                isinstance(gateway_id_value, str)
-                and gateway_id_value.startswith("!")
-                and len(gateway_id_value) > 1
-            ):
-                try:
-                    gateway_node_id = int(gateway_id_value[1:], 16)
-                    gateway_label = gateway_names.get(gateway_node_id, gateway_id_value)
-                except ValueError:
-                    gateway_label = gateway_id_value
-
-            available_gateway_sources.append(
-                {"value": gateway_id_value, "label": gateway_label}
-            )
-
-        cursor.execute(
-            """
-            SELECT DISTINCT mqtt_source
-            FROM packet_history
-            WHERE mqtt_source IS NOT NULL AND mqtt_source != ''
-            ORDER BY mqtt_source
-            """
-        )
-        available_mqtt_sources = {row[0] for row in cursor.fetchall() if row[0]}
-        available_mqtt_sources.update(
-            str(source.get("name", "")).strip()
-            for source in get_config().get_mqtt_sources()
-            if str(source.get("name", "")).strip()
-        )
-        available_mqtt_sources = sorted(available_mqtt_sources)
-
-        cursor.execute(
-            """
-            SELECT DISTINCT channel_id
-            FROM packet_history
-            WHERE channel_id IS NOT NULL AND channel_id != ''
-            ORDER BY channel_id
-            """
-        )
-        available_channels = [row[0] for row in cursor.fetchall() if row[0]]
-
-        cursor.execute(
-            """
-            SELECT DISTINCT portnum_name
-            FROM packet_history
-            WHERE portnum_name IS NOT NULL AND portnum_name != ''
-            ORDER BY portnum_name
-            """
-        )
-        available_packet_types = [row[0] for row in cursor.fetchall() if row[0]]
+        filter_metadata = _get_live_packet_filter_metadata()
 
         rows: list[Any] = list(fetched_rows)
         if group_by_mesh_id:
@@ -679,10 +707,7 @@ def api_live_packets():
             "packets": live_packets,
             "count": len(live_packets),
             "filters": {
-                "available_channels": available_channels,
-                "available_gateway_sources": available_gateway_sources,
-                "available_mqtt_sources": available_mqtt_sources,
-                "available_packet_types": available_packet_types,
+                **filter_metadata,
                 "selected": {
                     "channel_id": channel_id,
                     "gateway_source": gateway_source,

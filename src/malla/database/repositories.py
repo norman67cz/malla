@@ -1587,10 +1587,6 @@ class NodeRepository:
                 )
             """
 
-            count_query = base_cte + " SELECT COUNT(*) AS total_count FROM aggregated_nodes"
-            cursor.execute(count_query, params)
-            total_count = cursor.fetchone()["total_count"] or 0
-
             data_query = (
                 base_cte
                 + f"""
@@ -1607,7 +1603,8 @@ class NodeRepository:
                     neighborinfo,
                     admin,
                     waypoint,
-                    unknown
+                    unknown,
+                    COUNT(*) OVER() AS total_count
                 FROM aggregated_nodes
                 ORDER BY {order_column} {order_direction}, node_name ASC
                 LIMIT ? OFFSET ?
@@ -1615,6 +1612,9 @@ class NodeRepository:
             )
             cursor.execute(data_query, [*params, limit, offset])
             rows = [dict(row) for row in cursor.fetchall()]
+            total_count = rows[0]["total_count"] if rows else 0
+            for row in rows:
+                row.pop("total_count", None)
             conn.close()
 
             return {
@@ -1874,7 +1874,220 @@ class NodeRepository:
                 """
 
             # Execute query with parameters
-            if firmware_info_filter in {"captured", "heuristic", "none", "older_than_2_6"}:
+            if firmware_info_filter in {"captured", "heuristic", "none"}:
+                firmware_where_conditions = list(where_conditions)
+                firmware_from_clause = "FROM node_info ni"
+                if mqtt_source:
+                    firmware_where_conditions.append(
+                        "COALESCE(alltime.packet_count_total, 0) > 0"
+                    )
+                alltime_condition = ""
+                if firmware_info_filter == "captured":
+                    alltime_condition = "ni.firmware_version IS NOT NULL"
+                elif firmware_info_filter == "heuristic":
+                    alltime_condition = """
+                        ni.firmware_version IS NULL
+                        AND (
+                            COALESCE(alltime.pki_packet_count_total, 0) > 0
+                            OR COALESCE(alltime.packet_count_total, 0) >= 20
+                        )
+                    """
+                elif firmware_info_filter == "none":
+                    alltime_condition = """
+                        ni.firmware_version IS NULL
+                        AND COALESCE(alltime.pki_packet_count_total, 0) = 0
+                        AND COALESCE(alltime.packet_count_total, 0) < 20
+                    """
+
+                firmware_where_conditions.append(alltime_condition)
+                firmware_where_clause = (
+                    "WHERE " + " AND ".join(firmware_where_conditions)
+                    if firmware_where_conditions
+                    else ""
+                )
+
+                if needs_24h_stats:
+                    count_query = f"""
+                        SELECT COUNT(*) as total
+                        {firmware_from_clause}
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_24h,
+                                SUM(
+                                    CASE
+                                        WHEN hop_start IS NOT NULL
+                                         AND hop_limit IS NOT NULL
+                                         AND (hop_start - hop_limit) = 0
+                                        THEN 1
+                                        ELSE 0
+                                    END
+                                ) as direct_packet_count_24h,
+                                MAX(timestamp) as last_packet_time
+                            FROM packet_history
+                            WHERE timestamp > (strftime('%s', 'now') - 86400)
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) stats ON ni.node_id = stats.node_id
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_total,
+                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+                            FROM packet_history
+                            WHERE 1=1
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) alltime ON ni.node_id = alltime.node_id
+                        {firmware_where_clause}
+                    """
+                    count_params: list[Any] = []
+                    if mqtt_source:
+                        count_params.extend([mqtt_source, mqtt_source])
+                    count_params.extend(params)
+                    cursor.execute(count_query, count_params)
+                    total_count = cursor.fetchone()["total"]
+
+                    firmware_query = f"""
+                        SELECT
+                            ni.node_id,
+                            ni.long_name,
+                            ni.short_name,
+                            ni.hw_model,
+                            ni.role,
+                            ni.primary_channel,
+                            ni.firmware_version,
+                            ni.last_updated,
+                            printf('!%08x', ni.node_id) as hex_id,
+                            COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
+                            COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
+                            COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
+                            COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
+                            datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str
+                        {firmware_from_clause}
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_24h,
+                                SUM(
+                                    CASE
+                                        WHEN hop_start IS NOT NULL
+                                         AND hop_limit IS NOT NULL
+                                         AND (hop_start - hop_limit) = 0
+                                        THEN 1
+                                        ELSE 0
+                                    END
+                                ) as direct_packet_count_24h,
+                                MAX(timestamp) as last_packet_time
+                            FROM packet_history
+                            WHERE timestamp > (strftime('%s', 'now') - 86400)
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) stats ON ni.node_id = stats.node_id
+                        LEFT JOIN (
+                            SELECT
+                                gateway_id,
+                                COUNT(*) as gateway_packet_count_24h
+                            FROM packet_history
+                            WHERE timestamp > (strftime('%s', 'now') - 86400)
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                              AND gateway_id IS NOT NULL AND gateway_id != ''
+                            GROUP BY gateway_id
+                        ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_total,
+                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+                            FROM packet_history
+                            WHERE 1=1
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) alltime ON ni.node_id = alltime.node_id
+                        {firmware_where_clause}
+                        ORDER BY {order_column} {order_dir}
+                        LIMIT ? OFFSET ?
+                    """
+                    query_params: list[Any] = []
+                    if mqtt_source:
+                        query_params.extend([mqtt_source, mqtt_source, mqtt_source])
+                    query_params.extend(params)
+                    query_params.extend([limit, offset])
+                else:
+                    count_query = f"""
+                        SELECT COUNT(*) as total
+                        {firmware_from_clause}
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_total,
+                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+                            FROM packet_history
+                            WHERE 1=1
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) alltime ON ni.node_id = alltime.node_id
+                        {firmware_where_clause}
+                    """
+                    count_params = []
+                    if mqtt_source:
+                        count_params.append(mqtt_source)
+                    count_params.extend(params)
+                    cursor.execute(count_query, count_params)
+                    total_count = cursor.fetchone()["total"]
+
+                    firmware_query = f"""
+                        SELECT
+                            ni.node_id,
+                            ni.long_name,
+                            ni.short_name,
+                            ni.hw_model,
+                            ni.role,
+                            ni.primary_channel,
+                            ni.firmware_version,
+                            ni.last_updated,
+                            printf('!%08x', ni.node_id) as hex_id,
+                            0 as packet_count_24h,
+                            0 as direct_packet_count_24h,
+                            0 as gateway_packet_count_24h,
+                            ni.last_updated as last_packet_time,
+                            datetime(ni.last_updated, 'unixepoch') as last_packet_str
+                        {firmware_from_clause}
+                        LEFT JOIN (
+                            SELECT
+                                from_node_id as node_id,
+                                COUNT(*) as packet_count_total,
+                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+                            FROM packet_history
+                            WHERE 1=1
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) alltime ON ni.node_id = alltime.node_id
+                        {firmware_where_clause}
+                        ORDER BY {order_column} {order_dir}
+                        LIMIT ? OFFSET ?
+                    """
+                    query_params = []
+                    if mqtt_source:
+                        query_params.append(mqtt_source)
+                    query_params.extend(params)
+                    query_params.extend([limit, offset])
+
+                cursor.execute(firmware_query, query_params)
+                nodes = [dict(row) for row in cursor.fetchall()]
+                for node in nodes:
+                    node["firmware_info_state"] = firmware_info_filter
+            elif firmware_info_filter == "older_than_2_6":
+                older_than_where_conditions = list(where_conditions)
+                if mqtt_source:
+                    older_than_where_conditions.append(
+                        "COALESCE(alltime.packet_count_total, 0) > 0"
+                    )
+                older_than_where_clause = (
+                    "WHERE " + " AND ".join(older_than_where_conditions)
+                    if older_than_where_conditions
+                    else ""
+                )
                 if needs_24h_stats:
                     query_no_paging = f"""
                         SELECT
@@ -1934,7 +2147,15 @@ class NodeRepository:
                               {"AND mqtt_source = ?" if mqtt_source else ""}
                             GROUP BY from_node_id
                         ) alltime ON ni.node_id = alltime.node_id
-                        {where_clause}
+                        {older_than_where_clause}
+                        {" AND " if older_than_where_clause else "WHERE "}
+                        (
+                            ni.firmware_version IS NOT NULL
+                            OR (
+                                COALESCE(alltime.packet_count_total, 0) >= 20
+                                AND COALESCE(alltime.pki_packet_count_total, 0) = 0
+                            )
+                        )
                         ORDER BY {order_column} {order_dir}
                     """
                 else:
@@ -1967,10 +2188,18 @@ class NodeRepository:
                               {"AND mqtt_source = ?" if mqtt_source else ""}
                             GROUP BY from_node_id
                         ) alltime ON ni.node_id = alltime.node_id
-                        {where_clause}
+                        {older_than_where_clause}
+                        {" AND " if older_than_where_clause else "WHERE "}
+                        (
+                            ni.firmware_version IS NOT NULL
+                            OR (
+                                COALESCE(alltime.packet_count_total, 0) >= 20
+                                AND COALESCE(alltime.pki_packet_count_total, 0) = 0
+                            )
+                        )
                         ORDER BY {order_column} {order_dir}
                     """
-                query_no_paging_params: list[Any] = base_params.copy()
+                query_no_paging_params: list[Any] = []
                 if mqtt_source and needs_24h_stats:
                     query_no_paging_params.extend([mqtt_source, mqtt_source, mqtt_source])
                 elif mqtt_source:
@@ -4050,6 +4279,66 @@ class TracerouteRepository:
         if filters is None:
             filters = {}
 
+        def _extract_traceroute_route_nodes(
+            packet: dict[str, Any],
+        ) -> list[int] | None:
+            """Parse traceroute route nodes without name resolution."""
+            cached_route_nodes = packet.get("_route_nodes_cache")
+            if cached_route_nodes is not None:
+                return cached_route_nodes
+
+            route_nodes: list[int] | None = None
+            route_json = packet.get("route")
+            if route_json:
+                try:
+                    parsed_route = json.loads(route_json)
+                    if isinstance(parsed_route, list):
+                        route_nodes = parsed_route
+                except Exception:
+                    route_nodes = None
+
+            if route_nodes is None and packet.get("raw_payload"):
+                try:
+                    from ..models.traceroute import TraceroutePacket
+
+                    tr_packet = TraceroutePacket(packet, resolve_names=False)
+                    route_nodes = tr_packet.route_data.get("route_nodes", [])
+                except Exception as e:
+                    logger.debug(
+                        f"Failed to parse route nodes for traceroute packet {packet.get('id')}: {e}"
+                    )
+                    route_nodes = []
+
+            packet["_route_nodes_cache"] = route_nodes
+            return route_nodes
+
+        def _enrich_traceroute_display(
+            packet: dict[str, Any], *, resolve_names: bool
+        ) -> None:
+            """Populate route json and display only for packets being returned."""
+            packet["route"] = None
+            packet["route_display"] = "No route data"
+
+            if not packet.get("raw_payload"):
+                return
+
+            try:
+                from ..models.traceroute import TraceroutePacket
+
+                tr_packet = TraceroutePacket(packet, resolve_names=resolve_names)
+                route_nodes = tr_packet.route_data.get("route_nodes", [])
+                packet["_route_nodes_cache"] = route_nodes
+                if route_nodes:
+                    packet["route"] = json.dumps(route_nodes)
+                    if resolve_names:
+                        packet["route_display"] = tr_packet.format_path_display(
+                            "display"
+                        )
+            except Exception as e:
+                logger.debug(
+                    f"Failed to enrich route display for traceroute packet {packet.get('id')}: {e}"
+                )
+
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -4310,26 +4599,11 @@ class TracerouteRepository:
                     # Success indicator
                     aggregated["success"] = aggregated["processed_successfully"]
 
-                    # Enhanced route display using TraceroutePacket
+                    # Route parsing is deferred until after pagination. We only
+                    # populate defaults here so grouping/sorting stays cheap.
                     aggregated["route"] = None
                     aggregated["route_display"] = "No route data"
-                    if aggregated.get("raw_payload"):
-                        try:
-                            from ..models.traceroute import TraceroutePacket
-
-                            tr_packet = TraceroutePacket(aggregated, resolve_names=True)
-                            if tr_packet.route_data["route_nodes"]:
-                                aggregated["route"] = json.dumps(
-                                    tr_packet.route_data["route_nodes"]
-                                )
-                                # Get enhanced route display with node names
-                                aggregated["route_display"] = (
-                                    tr_packet.format_path_display("display")
-                                )
-                        except Exception as e:
-                            logger.debug(
-                                f"Failed to parse route for grouped packet {aggregated['id']}: {e}"
-                            )
+                    aggregated["_route_nodes_cache"] = None
 
                     aggregated_packets.append(aggregated)
 
@@ -4344,30 +4618,8 @@ class TracerouteRepository:
                             filtered_packets.append(packet)
                             continue
 
-                        # Attempt to match within the hop route
-                        # Prefer already extracted route information if available
-                        route_nodes: list[int] | None = None
-                        if packet.get("route"):
-                            try:
-                                import json as _json
-
-                                route_nodes = _json.loads(packet["route"])
-                            except Exception:
-                                route_nodes = None
-
-                        # If not available, fall back to parsing the raw payload
-                        if route_nodes is None and packet.get("raw_payload"):
-                            try:
-                                from ..models.traceroute import TraceroutePacket as _TRP
-
-                                tr_packet = _TRP(packet, resolve_names=False)
-                                route_nodes = tr_packet.route_data.get(
-                                    "route_nodes", []
-                                )
-                            except Exception as e:
-                                logger.debug(
-                                    f"Failed to parse route for grouped route_node filtering: {e}"
-                                )
+                        # Attempt to match within the hop route only when needed.
+                        route_nodes = _extract_traceroute_route_nodes(packet)
                         if route_nodes and route_node_filter in route_nodes:
                             filtered_packets.append(packet)
 
@@ -4420,6 +4672,9 @@ class TracerouteRepository:
 
                 # Apply pagination
                 packets = aggregated_packets[offset : offset + limit]
+                for packet in packets:
+                    _enrich_traceroute_display(packet, resolve_names=True)
+                    packet.pop("_route_nodes_cache", None)
 
                 # Handle None total_count for grouped queries
                 if total_count is None:
@@ -4499,21 +4754,10 @@ class TracerouteRepository:
                     packet["success"] = packet["processed_successfully"]
                     packet["is_grouped"] = False
 
-                    # Extract route data from raw_payload if available
+                    # Route parsing is deferred unless required for filtering or output.
                     packet["route"] = None
-                    if packet.get("raw_payload"):
-                        try:
-                            from ..models.traceroute import TraceroutePacket
-
-                            tr_packet = TraceroutePacket(packet, resolve_names=False)
-                            if tr_packet.route_data["route_nodes"]:
-                                packet["route"] = json.dumps(
-                                    tr_packet.route_data["route_nodes"]
-                                )
-                        except Exception as e:
-                            logger.debug(
-                                f"Failed to parse route for packet {packet['id']}: {e}"
-                            )
+                    packet["route_display"] = "No route data"
+                    packet["_route_nodes_cache"] = None
 
                     # Calculate hop count from hop_start and hop_limit
                     if (
@@ -4539,21 +4783,9 @@ class TracerouteRepository:
                             continue
 
                         # Check if the node appears in the route_nodes array
-                        if packet.get("raw_payload"):
-                            try:
-                                from ..models.traceroute import TraceroutePacket
-
-                                tr_packet = TraceroutePacket(
-                                    packet, resolve_names=False
-                                )
-                                if route_node_filter in tr_packet.route_data.get(
-                                    "route_nodes", []
-                                ):
-                                    filtered_packets.append(packet)
-                            except Exception as e:
-                                logger.debug(
-                                    f"Failed to parse route for route_node filtering: {e}"
-                                )
+                        route_nodes = _extract_traceroute_route_nodes(packet)
+                        if route_nodes and route_node_filter in route_nodes:
+                            filtered_packets.append(packet)
 
                     # Now apply pagination to filtered results
                     total_count = len(filtered_packets)
@@ -4562,6 +4794,10 @@ class TracerouteRepository:
                     # No route filtering needed, use all packets
                     packets = all_packets
                     total_count = total_count_before_filter
+
+                for packet in packets:
+                    _enrich_traceroute_display(packet, resolve_names=False)
+                    packet.pop("_route_nodes_cache", None)
 
             conn.close()
 
