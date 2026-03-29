@@ -105,6 +105,10 @@ class AppConfig:
                     "enabled": bool(source.get("enabled", True)),
                     "broker_address": broker_address,
                     "port": int(source.get("port", source.get("mqtt_port", 1883))),
+                    "tls": bool(source.get("tls", False)),
+                    "tls_insecure_skip_verify": bool(
+                        source.get("tls_insecure_skip_verify", False)
+                    ),
                     "username": source.get("username", source.get("mqtt_username")),
                     "password": source.get("password", source.get("mqtt_password")),
                     "topic_prefix": str(
@@ -137,6 +141,8 @@ class AppConfig:
                 "enabled": True,
                 "broker_address": self.mqtt_broker_address,
                 "port": self.mqtt_port,
+                "tls": False,
+                "tls_insecure_skip_verify": False,
                 "username": self.mqtt_username,
                 "password": self.mqtt_password,
                 "topic_prefix": self.mqtt_topic_prefix,

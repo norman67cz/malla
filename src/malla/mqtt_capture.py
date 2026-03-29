@@ -35,6 +35,7 @@ import json
 import hashlib
 import logging
 import socket
+import ssl
 import threading
 import time
 from pathlib import Path
@@ -2120,8 +2121,12 @@ def on_disconnect(
                     broker_address,
                     broker_port,
                 )
-                client.reconnect()
-                logging.info("Successfully reconnected %s to MQTT broker", source_name)
+                reconnect_rc = client.reconnect()
+                logging.info(
+                    "Reconnect request for %s returned %s; waiting for CONNACK.",
+                    source_name,
+                    reconnect_rc,
+                )
                 return
             except ConnectionRefusedError:
                 logging.warning(
@@ -2176,6 +2181,16 @@ def main() -> None:
 
         if source.get("username"):
             mqtt_client.username_pw_set(source.get("username"), source.get("password"))
+
+        if source.get("tls"):
+            cert_reqs = (
+                ssl.CERT_NONE
+                if source.get("tls_insecure_skip_verify")
+                else ssl.CERT_REQUIRED
+            )
+            mqtt_client.tls_set(cert_reqs=cert_reqs)
+            if source.get("tls_insecure_skip_verify"):
+                mqtt_client.tls_insecure_set(True)
 
         mqtt_client.on_connect = on_connect
         mqtt_client.on_message = on_message
