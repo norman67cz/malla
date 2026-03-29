@@ -89,6 +89,7 @@
                     <label for="mqttSourceFilter" class="form-label">{{ t('common.mqtt_source') }}</label>
                     <select class="form-select form-select-sm" id="mqttSourceFilter" name="mqtt_source">
                         <option value="">{{ t('common.all_sources') }}</option>
+                        <option value="cz" selected>cz</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -866,6 +867,9 @@ function initializeInterface() {
             const hasExplicitUrlValue = urlParams.has('mqtt_source');
             const selectedValue = select.value;
             (data.mqtt_sources || []).forEach((source) => {
+                if (Array.from(select.options).some((option) => option.value === source)) {
+                    return;
+                }
                 const option = document.createElement('option');
                 option.value = source;
                 option.textContent = source;
@@ -1020,6 +1024,16 @@ function buildFilterParams() {
     return params;
 }
 
+function syncMapMqttSourceToUrl(mqttSource) {
+    const url = new URL(window.location.href);
+    if (mqttSource) {
+        url.searchParams.set('mqtt_source', mqttSource);
+    } else {
+        url.searchParams.delete('mqtt_source');
+    }
+    window.history.replaceState({}, '', url.toString());
+}
+
 function getMapMqttSourceValue(formData = null) {
     if (formData) {
         return (formData.get('mqtt_source') || '').trim();
@@ -1050,6 +1064,7 @@ async function loadNodeLocations() {
         showLoading();
 
         const params = buildFilterParams();
+        syncMapMqttSourceToUrl(params.get('mqtt_source') || '');
         const response = await fetch(`/api/locations?${params.toString()}`);
         const data = await response.json();
 
