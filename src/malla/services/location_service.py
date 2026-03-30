@@ -452,6 +452,7 @@ class LocationService:
                     "is_bidirectional": True,  # Network graph links are bidirectional by design
                     "total_hops_seen": link["packet_count"],
                     "last_packet_id": link.get("last_packet_id"),
+                    "mqtt_source": link.get("mqtt_source"),
                 }
 
                 traceroute_links.append(traceroute_link)

@@ -1135,6 +1135,7 @@ class TracerouteService:
                                 "packet_count": 1,
                                 "last_seen": tr_data["timestamp"],
                                 "last_packet_id": tr_data["id"],
+                                "mqtt_source": tr_data.get("mqtt_source"),
                             }
                             stats["links_found"] += 1
                         else:
@@ -1144,6 +1145,7 @@ class TracerouteService:
                             if tr_data["timestamp"] > link["last_seen"]:
                                 link["last_seen"] = tr_data["timestamp"]
                                 link["last_packet_id"] = tr_data["id"]
+                                link["mqtt_source"] = tr_data.get("mqtt_source")
 
                         # Track connections for nodes
                         nodes[hop.from_node_id]["connections"].add(hop.to_node_id)
@@ -1229,6 +1231,7 @@ class TracerouteService:
                         "strength": round(strength, 1),
                         "last_seen": link_data["last_seen"],
                         "last_packet_id": link_data["last_packet_id"],
+                        "mqtt_source": link_data.get("mqtt_source"),
                     }
                 )
 

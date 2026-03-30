@@ -262,7 +262,11 @@
     }
 
     function loadAvailableNodes() {
-        fetch('/api/traceroute-hops/nodes')
+        const mqttSource = getCurrentHopMqttSource();
+        const url = mqttSource
+            ? `/api/traceroute-hops/nodes?mqtt_source=${encodeURIComponent(mqttSource)}`
+            : '/api/traceroute-hops/nodes';
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 availableNodes = data.nodes;
@@ -286,7 +290,11 @@
         node2Select.innerHTML = '<option value="">Loading related nodes...</option>';
         node2Select.disabled = true;
 
-        return fetch(`/api/traceroute/related-nodes/${nodeId}`)
+        const mqttSource = getCurrentHopMqttSource();
+        const url = mqttSource
+            ? `/api/traceroute/related-nodes/${nodeId}?mqtt_source=${encodeURIComponent(mqttSource)}`
+            : `/api/traceroute/related-nodes/${nodeId}`;
+        return fetch(url)
             .then(response => response.json())
             .then(data => {
                 relatedNodes = data.related_nodes || [];
@@ -440,7 +448,11 @@
         document.getElementById('no-data-section').style.display = 'none';
 
         // Fetch hop analysis data
-        fetch(`/api/traceroute/link/${node1Id}/${node2Id}`)
+        const mqttSource = getCurrentHopMqttSource();
+        const apiUrl = mqttSource
+            ? `/api/traceroute/link/${node1Id}/${node2Id}?mqtt_source=${encodeURIComponent(mqttSource)}`
+            : `/api/traceroute/link/${node1Id}/${node2Id}`;
+        fetch(apiUrl)
             .then(response => response.json())
             .then(data => {
                 document.getElementById('loading').style.display = 'none';
@@ -487,6 +499,16 @@
             url.searchParams.delete('to_node');
             window.history.pushState({}, '', url);
         }
+    }
+
+    function getCurrentHopMqttSource() {
+        const params = new URLSearchParams(window.location.search);
+        const rawValue = (params.get('mqtt_source') || '').trim();
+        return rawValue === 'all' ? '' : rawValue;
+    }
+
+    function getCurrentHopMqttSourceLabel() {
+        return getCurrentHopMqttSource() || 'All Sources';
     }
 
     function getNodeDisplayInfo(nodeId) {
@@ -596,6 +618,7 @@
 
         let html = `<strong>Link Analysis:</strong> `;
         html += `${fromNodeLink} ↔ ${toNodeLink}<br>`;
+        html += `<small class="text-muted">MQTT Source: ${getCurrentHopMqttSourceLabel()}</small><br>`;
 
         const directions = Object.keys(directionCounts);
         if (directions.length > 1) {

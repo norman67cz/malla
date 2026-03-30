@@ -1458,13 +1458,22 @@ def api_traceroute_hops_nodes():
     start_time = time.time()
     logger.info("API traceroute-hops/nodes endpoint accessed")
     try:
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source == "all":
+            mqtt_source = ""
         # Time the database query
         db_start = time.time()
         conn = get_db_connection()
         cursor = conn.cursor()
 
         # Get nodes that have been involved in traceroutes (either as source or destination)
-        query = """
+        source_filter_sql = ""
+        source_filter_params: list[Any] = []
+        if mqtt_source:
+            source_filter_sql = " AND mqtt_source = ?"
+            source_filter_params = [mqtt_source, mqtt_source]
+
+        query = f"""
             SELECT DISTINCT
                 ni.node_id,
                 ni.long_name,
@@ -1475,14 +1484,16 @@ def api_traceroute_hops_nodes():
             WHERE ni.node_id IN (
                 SELECT DISTINCT from_node_id FROM packet_history
                 WHERE portnum_name = 'TRACEROUTE_APP' AND from_node_id IS NOT NULL
+                {source_filter_sql}
                 UNION
                 SELECT DISTINCT to_node_id FROM packet_history
                 WHERE portnum_name = 'TRACEROUTE_APP' AND to_node_id IS NOT NULL
+                {source_filter_sql}
             )
             ORDER BY ni.long_name, ni.short_name
         """
 
-        cursor.execute(query)
+        cursor.execute(query, source_filter_params)
         nodes_data = [dict(row) for row in cursor.fetchall()]
         conn.close()
         db_time = time.time() - db_start
@@ -1543,7 +1554,12 @@ def api_traceroute_related_nodes(node_id):
     """API endpoint for nodes that have traceroute connections to the specified node."""
     logger.info(f"API traceroute/related-nodes endpoint accessed for node {node_id}")
     try:
-        related_nodes = NodeService.get_traceroute_related_nodes(node_id)
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source == "all":
+            mqtt_source = ""
+        related_nodes = NodeService.get_traceroute_related_nodes(
+            node_id, mqtt_source=mqtt_source or None
+        )
         return jsonify(related_nodes)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -1561,6 +1577,9 @@ def api_traceroute_link(node1_id, node2_id):
     try:
         node1_id_int = convert_node_id(node1_id)
         node2_id_int = convert_node_id(node2_id)
+        mqtt_source = request.args.get("mqtt_source", "").strip()
+        if mqtt_source == "all":
+            mqtt_source = ""
 
         # Get ALL recent traceroute packets to search for RF hops between these nodes
         from datetime import datetime, timedelta
@@ -1573,9 +1592,14 @@ def api_traceroute_link(node1_id, node2_id):
             "end_time": end_time.timestamp(),
             "processed_successfully_only": True,
         }
+        if mqtt_source:
+            filters["mqtt_source"] = mqtt_source
 
+        # For all-sources analysis we need a much wider sample, otherwise
+        # low-volume source-specific hops disappear behind busier regions.
+        packet_limit = 15000 if mqtt_source else 120000
         all_packets = TracerouteRepository.get_traceroute_packets(
-            limit=15000, filters=filters
+            limit=packet_limit, filters=filters
         )
 
         # Don't convert bytes to base64 yet - TraceroutePacket needs raw bytes

@@ -1,5 +1,5 @@
 (function () {
-    const CACHE_KEY = 'malla_nodes_cache_v1';
+    const CACHE_KEY_PREFIX = 'malla_nodes_cache_v1';
     const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
     // Internal state shared across the page
@@ -7,13 +7,44 @@
     let _loaded = false;            // Whether we attempted to load
     let _loadPromise = null;        // Promise that resolves once loading finished
 
+    function getCurrentMqttSourceParam() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('mqtt_source')) {
+                return '';
+            }
+            return (params.get('mqtt_source') || '').trim();
+        } catch (_err) {
+            return '';
+        }
+    }
+
+    function getCacheKey() {
+        const mqttSource = getCurrentMqttSourceParam() || 'default';
+        return `${CACHE_KEY_PREFIX}:${mqttSource}`;
+    }
+
+    function buildNodesApiUrl(extraParams = {}) {
+        const url = new URL('/api/nodes', window.location.origin);
+        const mqttSource = getCurrentMqttSourceParam();
+        if (mqttSource) {
+            url.searchParams.set('mqtt_source', mqttSource);
+        }
+        Object.entries(extraParams).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                url.searchParams.set(key, value);
+            }
+        });
+        return `${url.pathname}${url.search}`;
+    }
+
     /**
      * Attempt to restore cached node list from localStorage.
      * Returns the cached array if it exists and is still fresh, otherwise null.
      */
     function _restoreFromLocalStorage() {
         try {
-            const raw = localStorage.getItem(CACHE_KEY);
+            const raw = localStorage.getItem(getCacheKey());
             if (!raw) return null;
 
             const parsed = JSON.parse(raw);
@@ -33,7 +64,7 @@
     function _persistToLocalStorage(nodes) {
         try {
             const payload = { timestamp: Date.now(), nodes };
-            localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+            localStorage.setItem(getCacheKey(), JSON.stringify(payload));
         } catch (err) {
             // If storage quota exceeded or disabled, fail silently.
             console.warn('NodeCache: Failed to persist to localStorage:', err);
@@ -61,7 +92,7 @@
 
                 // 2. Fetch from API
                 try {
-                    const resp = await fetch('/api/nodes?limit=1000');
+                    const resp = await fetch(buildNodesApiUrl({ limit: 1000 }));
                     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                     const data = await resp.json();
                     _nodes = data.nodes || [];
@@ -85,7 +116,26 @@
         async getNode(nodeId) {
             await this.load();
             const idStr = nodeId.toString();
-            return _nodes.find((n) => n.node_id.toString() === idStr) || null;
+            const cachedNode = _nodes.find((n) => n.node_id.toString() === idStr) || null;
+            if (cachedNode) {
+                return cachedNode;
+            }
+
+            try {
+                const resp = await fetch(`/api/node/${encodeURIComponent(idStr)}/info`);
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                if (data && data.node) {
+                    this.addNode(data.node);
+                    return data.node;
+                }
+            } catch (err) {
+                console.warn(`NodeCache.getNode: fallback fetch failed for ${idStr}`, err);
+            }
+
+            return null;
         },
 
         /**
@@ -109,12 +159,17 @@
                         decId.includes(lower)
                     );
                 });
-                return results.slice(0, limit);
+                if (results.length > 0 || !query) {
+                    return results.slice(0, limit);
+                }
             }
 
-            // If we're still loading the big list, perform a quick focused query to the API
+            // If the local cache did not match, perform a focused query to the API.
             try {
-                const resp = await fetch(`/api/nodes?search=${encodeURIComponent(query)}&limit=${limit}`);
+                const resp = await fetch(buildNodesApiUrl({
+                    search: query,
+                    limit,
+                }));
                 if (resp.ok) {
                     const data = await resp.json();
                     if (Array.isArray(data.nodes)) {

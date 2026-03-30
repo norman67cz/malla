@@ -114,7 +114,7 @@ class NodeService:
         }
 
     @staticmethod
-    def get_traceroute_related_nodes(node_id) -> dict[str, Any]:
+    def get_traceroute_related_nodes(node_id, mqtt_source: str | None = None) -> dict[str, Any]:
         """
         Get nodes that have DIRECT RF hop connections to the specified node.
 
@@ -156,8 +156,12 @@ class NodeService:
             AND timestamp >= ?
             AND timestamp <= ?
         """
+        params: list[Any] = [start_time.timestamp(), end_time.timestamp()]
+        if mqtt_source:
+            query += "\n            AND mqtt_source = ?"
+            params.append(mqtt_source)
 
-        cursor.execute(query, (start_time.timestamp(), end_time.timestamp()))
+        cursor.execute(query, params)
         packets = cursor.fetchall()
 
         # Track nodes with direct RF hops and their connection counts

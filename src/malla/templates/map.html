@@ -1063,6 +1063,21 @@ function getMapMqttSourceValue(formData = null) {
     return (formData.get('mqtt_source') || '').trim() || 'cz';
 }
 
+function getMapMqttSourceLabel() {
+    const mqttSource = getMapMqttSourceValue();
+    return mqttSource || 'All Sources';
+}
+
+function getLinkMqttSourceLabel(link) {
+    return (link && link.mqtt_source) ? link.mqtt_source : getMapMqttSourceLabel();
+}
+
+function escapeJsString(value) {
+    return String(value || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+}
+
 // Load node locations from API
 async function loadNodeLocations() {
     try {
@@ -2240,6 +2255,7 @@ function createLinkPopupContent(link) {
             <div class="fw-bold mb-2">${link.link_type === 'packet' ? 'Direct Packet Link' : (link.link_type === 'neighborinfo' ? 'NeighborInfo Link' : 'Traceroute RF Hop')}</div>
             <div><strong>From:</strong> ${fromName}</div>
             <div><strong>To:</strong> ${toName}</div>
+            <div><strong>MQTT Source:</strong> ${getLinkMqttSourceLabel(link)}</div>
             ${link.link_type === 'neighborinfo'
                 ? `<div><strong>Reports:</strong> ${link.report_count || 1}</div>`
                 : `<div><strong>Success Rate:</strong> <span class="${qualityClass}">${link.success_rate.toFixed(1)}%</span></div>
@@ -2250,9 +2266,14 @@ function createLinkPopupContent(link) {
             ${link.link_type === 'neighborinfo' && link.neighbor_last_rx_time ? `<div><strong>Neighbor Last Heard:</strong> ${formatTimestamp(link.neighbor_last_rx_time)}</div>` : ''}
             ${link.link_type === 'neighborinfo' && link.neighbor_broadcast_interval_secs ? `<div><strong>Broadcast Interval:</strong> ${link.neighbor_broadcast_interval_secs}s</div>` : ''}
             <div class="mt-2 d-flex gap-1">
-                ${link.link_type !== 'neighborinfo' ? `
-                <button class="btn btn-sm btn-primary" onclick="showTracerouteHistory(${link.from_node_id}, ${link.to_node_id})">
-                    View History
+                ${link.link_type === 'traceroute' ? `
+                <button class="btn btn-sm btn-primary" onclick="showLinkHistory(${link.from_node_id}, ${link.to_node_id}, 'traceroute', '${escapeJsString(link.mqtt_source || '')}')">
+                    View RF Hop Analysis
+                </button>
+                ` : ''}
+                ${link.link_type === 'packet' ? `
+                <button class="btn btn-sm btn-primary" onclick="showLinkHistory(${link.from_node_id}, ${link.to_node_id}, 'packet', '${escapeJsString(link.mqtt_source || '')}')">
+                    View Packet History
                 </button>
                 ` : ''}
                 ${hasLocations ? `
@@ -2265,8 +2286,33 @@ function createLinkPopupContent(link) {
     `;
 }
 
+function withCurrentMqttSource(url) {
+    if (typeof applyCurrentMqttSourceToUrl === 'function') {
+        return applyCurrentMqttSourceToUrl(url);
+    }
+    return url;
+}
+
+function applyExplicitMqttSourceToUrl(url, mqttSource) {
+    if (!mqttSource) {
+        return withCurrentMqttSource(url);
+    }
+    const absoluteUrl = new URL(url, window.location.origin);
+    absoluteUrl.searchParams.set('mqtt_source', mqttSource);
+    return absoluteUrl.pathname + absoluteUrl.search;
+}
+
+function showLinkHistory(fromNodeId, toNodeId, linkType, mqttSource = '') {
+    if (linkType === 'packet') {
+        showPacketLinkHistory(fromNodeId, toNodeId, mqttSource);
+        return;
+    }
+
+    showTracerouteHistory(fromNodeId, toNodeId, mqttSource);
+}
+
 // Show detailed traceroute history between two nodes
-function showTracerouteHistory(fromNodeId, toNodeId) {
+function showTracerouteHistory(fromNodeId, toNodeId, mqttSource = '') {
     let url;
     if (window.URLFilterManager) {
         const urlManager = new URLFilterManager();
@@ -2278,7 +2324,32 @@ function showTracerouteHistory(fromNodeId, toNodeId) {
         // Fallback if URL filter manager is not available
         url = `/traceroute-hops?from_node=${fromNodeId}&to_node=${toNodeId}`;
     }
-    window.open(url, '_blank');
+    window.open(applyExplicitMqttSourceToUrl(url, mqttSource), '_blank');
+}
+
+function showPacketLinkHistory(fromNodeId, toNodeId, mqttSource = '') {
+    const fromNode = nodeData.find(node => node.id === fromNodeId);
+    const toNode = nodeData.find(node => node.id === toNodeId);
+    let filters = {};
+
+    if (fromNode?.is_mqtt_gateway && !toNode?.is_mqtt_gateway) {
+        filters = { from_node: toNodeId, gateway_id: fromNodeId };
+    } else if (toNode?.is_mqtt_gateway && !fromNode?.is_mqtt_gateway) {
+        filters = { from_node: fromNodeId, gateway_id: toNodeId };
+    } else {
+        filters = { from_node: fromNodeId, to_node: toNodeId };
+    }
+
+    let url;
+    if (window.URLFilterManager) {
+        const urlManager = new URLFilterManager();
+        url = urlManager.createFilteredURL('/packets', filters);
+    } else {
+        const params = new URLSearchParams(filters);
+        url = `/packets?${params.toString()}`;
+    }
+
+    window.open(applyExplicitMqttSourceToUrl(url, mqttSource), '_blank');
 }
 
 // View node details
@@ -2421,7 +2492,13 @@ function drawHopNetwork(skipFit = false) {
 
 // Show line of sight analysis for a link between two nodes (redirects to new page)
 function showLineOfSight(fromNodeId, toNodeId) {
-    window.open(`/line-of-sight?from=${fromNodeId}&to=${toNodeId}`, '_blank');
+    window.open(
+        applyExplicitMqttSourceToUrl(
+            `/line-of-sight?from=${fromNodeId}&to=${toNodeId}`,
+            getMapMqttSourceValue()
+        ),
+        '_blank'
+    );
 }
 
 </script>
