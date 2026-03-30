@@ -139,6 +139,16 @@
                 </select>
             </div>
             <div class="col-12 nodes-inline-field">
+                <label for="signal_quality_group" class="form-label">{{ t('nodes.signal_quality_group') }}</label>
+                <select class="form-select form-select-sm" id="signal_quality_group" name="signal_quality_group">
+                    <option value="">{{ t('nodes.signal_quality_group_any') }}</option>
+                    <option value="excellent">{{ t('nodes.signal_quality_group_excellent') }}</option>
+                    <option value="good">{{ t('nodes.signal_quality_group_good') }}</option>
+                    <option value="fair">{{ t('nodes.signal_quality_group_fair') }}</option>
+                    <option value="poor">{{ t('nodes.signal_quality_group_poor') }}</option>
+                </select>
+            </div>
+            <div class="col-12 nodes-inline-field">
                 <label for="firmware_info" class="form-label">{{ t('nodes.firmware_info') }}</label>
                 <select class="form-select form-select-sm" id="firmware_info" name="firmware_info">
                     <option value="">{{ t('nodes.firmware_info_any') }}</option>

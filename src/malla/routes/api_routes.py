@@ -2160,6 +2160,9 @@ def api_nodes_data():
         activity_group = request.args.get("activity_group", "").strip()
         if activity_group in {"very_active", "moderately_active", "lightly_active", "inactive"}:
             filters["activity_group"] = activity_group
+        signal_quality_group = request.args.get("signal_quality_group", "").strip()
+        if signal_quality_group in {"excellent", "good", "fair", "poor"}:
+            filters["signal_quality_group"] = signal_quality_group
         if request.args.get("active_only", "").strip() in {"1", "true", "on"}:
             filters["active_only"] = True
         if request.args.get("named_only", "").strip() in {"1", "true", "on"}:

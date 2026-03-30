@@ -1784,6 +1784,7 @@ class NodeRepository:
                 or filters.get("active_only")
                 or filters.get("direct_receptions")
                 or filters.get("activity_group")
+                or filters.get("signal_quality_group")
                 or order_by == "last_packet_time"
             )
 
@@ -1818,6 +1819,15 @@ class NodeRepository:
                     where_conditions.append("COALESCE(stats.packet_count_24h, 0) >= 1 AND COALESCE(stats.packet_count_24h, 0) <= 10")
                 elif activity_group == "inactive":
                     where_conditions.append("COALESCE(stats.packet_count_24h, 0) = 0")
+                signal_quality_group = filters.get("signal_quality_group")
+                if signal_quality_group == "excellent":
+                    where_conditions.append("stats.avg_rssi_24h > -70")
+                elif signal_quality_group == "good":
+                    where_conditions.append("stats.avg_rssi_24h > -80 AND stats.avg_rssi_24h <= -70")
+                elif signal_quality_group == "fair":
+                    where_conditions.append("stats.avg_rssi_24h > -90 AND stats.avg_rssi_24h <= -80")
+                elif signal_quality_group == "poor":
+                    where_conditions.append("stats.avg_rssi_24h <= -90")
 
                 where_clause = (
                     "WHERE " + " AND ".join(where_conditions)
@@ -1832,6 +1842,7 @@ class NodeRepository:
                         SELECT
                             from_node_id as node_id,
                             COUNT(*) as packet_count_24h,
+                            AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
                             SUM(
                                 CASE
                                     WHEN hop_start IS NOT NULL
@@ -1865,6 +1876,7 @@ class NodeRepository:
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
+                        stats.avg_rssi_24h as avg_rssi_24h,
                         COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                         COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
                         COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
@@ -1874,6 +1886,7 @@ class NodeRepository:
                         SELECT
                             from_node_id as node_id,
                             COUNT(*) as packet_count_24h,
+                            AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
                             SUM(
                                 CASE
                                     WHEN hop_start IS NOT NULL
@@ -1925,6 +1938,7 @@ class NodeRepository:
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         0 as packet_count_24h,
+                        NULL as avg_rssi_24h,
                         0 as direct_packet_count_24h,
                         0 as gateway_packet_count_24h,
                         ni.last_updated as last_packet_time,
@@ -1981,6 +1995,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
+                            stats.avg_rssi_24h as avg_rssi_24h,
                             COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                             COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
                             COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
@@ -1991,6 +2006,7 @@ class NodeRepository:
                             SELECT
                                 from_node_id as node_id,
                                 COUNT(*) as packet_count_24h,
+                                AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
                                 SUM(
                                     CASE
                                         WHEN hop_start IS NOT NULL
@@ -2048,6 +2064,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             0 as packet_count_24h,
+                            NULL as avg_rssi_24h,
                             0 as direct_packet_count_24h,
                             0 as gateway_packet_count_24h,
                             ni.last_updated as last_packet_time,
@@ -2104,6 +2121,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
+                            stats.avg_rssi_24h as avg_rssi_24h,
                             COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                             COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
                             COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
@@ -2115,6 +2133,7 @@ class NodeRepository:
                             SELECT
                                 from_node_id as node_id,
                                 COUNT(*) as packet_count_24h,
+                                AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
                                 SUM(
                                     CASE
                                         WHEN hop_start IS NOT NULL
@@ -2174,6 +2193,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             0 as packet_count_24h,
+                            NULL as avg_rssi_24h,
                             0 as direct_packet_count_24h,
                             0 as gateway_packet_count_24h,
                             ni.last_updated as last_packet_time,

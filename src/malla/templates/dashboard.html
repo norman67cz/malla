@@ -1023,6 +1023,18 @@ function openNodesForActivityGroup(activityGroup) {
     window.location.href = `${url.pathname}${url.search}`;
 }
 
+function openNodesForSignalQualityGroup(signalQualityGroup) {
+    if (!signalQualityGroup) return;
+    const url = new URL('/nodes', window.location.origin);
+    url.searchParams.set('signal_quality_group', signalQualityGroup);
+    if (selectedMqttSource) {
+        url.searchParams.set('mqtt_source', selectedMqttSource);
+    } else {
+        url.searchParams.set('mqtt_source', 'all');
+    }
+    window.location.href = `${url.pathname}${url.search}`;
+}
+
 function createGatewayActivityChart(gatewayData) {
     if (!gatewayData || gatewayData.length === 0) return;
 
@@ -1075,6 +1087,8 @@ function createSignalDistributionChart(signalData) {
     const colors = getChartColors();
     const options = getDefaultChartOptions();
 
+    const signalQualityGroups = ['excellent', 'good', 'fair', 'poor'];
+
     chartInstances.signalDistributionChart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -1085,7 +1099,16 @@ function createSignalDistributionChart(signalData) {
                 backgroundColor: [colors.success, colors.warning, colors.info, colors.danger]
             }]
         },
-        options: options
+        options: {
+            ...options,
+            onClick: (_, elements) => {
+                if (!elements || !elements.length) return;
+                const signalQualityGroup = signalQualityGroups[elements[0].index];
+                if (signalQualityGroup) {
+                    openNodesForSignalQualityGroup(signalQualityGroup);
+                }
+            }
+        }
     });
 }
 
