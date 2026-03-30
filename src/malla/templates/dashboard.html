@@ -1047,6 +1047,18 @@ function openNodesForHardwareModel(hwModel) {
     window.location.href = `${url.pathname}${url.search}`;
 }
 
+function openPacketsForPortnum(portnum) {
+    if (!portnum) return;
+    const url = new URL('/packets', window.location.origin);
+    url.searchParams.set('portnum', portnum);
+    if (selectedMqttSource) {
+        url.searchParams.set('mqtt_source', selectedMqttSource);
+    } else {
+        url.searchParams.set('mqtt_source', 'all');
+    }
+    window.location.href = `${url.pathname}${url.search}`;
+}
+
 function createGatewayActivityChart(gatewayData) {
     if (!gatewayData || gatewayData.length === 0) return;
 
@@ -1187,6 +1199,13 @@ function createPacketTypesChart(packetTypes) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (_, elements) => {
+                if (!elements || !elements.length) return;
+                const portnum = packetTypes[elements[0].index]?.portnum_name;
+                if (portnum) {
+                    openPacketsForPortnum(portnum);
+                }
+            },
             plugins: {
                 legend: {
                     position: 'bottom',
