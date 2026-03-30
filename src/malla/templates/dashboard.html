@@ -1035,6 +1035,18 @@ function openNodesForSignalQualityGroup(signalQualityGroup) {
     window.location.href = `${url.pathname}${url.search}`;
 }
 
+function openNodesForHardwareModel(hwModel) {
+    if (!hwModel) return;
+    const url = new URL('/nodes', window.location.origin);
+    url.searchParams.set('hw_model', hwModel);
+    if (selectedMqttSource) {
+        url.searchParams.set('mqtt_source', selectedMqttSource);
+    } else {
+        url.searchParams.set('mqtt_source', 'all');
+    }
+    window.location.href = `${url.pathname}${url.search}`;
+}
+
 function createGatewayActivityChart(gatewayData) {
     if (!gatewayData || gatewayData.length === 0) return;
 
@@ -1222,6 +1234,13 @@ function createHardwareModelChart(hardwareModels) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (_, elements) => {
+                if (!elements || !elements.length) return;
+                const hwModel = hardwareModels[elements[0].index]?.hw_model;
+                if (hwModel) {
+                    openNodesForHardwareModel(hwModel);
+                }
+            },
             plugins: {
                 legend: {
                     position: 'bottom',
