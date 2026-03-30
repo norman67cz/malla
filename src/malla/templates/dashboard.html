@@ -670,6 +670,9 @@ document.addEventListener('DOMContentLoaded', function () {
         dashboardMqttSource.addEventListener('change', function() {
             selectedMqttSource = this.value || '';
             syncDashboardUrl();
+            if (typeof updateMqttSourceLinks === 'function') {
+                updateMqttSourceLinks(document);
+            }
             refreshDashboardData();
         });
 
@@ -693,6 +696,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 dashboardMqttSource.value = selectedMqttSource;
                 syncDashboardUrl();
+                if (typeof updateMqttSourceLinks === 'function') {
+                    updateMqttSourceLinks(document);
+                }
                 refreshDashboardData();
             })
             .catch((error) => console.error('Error loading dashboard MQTT sources:', error));

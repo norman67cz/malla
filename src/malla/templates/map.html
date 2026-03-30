@@ -87,9 +87,13 @@
                 </div>
                 <div class="mb-3">
                     <label for="mqttSourceFilter" class="form-label">{{ t('common.mqtt_source') }}</label>
+                    {% set initial_mqtt_source = request.args.get('mqtt_source', '').strip() or 'cz' %}
                     <select class="form-select form-select-sm" id="mqttSourceFilter" name="mqtt_source">
                         <option value="">{{ t('common.all_sources') }}</option>
-                        <option value="cz" selected>cz</option>
+                        {% if initial_mqtt_source and initial_mqtt_source != 'cz' %}
+                        <option value="{{ initial_mqtt_source }}" selected>{{ initial_mqtt_source }}</option>
+                        {% endif %}
+                        <option value="cz" {{ 'selected' if initial_mqtt_source == 'cz' else '' }}>cz</option>
                     </select>
                 </div>
                 <div class="mb-3">
