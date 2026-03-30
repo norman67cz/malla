@@ -84,6 +84,8 @@
 
 {% block content %}
 {% set filters = filters|default({}) %}
+</div> <!-- Close the base template's container -->
+<div class="container-fluid px-4">
 <div class="row">
     <div class="col-12">
         <h1><i class="bi bi-router"></i> {{ t('page.gateway_compare_title') }}</h1>
@@ -596,4 +598,5 @@ if (chartData.timeline_snr.timestamps.length > 0) {
 
 </script>
 {% endif %}
+</div>
 {% endblock %}

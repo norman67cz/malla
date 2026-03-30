@@ -51,6 +51,8 @@
 {% endblock %}
 
 {% block content %}
+</div> <!-- Close the base template's container -->
+<div class="container-fluid px-4">
 <div class="row">
     <div class="col-12">
         <h1><i class="bi bi-broadcast-pin"></i> {{ t('page.traceroute_hops_title') }}</h1>
@@ -893,4 +895,5 @@
         return `${Math.floor(diff / 86400)}d ago`;
     }
 </script>
+</div>
 {% endblock %}
