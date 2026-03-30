@@ -21,6 +21,10 @@ class URLFilterManager {
         const params = new URLSearchParams(window.location.search);
         const result = {};
         for (let [key, value] of params.entries()) {
+            if (key === 'mqtt_source' && value === 'all') {
+                result[key] = '';
+                continue;
+            }
             if (value.trim()) {
                 result[key] = value;
             }
@@ -37,6 +41,9 @@ class URLFilterManager {
 
         // Add non-empty filters to URL
         Object.entries(filters).forEach(([key, value]) => {
+            if (key === 'mqtt_source') {
+                return;
+            }
             if (Array.isArray(value)) {
                 if (value.length > 0) {
                     url.searchParams.set(key, value.join(','));
@@ -45,6 +52,18 @@ class URLFilterManager {
                 url.searchParams.set(key, value);
             }
         });
+
+        const mqttSourceField = this.form?.querySelector('[name="mqtt_source"]');
+        if (mqttSourceField) {
+            const mqttSourceValue = (mqttSourceField.value || '').trim();
+            if (mqttSourceValue) {
+                url.searchParams.set('mqtt_source', mqttSourceValue);
+            } else {
+                url.searchParams.set('mqtt_source', 'all');
+            }
+        } else if (filters.mqtt_source && filters.mqtt_source.toString().trim()) {
+            url.searchParams.set('mqtt_source', filters.mqtt_source);
+        }
 
         // Update URL without page reload
         window.history.replaceState({}, '', url);

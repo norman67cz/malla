@@ -58,9 +58,14 @@
                         <span class="text-muted small" id="statisticPeriodLabel">1 day</span>
                     </div>
                     <div class="d-flex align-items-center gap-2 ms-md-auto statistic-header-controls">
+                        {% set raw_initial_mqtt_source = request.args.get('mqtt_source', '').strip() %}
+                        {% set initial_mqtt_source = '' if raw_initial_mqtt_source == 'all' else (raw_initial_mqtt_source or 'cz') %}
                         <select class="form-select form-select-sm" id="statisticMqttSource" style="max-width: 13rem;">
-                            <option value="cz" selected>cz</option>
                             <option value="">{{ t('common.all_sources') }}</option>
+                            {% if initial_mqtt_source and initial_mqtt_source != 'cz' %}
+                            <option value="{{ initial_mqtt_source }}" selected>{{ initial_mqtt_source }}</option>
+                            {% endif %}
+                            <option value="cz" {{ 'selected' if initial_mqtt_source == 'cz' else '' }}>cz</option>
                         </select>
                         <div class="btn-group btn-group-sm statistic-period-buttons" role="group" aria-label="Time period">
                             <button type="button" class="btn btn-outline-primary" data-period="1h">1 hour</button>
@@ -105,7 +110,9 @@ document.addEventListener('DOMContentLoaded', function() {
         defaultSort: { column: 'node_name', direction: 'asc' },
         filters: {
             period: '1d',
-            mqtt_source: 'cz'
+            mqtt_source: urlParams.has('mqtt_source')
+                ? ((urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || ''))
+                : 'cz'
         },
         columns: [
             {
@@ -132,7 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function ensureStatisticSourceOption(value) {
-        if (!value) return;
+        if (!value || value === 'all') return;
         if (Array.from(mqttSourceSelect.options).some((option) => option.value === value)) return;
         const option = document.createElement('option');
         option.value = value;
@@ -150,7 +157,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mqttSource) {
             url.searchParams.set('mqtt_source', mqttSource);
         } else {
-            url.searchParams.delete('mqtt_source');
+            url.searchParams.set('mqtt_source', 'all');
         }
         window.history.replaceState({}, '', url);
     }
@@ -204,8 +211,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 option.textContent = source;
                 mqttSourceSelect.appendChild(option);
             });
-            const requestedSource = urlParams.get('mqtt_source') || '';
-            if (requestedSource && sources.includes(requestedSource)) {
+            const requestedSource = urlParams.has('mqtt_source')
+                ? ((urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || ''))
+                : null;
+            if (requestedSource !== null && (!requestedSource || sources.includes(requestedSource))) {
                 mqttSourceSelect.value = requestedSource;
             } else {
                 mqttSourceSelect.value = sources.includes('cz') ? 'cz' : '';
@@ -215,9 +224,12 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch((error) => console.error('Error loading MQTT sources:', error));
 
-    ensureStatisticSourceOption(urlParams.get('mqtt_source') || '');
-    if (urlParams.get('mqtt_source')) {
-        mqttSourceSelect.value = urlParams.get('mqtt_source') || '';
+    const initialRequestedSource = urlParams.has('mqtt_source')
+        ? ((urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || ''))
+        : '';
+    ensureStatisticSourceOption(initialRequestedSource);
+    if (urlParams.has('mqtt_source')) {
+        mqttSourceSelect.value = initialRequestedSource;
     }
     setPeriod(urlParams.get('period') || '1d');
 });

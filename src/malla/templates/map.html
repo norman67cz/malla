@@ -87,7 +87,8 @@
                 </div>
                 <div class="mb-3">
                     <label for="mqttSourceFilter" class="form-label">{{ t('common.mqtt_source') }}</label>
-                    {% set initial_mqtt_source = request.args.get('mqtt_source', '').strip() or 'cz' %}
+                    {% set raw_initial_mqtt_source = request.args.get('mqtt_source', '').strip() %}
+                    {% set initial_mqtt_source = '' if raw_initial_mqtt_source == 'all' else (raw_initial_mqtt_source or 'cz') %}
                     <select class="form-select form-select-sm" id="mqttSourceFilter" name="mqtt_source">
                         <option value="">{{ t('common.all_sources') }}</option>
                         {% if initial_mqtt_source and initial_mqtt_source != 'cz' %}
@@ -881,7 +882,7 @@ function initializeInterface() {
             });
 
             if (hasExplicitUrlValue) {
-                select.value = urlParams.get('mqtt_source') || '';
+                select.value = (urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || '');
             } else if (selectedValue) {
                 select.value = selectedValue;
             } else {
@@ -1033,7 +1034,7 @@ function syncMapMqttSourceToUrl(mqttSource) {
     if (mqttSource) {
         url.searchParams.set('mqtt_source', mqttSource);
     } else {
-        url.searchParams.delete('mqtt_source');
+        url.searchParams.set('mqtt_source', 'all');
     }
     window.history.replaceState({}, '', url.toString());
 }
@@ -1051,7 +1052,7 @@ function getMapMqttSourceValue(formData = null) {
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('mqtt_source')) {
-        return urlParams.get('mqtt_source') || '';
+        return (urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || '');
     }
 
     if (!formData) {

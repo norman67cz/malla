@@ -264,11 +264,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function applyFiltersFromUrl() {
         ensureLiveLogSelectOption(channelFilter, liveLogUrlParams.get('channel_id') || '');
         ensureLiveLogSelectOption(gatewaySourceFilter, liveLogUrlParams.get('gateway_source') || '');
-        ensureLiveLogSelectOption(mqttSourceFilter, liveLogUrlParams.get('mqtt_source') || '');
+        const requestedMqttSource = liveLogUrlParams.has('mqtt_source')
+            ? ((liveLogUrlParams.get('mqtt_source') || '') === 'all' ? '' : (liveLogUrlParams.get('mqtt_source') || ''))
+            : '';
+        ensureLiveLogSelectOption(mqttSourceFilter, requestedMqttSource);
         ensureLiveLogSelectOption(typeFilter, liveLogUrlParams.get('packet_type') || '');
         channelFilter.value = liveLogUrlParams.get('channel_id') || '';
         gatewaySourceFilter.value = liveLogUrlParams.get('gateway_source') || '';
-        mqttSourceFilter.value = liveLogUrlParams.get('mqtt_source') || '';
+        mqttSourceFilter.value = requestedMqttSource;
         typeFilter.value = liveLogUrlParams.get('packet_type') || '';
         fromFilter.value = liveLogUrlParams.get('from_filter') || '';
         toFilter.value = liveLogUrlParams.get('to_filter') || '';
@@ -289,7 +292,13 @@ document.addEventListener('DOMContentLoaded', function() {
         ];
 
         filters.forEach(([key, value]) => {
-            if (value) {
+            if (key === 'mqtt_source') {
+                if (value) {
+                    url.searchParams.set(key, value);
+                } else {
+                    url.searchParams.set(key, 'all');
+                }
+            } else if (value) {
                 url.searchParams.set(key, value);
             } else {
                 url.searchParams.delete(key);
@@ -369,7 +378,7 @@ document.addEventListener('DOMContentLoaded', function() {
         toFilter.value = selected.to_filter || toFilter.value || '';
         groupByMeshIdFilter.checked = Boolean(selected.group_by_mesh_id);
 
-        if (!filtersInitialized && !selected.mqtt_source && availableMqttSources.includes('cz')) {
+        if (!filtersInitialized && !selected.mqtt_source && !liveLogUrlParams.has('mqtt_source') && availableMqttSources.includes('cz')) {
             filtersInitialized = true;
             mqttSourceFilter.value = 'cz';
             syncLiveLogUrl();
@@ -514,7 +523,7 @@ document.addEventListener('DOMContentLoaded', function() {
     clearFiltersBtn.addEventListener('click', function() {
         channelFilter.value = '';
         gatewaySourceFilter.value = '';
-        mqttSourceFilter.value = Array.from(mqttSourceFilter.options).some(option => option.value === 'cz') ? 'cz' : '';
+        mqttSourceFilter.value = '';
         typeFilter.value = '';
         fromFilter.value = '';
         toFilter.value = '';

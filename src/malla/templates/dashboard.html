@@ -535,7 +535,7 @@ let temporalWindowHours = [24, 72, 168, 336].includes(Number(dashboardUrlParams.
     ? Number(dashboardUrlParams.get('temporal_window_hours'))
     : 24;
 let selectedMqttSource = dashboardUrlParams.has('mqtt_source')
-    ? (dashboardUrlParams.get('mqtt_source') || '')
+    ? ((dashboardUrlParams.get('mqtt_source') || '') === 'all' ? '' : (dashboardUrlParams.get('mqtt_source') || ''))
     : 'cz';
 
 // Get theme-aware colors for charts
@@ -630,7 +630,7 @@ function syncDashboardUrl() {
     if (selectedMqttSource) {
         url.searchParams.set('mqtt_source', selectedMqttSource);
     } else {
-        url.searchParams.delete('mqtt_source');
+        url.searchParams.set('mqtt_source', 'all');
     }
     if (temporalWindowHours !== 24) {
         url.searchParams.set('temporal_window_hours', String(temporalWindowHours));
@@ -691,7 +691,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 if (selectedMqttSource && !sources.includes(selectedMqttSource)) {
                     selectedMqttSource = sources.includes('cz') ? 'cz' : '';
-                } else if (!selectedMqttSource && sources.includes('cz')) {
+                } else if (!selectedMqttSource && !dashboardUrlParams.has('mqtt_source') && sources.includes('cz')) {
                     selectedMqttSource = 'cz';
                 }
                 dashboardMqttSource.value = selectedMqttSource;

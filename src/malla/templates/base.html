@@ -341,13 +341,24 @@
             return null;
         }
 
-        function getCurrentMqttSource() {
+        function getCurrentMqttSourceState() {
             const control = findActiveMqttSourceControl();
             if (control) {
-                return (control.value || '').trim();
+                return {
+                    value: (control.value || '').trim(),
+                    explicit: true,
+                };
             }
             const params = new URLSearchParams(window.location.search);
-            return (params.get('mqtt_source') || '').trim();
+            const rawValue = (params.get('mqtt_source') || '').trim();
+            return {
+                value: rawValue === 'all' ? '' : rawValue,
+                explicit: params.has('mqtt_source'),
+            };
+        }
+
+        function getCurrentMqttSource() {
+            return getCurrentMqttSourceState().value;
         }
 
         function shouldPropagateMqttSource(pathname) {
@@ -370,7 +381,7 @@
                 return rawHref;
             }
 
-            const currentMqttSource = getCurrentMqttSource();
+            const mqttSourceState = getCurrentMqttSourceState();
             try {
                 const url = new URL(rawHref, window.location.origin);
                 if (url.origin !== window.location.origin) {
@@ -380,8 +391,10 @@
                     return rawHref;
                 }
 
-                if (currentMqttSource) {
-                    url.searchParams.set('mqtt_source', currentMqttSource);
+                if (mqttSourceState.value) {
+                    url.searchParams.set('mqtt_source', mqttSourceState.value);
+                } else if (mqttSourceState.explicit) {
+                    url.searchParams.set('mqtt_source', 'all');
                 } else {
                     url.searchParams.delete('mqtt_source');
                 }

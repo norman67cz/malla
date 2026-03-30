@@ -237,6 +237,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.mqtt_sources) {
                 const select = document.getElementById('mqtt_source');
                 const allOption = select.querySelector('option[value=""]');
+                const urlParams = new URLSearchParams(window.location.search);
+                const hasExplicitUrlValue = urlParams.has('mqtt_source');
                 const selectedValue = select.value;
                 select.innerHTML = '';
                 select.appendChild(allOption);
@@ -246,7 +248,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     option.textContent = source;
                     select.appendChild(option);
                 });
-                select.value = selectedValue || (data.mqtt_sources.includes('cz') ? 'cz' : '');
+                if (hasExplicitUrlValue) {
+                    select.value = (urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || '');
+                } else {
+                    select.value = selectedValue || (data.mqtt_sources.includes('cz') ? 'cz' : '');
+                }
             }
         } catch (err) {
             console.error('Error loading MQTT sources:', err);

@@ -74,7 +74,8 @@
         <!-- Filters -->
         <div class="sidebar-section">
             <h6><i class="bi bi-funnel"></i> {{ t('common.filters') }}</h6>
-            {% set initial_mqtt_source = mqtt_source or request.args.get('mqtt_source', '').strip() or 'cz' %}
+            {% set raw_initial_mqtt_source = mqtt_source or request.args.get('mqtt_source', '').strip() %}
+            {% set initial_mqtt_source = '' if raw_initial_mqtt_source == 'all' else (raw_initial_mqtt_source or 'cz') %}
             <form id="filterForm">
                 <div class="mb-3">
                     <label for="hours" class="form-label">{{ t('graph.time_period') }}</label>
@@ -93,7 +94,7 @@
                         {% if initial_mqtt_source and initial_mqtt_source != 'cz' %}
                         <option value="{{ initial_mqtt_source }}" selected>{{ initial_mqtt_source }}</option>
                         {% endif %}
-                        <option value="cz" {{ 'selected' if initial_mqtt_source == 'cz' or not initial_mqtt_source else '' }}>cz</option>
+                        <option value="cz" {{ 'selected' if initial_mqtt_source == 'cz' else '' }}>cz</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -475,7 +476,7 @@ async function loadMqttSources() {
         });
 
         if (hasExplicitUrlValue) {
-            select.value = urlParams.get('mqtt_source') || '';
+            select.value = (urlParams.get('mqtt_source') || '') === 'all' ? '' : (urlParams.get('mqtt_source') || '');
         } else if (selectedValue) {
             select.value = selectedValue;
         } else {
@@ -506,7 +507,7 @@ function syncGraphUrl() {
     if (mqttSource) {
         url.searchParams.set('mqtt_source', mqttSource);
     } else {
-        url.searchParams.delete('mqtt_source');
+        url.searchParams.set('mqtt_source', 'all');
     }
 
     if (minSnr && minSnr !== '-200') {
