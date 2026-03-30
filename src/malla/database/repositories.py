@@ -1783,6 +1783,7 @@ class NodeRepository:
                 order_by == "packet_count_24h"
                 or filters.get("active_only")
                 or filters.get("direct_receptions")
+                or filters.get("activity_group")
                 or order_by == "last_packet_time"
             )
 
@@ -1808,6 +1809,15 @@ class NodeRepository:
                     where_conditions.append("COALESCE(stats.direct_packet_count_24h, 0) > 0")
                 elif direct_receptions_filter == "eq0":
                     where_conditions.append("COALESCE(stats.direct_packet_count_24h, 0) = 0")
+                activity_group = filters.get("activity_group")
+                if activity_group == "very_active":
+                    where_conditions.append("COALESCE(stats.packet_count_24h, 0) > 100")
+                elif activity_group == "moderately_active":
+                    where_conditions.append("COALESCE(stats.packet_count_24h, 0) > 10 AND COALESCE(stats.packet_count_24h, 0) <= 100")
+                elif activity_group == "lightly_active":
+                    where_conditions.append("COALESCE(stats.packet_count_24h, 0) >= 1 AND COALESCE(stats.packet_count_24h, 0) <= 10")
+                elif activity_group == "inactive":
+                    where_conditions.append("COALESCE(stats.packet_count_24h, 0) = 0")
 
                 where_clause = (
                     "WHERE " + " AND ".join(where_conditions)

@@ -2157,6 +2157,9 @@ def api_nodes_data():
         direct_receptions = request.args.get("direct_receptions", "").strip()
         if direct_receptions in {"gt0", "eq0"}:
             filters["direct_receptions"] = direct_receptions
+        activity_group = request.args.get("activity_group", "").strip()
+        if activity_group in {"very_active", "moderately_active", "lightly_active", "inactive"}:
+            filters["activity_group"] = activity_group
         if request.args.get("active_only", "").strip() in {"1", "true", "on"}:
             filters["active_only"] = True
         if request.args.get("named_only", "").strip() in {"1", "true", "on"}:

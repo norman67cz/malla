@@ -973,6 +973,7 @@ function createNodeActivityChart(nodeData) {
 
     const activityDist = nodeData.activity_distribution;
     const colors = getChartColors();
+    const activityGroups = ['very_active', 'moderately_active', 'lightly_active', 'inactive'];
 
     chartInstances.nodeActivityChart = new Chart(ctx, {
         type: 'doughnut',
@@ -991,6 +992,13 @@ function createNodeActivityChart(nodeData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (_, elements) => {
+                if (!elements || !elements.length) return;
+                const activityGroup = activityGroups[elements[0].index];
+                if (activityGroup) {
+                    openNodesForActivityGroup(activityGroup);
+                }
+            },
             plugins: {
                 legend: {
                     position: 'bottom',
@@ -1001,6 +1009,18 @@ function createNodeActivityChart(nodeData) {
             }
         }
     });
+}
+
+function openNodesForActivityGroup(activityGroup) {
+    if (!activityGroup) return;
+    const url = new URL('/nodes', window.location.origin);
+    url.searchParams.set('activity_group', activityGroup);
+    if (selectedMqttSource) {
+        url.searchParams.set('mqtt_source', selectedMqttSource);
+    } else {
+        url.searchParams.set('mqtt_source', 'all');
+    }
+    window.location.href = `${url.pathname}${url.search}`;
 }
 
 function createGatewayActivityChart(gatewayData) {
