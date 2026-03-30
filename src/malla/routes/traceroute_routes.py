@@ -67,6 +67,7 @@ def traceroute_graph():
         min_snr = request.args.get("min_snr", -200.0, type=float)
         include_indirect = request.args.get("include_indirect", False, type=bool)
         primary_channel = request.args.get("primary_channel", "").strip()
+        mqtt_source = request.args.get("mqtt_source", "").strip()
 
         # Validate parameters
         if hours < 1 or hours > 168:  # Max 7 days
@@ -81,6 +82,7 @@ def traceroute_graph():
             min_snr=min_snr,
             include_indirect=include_indirect,
             primary_channel=primary_channel,
+            mqtt_source=mqtt_source,
         )
     except Exception as e:
         logger.error(f"Error in traceroute graph route: {e}")

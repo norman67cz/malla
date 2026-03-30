@@ -1740,6 +1740,7 @@ def api_traceroute_graph():
         hours = request.args.get("hours", 72, type=int)
         min_snr = request.args.get("min_snr", -30.0, type=float)
         include_indirect = request.args.get("include_indirect", False, type=bool)
+        mqtt_source = request.args.get("mqtt_source", "").strip()
 
         # Optional primary_channel filter
         primary_channel = request.args.get("primary_channel", "").strip()
@@ -1755,6 +1756,8 @@ def api_traceroute_graph():
         extra_filters = {}
         if primary_channel:
             extra_filters["primary_channel"] = primary_channel
+        if mqtt_source:
+            extra_filters["mqtt_source"] = mqtt_source
 
         # Get graph data from service
         graph_data = _get_traceroute_graph_payload(

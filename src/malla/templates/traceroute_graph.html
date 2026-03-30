@@ -74,6 +74,7 @@
         <!-- Filters -->
         <div class="sidebar-section">
             <h6><i class="bi bi-funnel"></i> {{ t('common.filters') }}</h6>
+            {% set initial_mqtt_source = mqtt_source or request.args.get('mqtt_source', '').strip() or 'cz' %}
             <form id="filterForm">
                 <div class="mb-3">
                     <label for="hours" class="form-label">{{ t('graph.time_period') }}</label>
@@ -83,6 +84,16 @@
                         <option value="24" {% if hours == 24 %}selected{% endif %}>{{ t('graph.last_24_hours') }}</option>
                         <option value="72" {% if hours == 72 %}selected{% endif %}>{{ t('graph.last_3_days') }}</option>
                         <option value="168" {% if hours == 168 %}selected{% endif %}>{{ t('graph.last_week') }}</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="mqtt_source" class="form-label">{{ t('common.mqtt_source') }}</label>
+                    <select class="form-select form-select-sm" id="mqtt_source" name="mqtt_source">
+                        <option value="">{{ t('common.all_sources') if t('common.all_sources') != 'common.all_sources' else 'All Sources' }}</option>
+                        {% if initial_mqtt_source and initial_mqtt_source != 'cz' %}
+                        <option value="{{ initial_mqtt_source }}" selected>{{ initial_mqtt_source }}</option>
+                        {% endif %}
+                        <option value="cz" {{ 'selected' if initial_mqtt_source == 'cz' or not initial_mqtt_source else '' }}>cz</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -267,8 +278,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Wait for jQuery to be available
     function waitForJQuery() {
         if (typeof $ !== 'undefined') {
-            initializeInterface();
-            loadGraph();
+            initializeInterface().then(() => {
+                loadGraph();
+            });
         } else {
             setTimeout(waitForJQuery, 50);
         }
@@ -277,7 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
     waitForJQuery();
 });
 
-function initializeInterface() {
+async function initializeInterface() {
     // Handle filter form submission
     $('#filterForm').on('submit', function(e) {
         e.preventDefault();
@@ -383,6 +395,8 @@ function initializeInterface() {
 
     // Load primary channels into filter checkbox list
     loadPrimaryChannels();
+    await loadMqttSources();
+    syncGraphUrl();
 }
 
 function loadGraph() {
@@ -398,6 +412,8 @@ function loadGraph() {
             params.append(element.name, 'true');
         }
     });
+
+    syncGraphUrl();
 
     fetch(`/api/traceroute/graph?${params.toString()}`)
         .then(response => response.json())
@@ -435,6 +451,83 @@ function loadGraph() {
             console.error('Error loading graph:', error);
             showError('Failed to load graph data');
         });
+}
+
+async function loadMqttSources() {
+    try {
+        const response = await fetch('/api/meshtastic/mqtt-sources');
+        const data = await response.json();
+        const select = document.getElementById('mqtt_source');
+        if (!select) return;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasExplicitUrlValue = urlParams.has('mqtt_source');
+        const selectedValue = select.value;
+
+        (data.mqtt_sources || []).forEach((source) => {
+            if (Array.from(select.options).some((option) => option.value === source)) {
+                return;
+            }
+            const option = document.createElement('option');
+            option.value = source;
+            option.textContent = source;
+            select.appendChild(option);
+        });
+
+        if (hasExplicitUrlValue) {
+            select.value = urlParams.get('mqtt_source') || '';
+        } else if (selectedValue) {
+            select.value = selectedValue;
+        } else {
+            select.value = (data.mqtt_sources || []).includes('cz') ? 'cz' : '';
+        }
+    } catch (error) {
+        console.error('Error loading MQTT sources:', error);
+    }
+}
+
+function syncGraphUrl() {
+    const url = new URL(window.location);
+    const form = document.getElementById('filterForm');
+    if (!form) return;
+
+    const hours = form.querySelector('#hours')?.value || '72';
+    const mqttSource = form.querySelector('#mqtt_source')?.value || '';
+    const minSnr = form.querySelector('#min_snr')?.value || '-200';
+    const includeIndirect = form.querySelector('#include_indirect')?.checked || false;
+    const primaryChannel = form.querySelector('#primary_channel')?.value || '';
+
+    if (hours && hours !== '72') {
+        url.searchParams.set('hours', hours);
+    } else {
+        url.searchParams.delete('hours');
+    }
+
+    if (mqttSource) {
+        url.searchParams.set('mqtt_source', mqttSource);
+    } else {
+        url.searchParams.delete('mqtt_source');
+    }
+
+    if (minSnr && minSnr !== '-200') {
+        url.searchParams.set('min_snr', minSnr);
+    } else {
+        url.searchParams.delete('min_snr');
+    }
+
+    if (includeIndirect) {
+        url.searchParams.set('include_indirect', 'true');
+    } else {
+        url.searchParams.delete('include_indirect');
+    }
+
+    if (primaryChannel) {
+        url.searchParams.set('primary_channel', primaryChannel);
+    } else {
+        url.searchParams.delete('primary_channel');
+    }
+
+    window.history.replaceState({}, '', url);
 }
 
 function renderGraph(data) {
