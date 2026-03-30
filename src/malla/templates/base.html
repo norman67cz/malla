@@ -145,7 +145,7 @@
                 <ul class="navbar-nav me-auto">
                     <!-- Dashboard -->
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'main.dashboard' }}" href="{{ url_for('main.dashboard', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('main.dashboard') }}">
                             <i class="bi bi-speedometer2"></i> {{ t('menu.dashboard') }}
                         </a>
                     </li>
@@ -192,7 +192,7 @@
 
                     <!-- Network Graph -->
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'traceroute.traceroute_graph' }}" href="{{ url_for('traceroute.traceroute_graph') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'traceroute.traceroute_graph' }}" href="{{ url_for('traceroute.traceroute_graph', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('traceroute.traceroute_graph') }}">
                             <i class="bi bi-diagram-2"></i> {{ t('menu.network_graph') }}
                         </a>
                     </li>
@@ -314,13 +314,45 @@
 
     <!-- Node tooltip functionality -->
     <script>
+        function findActiveMqttSourceControl() {
+            const selectors = [
+                '#mqtt_source',
+                '#dashboardMqttSource',
+                '#statisticMqttSource',
+                '#mqttSourceFilter',
+                '#liveLogMqttSourceFilter',
+                'select[name="mqtt_source"]',
+                'input[name="mqtt_source"]',
+            ];
+
+            for (const selector of selectors) {
+                const elements = document.querySelectorAll(selector);
+                for (const element of elements) {
+                    if (!element || element.disabled) {
+                        continue;
+                    }
+                    if (element.type === 'hidden') {
+                        continue;
+                    }
+                    return element;
+                }
+            }
+
+            return null;
+        }
+
         function getCurrentMqttSource() {
+            const control = findActiveMqttSourceControl();
+            if (control) {
+                return (control.value || '').trim();
+            }
             const params = new URLSearchParams(window.location.search);
             return (params.get('mqtt_source') || '').trim();
         }
 
         function shouldPropagateMqttSource(pathname) {
             return (
+                pathname === '/' ||
                 pathname === '/packets' ||
                 pathname === '/packets/live' ||
                 pathname === '/nodes' ||
@@ -338,10 +370,6 @@
             }
 
             const currentMqttSource = getCurrentMqttSource();
-            if (!currentMqttSource) {
-                return rawHref;
-            }
-
             try {
                 const url = new URL(rawHref, window.location.origin);
                 if (url.origin !== window.location.origin) {
@@ -350,9 +378,13 @@
                 if (!shouldPropagateMqttSource(url.pathname)) {
                     return rawHref;
                 }
-                if (!url.searchParams.has('mqtt_source')) {
+
+                if (currentMqttSource) {
                     url.searchParams.set('mqtt_source', currentMqttSource);
+                } else {
+                    url.searchParams.delete('mqtt_source');
                 }
+
                 return `${url.pathname}${url.search}${url.hash}`;
             } catch (error) {
                 return rawHref;
@@ -396,6 +428,18 @@
                 childList: true,
                 subtree: true,
             });
+        });
+
+        document.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            if (
+                target.matches('#mqtt_source, #dashboardMqttSource, #statisticMqttSource, #mqttSourceFilter, #liveLogMqttSourceFilter, select[name="mqtt_source"], input[name="mqtt_source"]')
+            ) {
+                updateMqttSourceLinks(document);
+            }
         });
 
         document.addEventListener('click', (event) => {
