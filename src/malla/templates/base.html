@@ -314,6 +314,97 @@
 
     <!-- Node tooltip functionality -->
     <script>
+        function getCurrentMqttSource() {
+            const params = new URLSearchParams(window.location.search);
+            return (params.get('mqtt_source') || '').trim();
+        }
+
+        function shouldPropagateMqttSource(pathname) {
+            return (
+                pathname === '/packets' ||
+                pathname === '/packets/live' ||
+                pathname === '/nodes' ||
+                pathname === '/traceroute' ||
+                pathname === '/map' ||
+                pathname === '/statistic' ||
+                pathname.startsWith('/node/') ||
+                pathname.startsWith('/packet/')
+            );
+        }
+
+        function applyCurrentMqttSourceToUrl(rawHref) {
+            if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
+                return rawHref;
+            }
+
+            const currentMqttSource = getCurrentMqttSource();
+            if (!currentMqttSource) {
+                return rawHref;
+            }
+
+            try {
+                const url = new URL(rawHref, window.location.origin);
+                if (url.origin !== window.location.origin) {
+                    return rawHref;
+                }
+                if (!shouldPropagateMqttSource(url.pathname)) {
+                    return rawHref;
+                }
+                if (!url.searchParams.has('mqtt_source')) {
+                    url.searchParams.set('mqtt_source', currentMqttSource);
+                }
+                return `${url.pathname}${url.search}${url.hash}`;
+            } catch (error) {
+                return rawHref;
+            }
+        }
+
+        function updateAnchorMqttSource(anchor) {
+            if (!anchor || !anchor.getAttribute) {
+                return;
+            }
+            const href = anchor.getAttribute('href');
+            const updatedHref = applyCurrentMqttSourceToUrl(href);
+            if (updatedHref && updatedHref !== href) {
+                anchor.setAttribute('href', updatedHref);
+            }
+        }
+
+        function updateMqttSourceLinks(root = document) {
+            const anchors = root.querySelectorAll ? root.querySelectorAll('a[href]') : [];
+            anchors.forEach(updateAnchorMqttSource);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateMqttSourceLinks(document);
+
+            const observer = new MutationObserver((mutations) => {
+                for (const mutation of mutations) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType !== Node.ELEMENT_NODE) {
+                            return;
+                        }
+                        if (node.matches && node.matches('a[href]')) {
+                            updateAnchorMqttSource(node);
+                        }
+                        updateMqttSourceLinks(node);
+                    });
+                }
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+            });
+        });
+
+        document.addEventListener('click', (event) => {
+            const anchor = event.target.closest ? event.target.closest('a[href]') : null;
+            if (anchor) {
+                updateAnchorMqttSource(anchor);
+            }
+        }, true);
+
         // Cache for node information to avoid repeated API calls
         const nodeInfoCache = new Map();
 

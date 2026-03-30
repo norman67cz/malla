@@ -431,7 +431,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 title: 'Node ID',
                 sortable: true,
                 render: (value, row) => {
-                    return `<a href="/node/${row.node_id}" class="text-decoration-none font-monospace" title="View node details">
+                    const nodeUrl = applyCurrentMqttSourceToUrl(`/node/${row.node_id}`);
+                    return `<a href="${nodeUrl}" class="text-decoration-none font-monospace" title="View node details">
                                 <small>${value}</small>
                             </a>`;
                 }
@@ -442,7 +443,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 sortable: true,
                 render: (value, row) => {
                     const displayName = value || 'Unnamed';
-                    return `<a href="/node/${row.node_id}" class="text-decoration-none" title="View node details">
+                    const nodeUrl = applyCurrentMqttSourceToUrl(`/node/${row.node_id}`);
+                    return `<a href="${nodeUrl}" class="text-decoration-none" title="View node details">
                                 ${displayName}
                             </a>`;
                 }
@@ -524,6 +526,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 sortable: false,
                 render: (value, row) => {
                     // Create filtered URLs using the URL manager
+                    const nodeUrl = applyCurrentMqttSourceToUrl(`/node/${value}`);
                     const packetsUrl = urlManager.createFilteredURL('/packets', {
                         from_node: value
                     });
@@ -533,7 +536,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     return `
                         <div class="btn-group" role="group">
-                            <a href="/node/${value}"
+                            <a href="${nodeUrl}"
                                class="btn btn-sm btn-outline-primary" title="View node details">
                                 <i class="bi bi-info-circle"></i>
                             </a>
