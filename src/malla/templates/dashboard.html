@@ -1059,6 +1059,18 @@ function openPacketsForPortnum(portnum) {
     window.location.href = `${url.pathname}${url.search}`;
 }
 
+function openNodesForGateway(gatewayId) {
+    if (!gatewayId) return;
+    const url = new URL('/nodes', window.location.origin);
+    url.searchParams.set('search', gatewayId);
+    if (selectedMqttSource) {
+        url.searchParams.set('mqtt_source', selectedMqttSource);
+    } else {
+        url.searchParams.set('mqtt_source', 'all');
+    }
+    window.location.href = `${url.pathname}${url.search}`;
+}
+
 function createGatewayActivityChart(gatewayData) {
     if (!gatewayData || gatewayData.length === 0) return;
 
@@ -1083,6 +1095,13 @@ function createGatewayActivityChart(gatewayData) {
     // Customize options for bar chart
     options.plugins.legend.display = false;
     options.scales.x.ticks.maxRotation = 45;
+    options.onClick = (_, elements) => {
+        if (!elements || !elements.length) return;
+        const gatewayId = topGateways[elements[0].index]?.gateway_id;
+        if (gatewayId) {
+            openNodesForGateway(gatewayId);
+        }
+    };
 
     chartInstances.gatewayActivityChart = new Chart(ctx, {
         type: 'bar',
