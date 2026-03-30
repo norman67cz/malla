@@ -127,6 +127,7 @@
     {% block vendor_head %}{% endblock %}
 </head>
 <body>
+    {% set current_mqtt_source = request.args.get('mqtt_source', '') %}
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="z-index: 1040;">
         <div class="container">
@@ -151,40 +152,40 @@
 
                     <!-- Packets -->
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if 'packet' in request.endpoint }}" href="{{ url_for('packet.packets') }}">
+                        <a class="nav-link {{ 'active' if 'packet' in request.endpoint }}" href="{{ url_for('packet.packets', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('packet.packets') }}">
                             <i class="bi bi-box"></i> {{ t('menu.packets') }}
                         </a>
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'packet.live_packets' }}" href="{{ url_for('packet.live_packets') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'packet.live_packets' }}" href="{{ url_for('packet.live_packets', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('packet.live_packets') }}">
                             <i class="bi bi-activity"></i> {{ t('menu.live_log') }}
                         </a>
                     </li>
 
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'main.statistic_page' }}" href="{{ url_for('main.statistic_page') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'main.statistic_page' }}" href="{{ url_for('main.statistic_page', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('main.statistic_page') }}">
                             <i class="bi bi-table"></i> {{ t('menu.statistic') }}
                         </a>
                     </li>
 
                     <!-- Nodes -->
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if 'node' in request.endpoint }}" href="{{ url_for('node.nodes') }}">
+                        <a class="nav-link {{ 'active' if 'node' in request.endpoint }}" href="{{ url_for('node.nodes', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('node.nodes') }}">
                             <i class="bi bi-router"></i> {{ t('menu.nodes') }}
                         </a>
                     </li>
 
                     <!-- Traceroutes (list) -->
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'traceroute.traceroute' }}" href="{{ url_for('traceroute.traceroute') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'traceroute.traceroute' }}" href="{{ url_for('traceroute.traceroute', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('traceroute.traceroute') }}">
                             <i class="bi bi-diagram-3"></i> {{ t('menu.traceroutes') }}
                         </a>
                     </li>
 
                     <!-- Map -->
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'main.map_view' }}" href="{{ url_for('main.map_view') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'main.map_view' }}" href="{{ url_for('main.map_view', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('main.map_view') }}">
                             <i class="bi bi-map"></i> {{ t('menu.map') }}
                         </a>
                     </li>

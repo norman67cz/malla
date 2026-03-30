@@ -38,7 +38,8 @@
         {% set display_name = hex_id %}
     {% endif %}
     
-    <a href="{{ url_for('node.node_detail', node_id=node_id) }}" 
+    {% set current_mqtt_source = request.args.get('mqtt_source', '') %}
+    <a href="{{ url_for('node.node_detail', node_id=node_id, mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('node.node_detail', node_id=node_id) }}" 
        class="node-link text-decoration-none {{ additional_classes }}"
        data-node-id="{{ node_id }}"
        data-bs-toggle="tooltip"
@@ -86,7 +87,8 @@
         {% set display_name = hex_id %}
     {% endif %}
     
-    <a href="{{ url_for('node.node_detail', node_id=node_id) }}" 
+    {% set current_mqtt_source = request.args.get('mqtt_source', '') %}
+    <a href="{{ url_for('node.node_detail', node_id=node_id, mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('node.node_detail', node_id=node_id) }}" 
        class="badge {{ badge_class }} text-decoration-none node-link"
        data-node-id="{{ node_id }}"
        data-bs-toggle="tooltip"
@@ -199,11 +201,12 @@
     #}
     {% if gateway_id and gateway_id != "Unknown" and gateway_id != "Unknown Gateway" %}
         {% if gateway_id.startswith('!') %}
+            {% set current_mqtt_source = request.args.get('mqtt_source', '') %}
             {# This is a node ID #}
             {% if packet_id %}
                 {# Link to specific packet reception #}
                 {% set display_name = gateway_name or gateway_id %}
-                <a href="{{ url_for('packet.packet_detail', packet_id=packet_id) }}" 
+                <a href="{{ url_for('packet.packet_detail', packet_id=packet_id, mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('packet.packet_detail', packet_id=packet_id) }}" 
                    class="node-link text-decoration-none {{ additional_classes }}"
                    data-node-id="{{ gateway_id }}"
                    data-bs-toggle="tooltip"

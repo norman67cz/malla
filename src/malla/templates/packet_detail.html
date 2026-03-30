@@ -84,13 +84,14 @@
 {% endblock %}
 
 {% block content %}
+{% set current_mqtt_source = request.args.get('mqtt_source', packet.mqtt_source or '') %}
 <!-- Header -->
 <div class="row mb-4">
         <div class="col">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="/">{{ t('node_detail.home') }}</a></li>
-                    <li class="breadcrumb-item"><a href="/packets">{{ t('menu.packets') }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('packet.packets', mqtt_source=current_mqtt_source) if current_mqtt_source else url_for('packet.packets') }}">{{ t('menu.packets') }}</a></li>
                     <li class="breadcrumb-item active">Packet #{{ packet.id }}</li>
                 </ol>
             </nav>
