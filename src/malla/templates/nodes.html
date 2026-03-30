@@ -129,6 +129,16 @@
                 </select>
             </div>
             <div class="col-12 nodes-inline-field">
+                <label for="activity_group" class="form-label">{{ t('nodes.activity_group') }}</label>
+                <select class="form-select form-select-sm" id="activity_group" name="activity_group">
+                    <option value="">{{ t('nodes.activity_group_any') }}</option>
+                    <option value="very_active">{{ t('nodes.activity_group_very_active') }}</option>
+                    <option value="moderately_active">{{ t('nodes.activity_group_moderately_active') }}</option>
+                    <option value="lightly_active">{{ t('nodes.activity_group_lightly_active') }}</option>
+                    <option value="inactive">{{ t('nodes.activity_group_inactive') }}</option>
+                </select>
+            </div>
+            <div class="col-12 nodes-inline-field">
                 <label for="firmware_info" class="form-label">{{ t('nodes.firmware_info') }}</label>
                 <select class="form-select form-select-sm" id="firmware_info" name="firmware_info">
                     <option value="">{{ t('nodes.firmware_info_any') }}</option>
