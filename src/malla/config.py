@@ -124,11 +124,19 @@ class AppConfig:
                         for channel in source.get("allowed_channels", [])
                         if str(channel).strip()
                     ],
+                    "blocked_topic_branches": [
+                        str(branch).strip()
+                        for branch in source.get("blocked_topic_branches", [])
+                        if str(branch).strip()
+                    ],
                     "allowed_inferred_countries": [
                         str(country).strip().upper()
                         for country in source.get("allowed_inferred_countries", [])
                         if str(country).strip()
                     ],
+                    "drop_failed_service_envelope": bool(
+                        source.get("drop_failed_service_envelope", False)
+                    ),
                     "max_receptions_per_mesh_packet": max(
                         0,
                         int(source.get("max_receptions_per_mesh_packet", 0) or 0),
@@ -152,7 +160,9 @@ class AppConfig:
                 "topic_prefix": self.mqtt_topic_prefix,
                 "topic_suffix": self.mqtt_topic_suffix,
                 "allowed_channels": [],
+                "blocked_topic_branches": [],
                 "allowed_inferred_countries": [],
+                "drop_failed_service_envelope": False,
                 "max_receptions_per_mesh_packet": 0,
             }
         ]

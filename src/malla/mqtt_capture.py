@@ -156,6 +156,21 @@ def extract_topic_metadata(topic: str) -> tuple[str | None, str]:
     return (None, "")
 
 
+def topic_has_blocked_branch(topic: str, blocked_branches: list[str] | None) -> bool:
+    """Return True when *topic* contains a configured blocked branch segment."""
+    if not topic or not blocked_branches:
+        return False
+
+    normalized_blocked = {
+        str(branch).strip().lower() for branch in blocked_branches if str(branch).strip()
+    }
+    if not normalized_blocked:
+        return False
+
+    parts = [part.strip().lower() for part in topic.split("/") if part.strip()]
+    return any(part in normalized_blocked for part in parts)
+
+
 def format_lora_modem_preset(preset_name: str | None) -> str | None:
     """Convert enum-like preset names such as ``MEDIUM_FAST`` to ``MEDIUM-FAST``."""
     if not preset_name:
@@ -1902,6 +1917,15 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             )
             return
 
+    blocked_topic_branches = source.get("blocked_topic_branches") or []
+    if topic_has_blocked_branch(msg.topic, blocked_topic_branches):
+        logging.info(
+            "Skipping message from %s on topic %s due to blocked topic branch filter",
+            source_name,
+            msg.topic,
+        )
+        return
+
     # Always store the raw message data first, regardless of parsing success
     raw_service_envelope_data = msg.payload
     service_envelope = None
@@ -2219,6 +2243,16 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             f"Error processing MQTT protobuf message on topic {msg.topic}: {e}"
         )
         logging.debug(f"Raw payload length: {len(msg.payload)} bytes")
+
+        if source.get("drop_failed_service_envelope", False) and (
+            service_envelope is None or mesh_packet is None
+        ):
+            logging.info(
+                "Dropping failed ServiceEnvelope from %s on topic %s due to source configuration",
+                source_name,
+                msg.topic,
+            )
+            return
 
     # Always log packet to database, regardless of parsing success
     try:
