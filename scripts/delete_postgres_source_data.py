@@ -5,6 +5,7 @@ Examples:
     python3 scripts/delete_postgres_source_data.py --source pl --to 2026-03-01
     python3 scripts/delete_postgres_source_data.py --source pl --from 2026-03-01
     python3 scripts/delete_postgres_source_data.py --source pl --from 2026-03-01 --to 2026-03-15
+    python3 scripts/delete_postgres_source_data.py --source pl --all
     python3 scripts/delete_postgres_source_data.py --source pl --dry-run
 """
 
@@ -34,11 +35,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Delete packet_history rows for one MQTT source from PostgreSQL, "
-            "optionally limited by --from / --to timestamps."
+            "optionally limited by --from / --to timestamps, or delete the entire source via --all."
         ),
         epilog=(
             "Examples:\n"
             "  python3 scripts/delete_postgres_source_data.py --source pl --dry-run\n"
+            "  python3 scripts/delete_postgres_source_data.py --source pl --all\n"
             "  python3 scripts/delete_postgres_source_data.py --source pl --to 2026-03-01\n"
             "  python3 scripts/delete_postgres_source_data.py --source pl --from 2026-03-01\n"
             "  python3 scripts/delete_postgres_source_data.py --source pl --from 2026-03-01 --to 2026-03-15\n"
@@ -67,6 +69,11 @@ def parse_args() -> argparse.Namespace:
         help="Inclusive upper bound in ISO format, e.g. 2026-03-15 or 2026-03-15T18:30:00",
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Delete all packet_history rows for the selected source. Cannot be combined with --from/--to.",
+    )
+    parser.add_argument(
         "--postgres-dsn",
         help="Explicit PostgreSQL DSN. If omitted, uses config/env resolution from Malla.",
     )
@@ -79,7 +86,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only show how many rows would be deleted.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.all and (args.from_ts or args.to_ts):
+        parser.error("--all cannot be combined with --from or --to")
+    return args
 
 
 def resolve_postgres_dsn(explicit_dsn: str | None, config_file: str | None) -> str:
@@ -185,7 +195,11 @@ def main() -> None:
     import psycopg
 
     dsn = resolve_postgres_dsn(args.postgres_dsn, args.config_file)
-    where_clause, params = build_where_clause(args.source, args.from_ts, args.to_ts)
+    where_clause, params = build_where_clause(
+        args.source,
+        None if args.all else args.from_ts,
+        None if args.all else args.to_ts,
+    )
 
     with psycopg.connect(dsn) as conn:
         conn.autocommit = False
@@ -193,6 +207,7 @@ def main() -> None:
         packets_to_delete = count_matching_rows(conn, where_clause, params)
 
         print(f"Source: {args.source}")
+        print(f"Delete mode: {'all rows for source' if args.all else 'time-ranged'}")
         print(f"Where:  {where_clause}")
         print(f"Rows matching packet_history delete: {packets_to_delete}")
 
