@@ -69,6 +69,9 @@ DATABASE_BACKEND: str = _cfg.database_backend.lower()
 
 # MQTT Broker details
 MQTT_SOURCES: list[dict[str, Any]] = _cfg.get_mqtt_sources()
+MQTT_SOURCE_BY_NAME: dict[str, dict[str, Any]] = {
+    str(source.get("name") or "default"): source for source in MQTT_SOURCES
+}
 PACKET_REPLAY_DEDUPE_WINDOW_SEC = 15 * 60
 
 # Database file path
@@ -1380,6 +1383,25 @@ def get_gateway_display_name(gateway_hex_id: str) -> str:
     return gateway_hex_id
 
 
+def _signal_score_components(
+    snr: float | int | None, rssi: float | int | None, timestamp_value: float
+) -> tuple[float, float, float]:
+    """Return sortable score components for reception quality.
+
+    Higher SNR wins first, then higher RSSI (less negative), then newer timestamp.
+    Missing values are treated as very weak.
+    """
+    try:
+        snr_value = float(snr) if snr is not None else float("-inf")
+    except (TypeError, ValueError):
+        snr_value = float("-inf")
+    try:
+        rssi_value = float(rssi) if rssi is not None else float("-inf")
+    except (TypeError, ValueError):
+        rssi_value = float("-inf")
+    return (snr_value, rssi_value, float(timestamp_value))
+
+
 def log_packet_to_database(
     topic: str,
     service_envelope: Any | None,
@@ -1459,6 +1481,13 @@ def log_packet_to_database(
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        source_config = MQTT_SOURCE_BY_NAME.get(str(mqtt_source or ""))
+        max_receptions_per_mesh_packet = 0
+        if source_config:
+            max_receptions_per_mesh_packet = int(
+                source_config.get("max_receptions_per_mesh_packet", 0) or 0
+            )
+
         if mqtt_source and gateway_id and mesh_packet_id not in (None, 0):
             cursor.execute(
                 """
@@ -1485,6 +1514,62 @@ def log_packet_to_database(
                     )
                     conn.close()
                     return
+
+        if (
+            mqtt_source
+            and mesh_packet_id not in (None, 0)
+            and max_receptions_per_mesh_packet > 0
+        ):
+            cursor.execute(
+                """
+                SELECT id, gateway_id, timestamp, rssi, snr
+                FROM packet_history
+                WHERE mqtt_source = ?
+                  AND mesh_packet_id = ?
+                ORDER BY timestamp DESC
+                """,
+                (mqtt_source, mesh_packet_id),
+            )
+            existing_receptions = cursor.fetchall()
+            if len(existing_receptions) >= max_receptions_per_mesh_packet:
+                new_score = _signal_score_components(snr, rssi, current_time)
+                scored_existing = []
+                for row in existing_receptions:
+                    row_mapping = dict(row)
+                    scored_existing.append(
+                        (
+                            _signal_score_components(
+                                row_mapping.get("snr"),
+                                row_mapping.get("rssi"),
+                                float(row_mapping.get("timestamp") or 0),
+                            ),
+                            row_mapping,
+                        )
+                    )
+                worst_score, worst_row = min(scored_existing, key=lambda item: item[0])
+                if new_score <= worst_score:
+                    logging.info(
+                        "Skipping excess reception mesh_id=%s from source=%s gateway=%s due to max_receptions_per_mesh_packet=%s",
+                        mesh_packet_id,
+                        mqtt_source,
+                        gateway_id or "<unknown>",
+                        max_receptions_per_mesh_packet,
+                    )
+                    conn.close()
+                    return
+
+                cursor.execute(
+                    "DELETE FROM packet_history WHERE id = ?",
+                    (worst_row["id"],),
+                )
+                logging.info(
+                    "Replacing weaker reception mesh_id=%s from source=%s gateway=%s with stronger gateway=%s due to max_receptions_per_mesh_packet=%s",
+                    mesh_packet_id,
+                    mqtt_source,
+                    worst_row.get("gateway_id") or "<unknown>",
+                    gateway_id or "<unknown>",
+                    max_receptions_per_mesh_packet,
+                )
 
         cursor.execute(
             """

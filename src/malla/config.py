@@ -129,6 +129,10 @@ class AppConfig:
                         for country in source.get("allowed_inferred_countries", [])
                         if str(country).strip()
                     ],
+                    "max_receptions_per_mesh_packet": max(
+                        0,
+                        int(source.get("max_receptions_per_mesh_packet", 0) or 0),
+                    ),
                 }
             )
 
@@ -149,6 +153,7 @@ class AppConfig:
                 "topic_suffix": self.mqtt_topic_suffix,
                 "allowed_channels": [],
                 "allowed_inferred_countries": [],
+                "max_receptions_per_mesh_packet": 0,
             }
         ]
 
