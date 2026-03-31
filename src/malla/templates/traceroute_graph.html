@@ -48,8 +48,8 @@
         <div class="sidebar-section" id="hopFilterSection" style="display: none;">
             <h6><i class="bi bi-funnel"></i> {{ t('graph.hop_distance_filter') }}</h6>
             <div class="mb-2">
-                <label for="hopDistance" class="form-label">{{ t('graph.show_nodes_within') }} <span id="hopDistanceValue">3</span> hops</label>
-                <input type="range" class="form-range" id="hopDistance" min="1" max="10" value="3" step="1">
+                <label for="hopDistance" class="form-label">{{ t('graph.show_nodes_within') }} <span id="hopDistanceValue">5</span> hops</label>
+                <input type="range" class="form-range" id="hopDistance" min="0" max="7" value="5" step="1">
             </div>
             <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" id="enableHopFilter" checked>
@@ -265,7 +265,7 @@ let selectedNode = null;
 let selectedLink = null;
 let searchResults = [];
 let hopFilterEnabled = true;
-let maxHopDistance = 3;
+let maxHopDistance = 5;
 let visibleNodeIds = null;
 let nodeDistances = null;
 let comparisonNode = null; // Second node for path comparison
