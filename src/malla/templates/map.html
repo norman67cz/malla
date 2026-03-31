@@ -99,19 +99,20 @@
                 </div>
                 <div class="mb-3">
                     <label for="roleFilter" class="form-label">{{ t('map.node_role') }}</label>
-                    <select class="form-select form-select-sm" id="roleFilter" name="roleFilter">
-                        <option value="">{{ t('common.all_roles') }}</option>
-                        <option value="CLIENT">Client</option>
-                        <option value="ROUTER">Router</option>
-                        <option value="ROUTER_LATE">Router Late</option>
-                        <option value="REPEATER">Repeater</option>
-                        <option value="CLIENT_MUTE">Client Mute</option>
-                        <option value="CLIENT_BASE">Client Base</option>
-                        <option value="TRACKER">Tracker</option>
-                        <option value="ROUTER_CLIENT">Router Client</option>
-                        <option value="SENSOR">Sensor</option>
-                        <option value="UNKNOWN">Unknown/Other</option>
+                    {% set initial_role_filters = request.args.get('roleFilter', '').split(',') | map('trim') | reject('equalto', '') | list %}
+                    <select class="form-select form-select-sm" id="roleFilter" name="roleFilter" multiple size="7">
+                        <option value="CLIENT" {{ 'selected' if 'CLIENT' in initial_role_filters else '' }}>Client</option>
+                        <option value="ROUTER" {{ 'selected' if 'ROUTER' in initial_role_filters else '' }}>Router</option>
+                        <option value="ROUTER_LATE" {{ 'selected' if 'ROUTER_LATE' in initial_role_filters else '' }}>Router Late</option>
+                        <option value="REPEATER" {{ 'selected' if 'REPEATER' in initial_role_filters else '' }}>Repeater</option>
+                        <option value="CLIENT_MUTE" {{ 'selected' if 'CLIENT_MUTE' in initial_role_filters else '' }}>Client Mute</option>
+                        <option value="CLIENT_BASE" {{ 'selected' if 'CLIENT_BASE' in initial_role_filters else '' }}>Client Base</option>
+                        <option value="TRACKER" {{ 'selected' if 'TRACKER' in initial_role_filters else '' }}>Tracker</option>
+                        <option value="ROUTER_CLIENT" {{ 'selected' if 'ROUTER_CLIENT' in initial_role_filters else '' }}>Router Client</option>
+                        <option value="SENSOR" {{ 'selected' if 'SENSOR' in initial_role_filters else '' }}>Sensor</option>
+                        <option value="UNKNOWN" {{ 'selected' if 'UNKNOWN' in initial_role_filters else '' }}>Unknown/Other</option>
                     </select>
+                    <div class="form-text">Ctrl/Cmd+click pro výběr více rolí.</div>
                 </div>
                 <div class="mb-3">
                     <label for="channelFilter" class="form-label">{{ t('common.primary_channel') }}</label>
@@ -1026,17 +1027,35 @@ function buildFilterParams() {
         params.set('mqtt_source', mqttSource);
     }
 
+    const selectedRoles = getSelectedRoleFilters();
+    if (selectedRoles.length > 0) {
+        params.set('roleFilter', selectedRoles.join(','));
+    }
+
     return params;
 }
 
-function syncMapMqttSourceToUrl(mqttSource) {
+function syncMapFiltersToUrl(mqttSource, selectedRoles = []) {
     const url = new URL(window.location.href);
     if (mqttSource) {
         url.searchParams.set('mqtt_source', mqttSource);
     } else {
         url.searchParams.set('mqtt_source', 'all');
     }
+    if (selectedRoles.length > 0) {
+        url.searchParams.set('roleFilter', selectedRoles.join(','));
+    } else {
+        url.searchParams.delete('roleFilter');
+    }
     window.history.replaceState({}, '', url.toString());
+}
+
+function getSelectedRoleFilters() {
+    const roleFilterSelect = document.getElementById('roleFilter');
+    if (!roleFilterSelect) return [];
+    return Array.from(roleFilterSelect.selectedOptions)
+        .map((option) => (option.value || '').trim())
+        .filter(Boolean);
 }
 
 function getMapMqttSourceValue(formData = null) {
@@ -1084,7 +1103,7 @@ async function loadNodeLocations() {
         showLoading();
 
         const params = buildFilterParams();
-        syncMapMqttSourceToUrl(params.get('mqtt_source') || '');
+        syncMapFiltersToUrl(params.get('mqtt_source') || '', getSelectedRoleFilters());
         const response = await fetch(`/api/locations?${params.toString()}`);
         const data = await response.json();
 
@@ -1122,7 +1141,7 @@ function applyClientSideFilters() {
 
     // Get filter values
     const maxAge = formData.get('maxAge'); // still read to sync UI but no longer used for filtering
-    const roleFilter = formData.get('roleFilter');
+    const roleFilters = getSelectedRoleFilters();
     const channelFilter = formData.get('channelFilter');
     const mqttGatewayOnly = formData.get('mqttGatewayOnly');
     const startDateTime = formData.get('startDateTime');
@@ -1136,15 +1155,15 @@ function applyClientSideFilters() {
     const currentTime = Date.now() / 1000;
 
     // Apply role filter
-    if (roleFilter) {
-        if (roleFilter === 'UNKNOWN') {
-            // Filter for nodes with null, undefined, or unknown roles
-            filteredNodes = filteredNodes.filter(node =>
-                !node.role || node.role === 'UNKNOWN' || node.role === 'Unknown'
-            );
-        } else {
-            filteredNodes = filteredNodes.filter(node => node.role === roleFilter);
-        }
+    if (roleFilters.length > 0) {
+        const selectedRoles = new Set(roleFilters);
+        filteredNodes = filteredNodes.filter(node => {
+            const normalizedRole = node.role || 'UNKNOWN';
+            if (selectedRoles.has(normalizedRole)) {
+                return true;
+            }
+            return selectedRoles.has('UNKNOWN') && (!node.role || node.role === 'UNKNOWN' || node.role === 'Unknown');
+        });
     }
 
     // Apply channel filter
