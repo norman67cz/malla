@@ -102,7 +102,30 @@
                     {% set initial_role_filters = request.args.get('roleFilter', '').split(',') | map('trim') | reject('equalto', '') | list %}
                     <input type="hidden" id="roleFilter" name="roleFilter" value="{{ initial_role_filters | join(',') }}">
                     <div id="roleFilterOptions" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
-                        <div class="text-muted">{{ t('common.loading') }}...</div>
+                        {% for value, label in [
+                            ('CLIENT', 'Client'),
+                            ('ROUTER', 'Router'),
+                            ('ROUTER_LATE', 'Router Late'),
+                            ('REPEATER', 'Repeater'),
+                            ('CLIENT_MUTE', 'Client Mute'),
+                            ('CLIENT_BASE', 'Client Base'),
+                            ('TRACKER', 'Tracker'),
+                            ('ROUTER_CLIENT', 'Router Client'),
+                            ('SENSOR', 'Sensor'),
+                            ('UNKNOWN', 'Unknown/Other')
+                        ] %}
+                        {% set role_id = 'map_role_' ~ value|lower %}
+                        <div class="form-check">
+                            <input
+                                class="form-check-input map-role-checkbox"
+                                type="checkbox"
+                                value="{{ value }}"
+                                id="{{ role_id }}"
+                                {{ 'checked' if value in initial_role_filters else '' }}
+                            >
+                            <label class="form-check-label" for="{{ role_id }}">{{ label }}</label>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
                 <div class="mb-3">
@@ -733,6 +756,7 @@ function initializeInterface() {
     // Handle filter form submission
     $('#locationFilterForm').on('submit', function(e) {
         e.preventDefault();
+        syncMapFiltersToUrl(getMapMqttSourceValue());
         loadNodeLocations();
     });
 
@@ -787,26 +811,31 @@ function initializeInterface() {
         return `${dateObj.getFullYear()}-${pad(dateObj.getMonth()+1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
     }
 
-    $('#maxAge').on('change', function() {
-        const val = this.value;
-        if (!val) {
-            // No Limit selected – clear date inputs
+    function applyMaxAgeToDateInputs(value) {
+        if (!value) {
             $('#startDateTime').val('');
             $('#endDateTime').val('');
-        } else {
-            const hours = parseInt(val,10);
-            if (!isNaN(hours)) {
-                const now = new Date();
-                const start = new Date(now.getTime() - hours*3600*1000);
-                $('#startDateTime').val(toLocalInputValue(start));
-                // Don't set end date - leave it empty to show all data up to present
-                $('#endDateTime').val('');
-            }
+            return;
         }
+
+        const hours = parseInt(value, 10);
+        if (Number.isNaN(hours)) {
+            return;
+        }
+
+        const now = new Date();
+        const start = new Date(now.getTime() - hours * 3600 * 1000);
+        $('#startDateTime').val(toLocalInputValue(start));
+        $('#endDateTime').val('');
+    }
+
+    $('#maxAge').on('change', function() {
+        applyMaxAgeToDateInputs(this.value);
         applyClientSideFilters();
     });
 
     $('#mqttSourceFilter').on('change', function() {
+        syncMapFiltersToUrl(getMapMqttSourceValue());
         loadNodeLocations();
     });
 
@@ -851,47 +880,6 @@ function initializeInterface() {
         } catch (error) {
             console.error('Error loading primary channels:', error);
         }
-    }
-
-    function getAvailableRoleOptions() {
-        return [
-            ['CLIENT', 'Client'],
-            ['ROUTER', 'Router'],
-            ['ROUTER_LATE', 'Router Late'],
-            ['REPEATER', 'Repeater'],
-            ['CLIENT_MUTE', 'Client Mute'],
-            ['CLIENT_BASE', 'Client Base'],
-            ['TRACKER', 'Tracker'],
-            ['ROUTER_CLIENT', 'Router Client'],
-            ['SENSOR', 'Sensor'],
-            ['UNKNOWN', 'Unknown/Other']
-        ];
-    }
-
-    function renderRoleFilterOptions() {
-        const container = document.getElementById('roleFilterOptions');
-        if (!container) return;
-
-        container.innerHTML = '';
-        getAvailableRoleOptions().forEach(([value, label]) => {
-            const roleId = `map_role_${String(value).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-            const wrapper = document.createElement('div');
-            wrapper.className = 'form-check';
-            wrapper.innerHTML = `
-                <input class="form-check-input map-role-checkbox" type="checkbox" value="${value}" id="${roleId}">
-                <label class="form-check-label" for="${roleId}">${label}</label>
-            `;
-            container.appendChild(wrapper);
-        });
-
-        container.querySelectorAll('.map-role-checkbox').forEach((checkbox) => {
-            checkbox.addEventListener('change', () => {
-                syncRoleHiddenInput();
-                applyClientSideFilters();
-            });
-        });
-
-        applyRoleSelectionFromHidden();
     }
 
     async function loadMqttSources() {
@@ -992,27 +980,24 @@ function initializeInterface() {
             params.has('endDateTime');
 
         if (!hasExplicitTimeFilter && !$('#startDateTime').val() && !$('#endDateTime').val()) {
-            $('#maxAge').val('72').trigger('change');
+            $('#maxAge').val('72');
+            applyMaxAgeToDateInputs('72');
         }
     }
 
     // Load channels and MQTT sources on interface init
     loadPrimaryChannels();
-    renderRoleFilterOptions();
     loadMqttSources();
     initializeDefaultMaxAge();
 
-    // Trigger change events for all form fields to initialize them based on default values
-    const formFields = document.querySelectorAll(
-        '#locationFilterForm select, #locationFilterForm input:not(.map-channel-checkbox):not(.map-role-checkbox)'
-    );
-    formFields.forEach(field => {
-        if (field.value) {
-            // Manually trigger the change event handler
-            const event = new Event('change', { bubbles: true });
-            field.dispatchEvent(event);
-        }
+    document.querySelectorAll('.map-role-checkbox').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+            syncRoleHiddenInput();
+            syncMapFiltersToUrl(getMapMqttSourceValue(), getSelectedRoleFilters());
+            applyClientSideFilters();
+        });
     });
+
 }
 
 // Map tile layers for different themes
@@ -1073,6 +1058,19 @@ function initMap() {
     loadNodeLocations();
 }
 
+function getSelectedRoleFilters() {
+    return Array.from(document.querySelectorAll('.map-role-checkbox:checked'))
+        .map((input) => input.value)
+        .filter((value) => value && value.trim());
+}
+
+function syncRoleHiddenInput() {
+    const hiddenInput = document.getElementById('roleFilter');
+    if (!hiddenInput) return;
+    hiddenInput.value = getSelectedRoleFilters().join(',');
+    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 // Build filter parameters from form
 function buildFilterParams() {
     const form = document.getElementById('locationFilterForm');
@@ -1091,20 +1089,18 @@ function buildFilterParams() {
         params.set('mqtt_source', mqttSource);
     }
 
-    const selectedRoles = getSelectedRoleFilters();
-    if (selectedRoles.length > 0) {
-        params.set('roleFilter', selectedRoles.join(','));
-    }
-
     return params;
 }
 
-function syncMapFiltersToUrl(mqttSource, selectedRoles = []) {
+function syncMapFiltersToUrl(mqttSource, selectedRoles = null) {
     const url = new URL(window.location.href);
     if (mqttSource) {
         url.searchParams.set('mqtt_source', mqttSource);
     } else {
         url.searchParams.set('mqtt_source', 'all');
+    }
+    if (selectedRoles === null) {
+        selectedRoles = getSelectedRoleFilters();
     }
     if (selectedRoles.length > 0) {
         url.searchParams.set('roleFilter', selectedRoles.join(','));
@@ -1154,12 +1150,11 @@ function escapeJsString(value) {
 }
 
 // Load node locations from API
-async function loadNodeLocations() {
+    async function loadNodeLocations() {
     try {
         showLoading();
 
         const params = buildFilterParams();
-        syncMapFiltersToUrl(params.get('mqtt_source') || '', getSelectedRoleFilters());
         const response = await fetch(`/api/locations?${params.toString()}`);
         const data = await response.json();
 
