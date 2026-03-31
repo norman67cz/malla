@@ -369,7 +369,7 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
             return html.escape(text)
         from markupsafe import Markup
 
-        rendered = _markdown.markdown(text)
+        rendered = _markdown.markdown(text, extensions=["nl2br"])
         return Markup(sanitize_markdown_html(rendered))
 
     @app.context_processor
