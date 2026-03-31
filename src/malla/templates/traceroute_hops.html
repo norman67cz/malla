@@ -322,49 +322,127 @@
         // Auto-select nodes from URL parameters if present
         if (window.autoSelectNodes) {
             const { fromNode, toNode } = window.autoSelectNodes;
+            preselectNodesFromUrl(fromNode, toNode);
+        }
+    }
 
-            // Convert node IDs to integers for comparison
-            const fromNodeInt = parseInt(fromNode);
-            const toNodeInt = parseInt(toNode);
+    function formatHexNodeId(nodeId) {
+        return `!${parseInt(nodeId, 10).toString(16).padStart(8, '0')}`;
+    }
 
-            // Find and select the nodes
-            const fromNodeExists = availableNodes.find(n => n.node_id == fromNodeInt);
-            const toNodeExists = availableNodes.find(n => n.node_id == toNodeInt);
+    function normalizeNodeRecord(node, nodeId = null) {
+        const numericId = parseInt(node?.node_id ?? nodeId, 10);
+        if (!Number.isFinite(numericId)) {
+            return null;
+        }
 
-            if (fromNodeExists && toNodeExists) {
-                // Set the node picker value and display
-                const node1Input = document.getElementById('node1-select_value');
-                const node1Display = document.getElementById('node1-select');
-                node1Input.value = fromNodeInt;
-                node1Display.value = fromNodeExists.display_name;
+        const hexId = node?.hex_id || formatHexNodeId(numericId);
+        const displayName = node?.display_name
+            || node?.long_name
+            || node?.short_name
+            || `Node ${hexId}`;
 
-                // Update node info displays
-                updateNodeInfo('node1', fromNodeInt);
+        return {
+            ...node,
+            node_id: numericId,
+            hex_id: hexId,
+            display_name: displayName
+        };
+    }
 
-                // Load related nodes for the first node, then select the second node
-                loadRelatedNodes(fromNodeInt).then(() => {
-                    const node2Select = document.getElementById('node2-select');
-                    node2Select.value = toNodeInt;
-                    updateNodeInfo('node2', toNodeInt);
+    function addNodeToAvailableNodes(node) {
+        const normalized = normalizeNodeRecord(node);
+        if (!normalized) {
+            return null;
+        }
 
-                    // Enable analyze button and trigger analysis
-                    checkAnalyzeButton();
+        if (!availableNodes.find(existing => existing.node_id == normalized.node_id)) {
+            availableNodes.push(normalized);
+        }
+        return normalized;
+    }
 
-                    // Auto-trigger analysis after a short delay to ensure UI is ready
-                    setTimeout(() => {
-                        if (!document.getElementById('analyze-btn').disabled) {
-                            analyzeHop();
-                        }
-                    }, 500);
-                });
+    async function resolveNodeRecord(nodeId) {
+        const numericId = parseInt(nodeId, 10);
+        if (!Number.isFinite(numericId)) {
+            return null;
+        }
 
-                // Clear the auto-select data
-                delete window.autoSelectNodes;
-            } else {
-                console.warn('One or both nodes from URL parameters not found in available nodes');
-                if (!fromNodeExists) console.warn('From node not found:', fromNode);
-                if (!toNodeExists) console.warn('To node not found:', toNode);
+        const existingNode = availableNodes.find(node => node.node_id == numericId);
+        if (existingNode) {
+            return existingNode;
+        }
+
+        if (window.NodeCache && typeof window.NodeCache.getNode === 'function') {
+            try {
+                const cachedNode = await window.NodeCache.getNode(numericId);
+                const normalizedCachedNode = addNodeToAvailableNodes(cachedNode);
+                if (normalizedCachedNode) {
+                    return normalizedCachedNode;
+                }
+            } catch (error) {
+                console.warn('Failed to resolve node from NodeCache:', numericId, error);
             }
+        }
+
+        return addNodeToAvailableNodes({ node_id: numericId });
+    }
+
+    function ensureNode2Option(node) {
+        const node2Select = document.getElementById('node2-select');
+        const normalized = normalizeNodeRecord(node);
+        if (!normalized) {
+            return;
+        }
+
+        const exists = Array.from(node2Select.options).some(option => option.value === String(normalized.node_id));
+        if (!exists) {
+            node2Select.add(new Option(normalized.display_name, normalized.node_id));
+        }
+    }
+
+    async function preselectNodesFromUrl(fromNode, toNode) {
+        const fromNodeInt = parseInt(fromNode, 10);
+        const toNodeInt = parseInt(toNode, 10);
+
+        if (!Number.isFinite(fromNodeInt) || !Number.isFinite(toNodeInt)) {
+            delete window.autoSelectNodes;
+            return;
+        }
+
+        try {
+            const fromNodeRecord = await resolveNodeRecord(fromNodeInt);
+            const toNodeRecord = await resolveNodeRecord(toNodeInt);
+
+            const node1Input = document.getElementById('node1-select_value');
+            const node1Display = document.getElementById('node1-select');
+            node1Input.value = fromNodeInt;
+            node1Display.value = fromNodeRecord?.display_name || `Node ${formatHexNodeId(fromNodeInt)}`;
+            updateNodeInfo('node1', fromNodeInt);
+
+            await loadRelatedNodes(fromNodeInt);
+
+            const resolvedSecondNode = relatedNodes.find(node => node.node_id == toNodeInt)
+                || availableNodes.find(node => node.node_id == toNodeInt)
+                || toNodeRecord;
+            if (resolvedSecondNode) {
+                ensureNode2Option(resolvedSecondNode);
+            }
+
+            const node2Select = document.getElementById('node2-select');
+            node2Select.value = String(toNodeInt);
+            updateNodeInfo('node2', toNodeInt);
+            checkAnalyzeButton();
+
+            setTimeout(() => {
+                if (!document.getElementById('analyze-btn').disabled) {
+                    analyzeHop();
+                }
+            }, 500);
+        } catch (error) {
+            console.error('Error auto-selecting traceroute hop nodes from URL:', error);
+        } finally {
+            delete window.autoSelectNodes;
         }
     }
 
