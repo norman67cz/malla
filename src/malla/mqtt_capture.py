@@ -111,6 +111,47 @@ COUNTRY_POLYGONS_PATH = (
 )
 COUNTRY_POLYGONS: dict[str, dict[str, Any]] = {}
 
+KNOWN_MQTT_MESSAGE_TYPES = {"e", "c", "p", "json", "stat"}
+
+
+def extract_topic_metadata(topic: str) -> tuple[str | None, str]:
+    """Extract message type and channel name from a Meshtastic MQTT topic.
+
+    Topic structures can vary substantially across brokers. For region/community
+    feeds we cannot rely on fixed indexes, so we parse from the tail:
+    - last segment is often a node/gateway id like ``!abcdef12``
+    - previous segment is typically the channel name
+    - segment before that is the payload/message type like ``e`` or ``json``
+
+    Returns ``(message_type, channel_name)`` where either item may be missing.
+    """
+    if not topic:
+        return (None, "")
+
+    parts = [part for part in topic.split("/") if part]
+    if len(parts) < 3:
+        return (None, "")
+
+    tail_index = len(parts) - 1
+    if parts[tail_index].startswith("!"):
+        channel_idx = tail_index - 1
+        type_idx = tail_index - 2
+        if type_idx >= 0 and channel_idx >= 0:
+            message_type = parts[type_idx]
+            channel_name = parts[channel_idx]
+            if message_type in KNOWN_MQTT_MESSAGE_TYPES and not channel_name.startswith("!"):
+                return (message_type, channel_name)
+
+    for idx in range(len(parts) - 1, -1, -1):
+        part = parts[idx]
+        if part in KNOWN_MQTT_MESSAGE_TYPES:
+            next_part = parts[idx + 1] if idx + 1 < len(parts) else ""
+            if next_part and not next_part.startswith("!"):
+                return (part, next_part)
+            return (part, "")
+
+    return (None, "")
+
 
 def format_lora_modem_preset(preset_name: str | None) -> str | None:
     """Convert enum-like preset names such as ``MEDIUM_FAST`` to ``MEDIUM-FAST``."""
@@ -1747,17 +1788,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
     # Extract routing metadata from topic before parsing so we can drop
     # disallowed channels early and avoid unnecessary DB writes/work.
     message_type = None
-    topic_parts = []
     channel_name = ""
     try:
-        topic_parts = msg.topic.split("/")
-        if len(topic_parts) >= 4:
-            message_type = topic_parts[3]  # Should be 'e', 'c', 'p', etc.
+        message_type, channel_name = extract_topic_metadata(msg.topic)
+        if message_type:
             logging.debug(f"Message type from topic: {message_type}")
-        if len(topic_parts) >= 5:
-            potential_channel = topic_parts[4]
-            if potential_channel and not potential_channel.startswith("!"):
-                channel_name = potential_channel
     except Exception:
         pass
 
