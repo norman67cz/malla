@@ -100,19 +100,10 @@
                 <div class="mb-3">
                     <label for="roleFilter" class="form-label">{{ t('map.node_role') }}</label>
                     {% set initial_role_filters = request.args.get('roleFilter', '').split(',') | map('trim') | reject('equalto', '') | list %}
-                    <select class="form-select form-select-sm" id="roleFilter" name="roleFilter" multiple size="7">
-                        <option value="CLIENT" {{ 'selected' if 'CLIENT' in initial_role_filters else '' }}>Client</option>
-                        <option value="ROUTER" {{ 'selected' if 'ROUTER' in initial_role_filters else '' }}>Router</option>
-                        <option value="ROUTER_LATE" {{ 'selected' if 'ROUTER_LATE' in initial_role_filters else '' }}>Router Late</option>
-                        <option value="REPEATER" {{ 'selected' if 'REPEATER' in initial_role_filters else '' }}>Repeater</option>
-                        <option value="CLIENT_MUTE" {{ 'selected' if 'CLIENT_MUTE' in initial_role_filters else '' }}>Client Mute</option>
-                        <option value="CLIENT_BASE" {{ 'selected' if 'CLIENT_BASE' in initial_role_filters else '' }}>Client Base</option>
-                        <option value="TRACKER" {{ 'selected' if 'TRACKER' in initial_role_filters else '' }}>Tracker</option>
-                        <option value="ROUTER_CLIENT" {{ 'selected' if 'ROUTER_CLIENT' in initial_role_filters else '' }}>Router Client</option>
-                        <option value="SENSOR" {{ 'selected' if 'SENSOR' in initial_role_filters else '' }}>Sensor</option>
-                        <option value="UNKNOWN" {{ 'selected' if 'UNKNOWN' in initial_role_filters else '' }}>Unknown/Other</option>
-                    </select>
-                    <div class="form-text">Ctrl/Cmd+click pro výběr více rolí.</div>
+                    <input type="hidden" id="roleFilter" name="roleFilter" value="{{ initial_role_filters | join(',') }}">
+                    <div id="roleFilterOptions" class="border rounded p-2 small" style="max-height: 180px; overflow-y: auto;">
+                        <div class="text-muted">{{ t('common.loading') }}...</div>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label for="channelFilter" class="form-label">{{ t('common.primary_channel') }}</label>
@@ -862,6 +853,47 @@ function initializeInterface() {
         }
     }
 
+    function getAvailableRoleOptions() {
+        return [
+            ['CLIENT', 'Client'],
+            ['ROUTER', 'Router'],
+            ['ROUTER_LATE', 'Router Late'],
+            ['REPEATER', 'Repeater'],
+            ['CLIENT_MUTE', 'Client Mute'],
+            ['CLIENT_BASE', 'Client Base'],
+            ['TRACKER', 'Tracker'],
+            ['ROUTER_CLIENT', 'Router Client'],
+            ['SENSOR', 'Sensor'],
+            ['UNKNOWN', 'Unknown/Other']
+        ];
+    }
+
+    function renderRoleFilterOptions() {
+        const container = document.getElementById('roleFilterOptions');
+        if (!container) return;
+
+        container.innerHTML = '';
+        getAvailableRoleOptions().forEach(([value, label]) => {
+            const roleId = `map_role_${String(value).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-check';
+            wrapper.innerHTML = `
+                <input class="form-check-input map-role-checkbox" type="checkbox" value="${value}" id="${roleId}">
+                <label class="form-check-label" for="${roleId}">${label}</label>
+            `;
+            container.appendChild(wrapper);
+        });
+
+        container.querySelectorAll('.map-role-checkbox').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                syncRoleHiddenInput();
+                applyClientSideFilters();
+            });
+        });
+
+        applyRoleSelectionFromHidden();
+    }
+
     async function loadMqttSources() {
         try {
             const response = await fetch('/api/meshtastic/mqtt-sources');
@@ -923,6 +955,35 @@ function initializeInterface() {
         });
     }
 
+    function getSelectedRoleFilters() {
+        return Array.from(document.querySelectorAll('.map-role-checkbox:checked'))
+            .map((input) => input.value)
+            .filter((value) => value && value.trim());
+    }
+
+    function syncRoleHiddenInput() {
+        const hiddenInput = document.getElementById('roleFilter');
+        if (!hiddenInput) return;
+        hiddenInput.value = getSelectedRoleFilters().join(',');
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function applyRoleSelectionFromHidden() {
+        const hiddenInput = document.getElementById('roleFilter');
+        if (!hiddenInput) return;
+
+        const selected = new Set(
+            hiddenInput.value
+                .split(',')
+                .map((value) => value.trim())
+                .filter(Boolean)
+        );
+
+        document.querySelectorAll('.map-role-checkbox').forEach((input) => {
+            input.checked = selected.has(input.value);
+        });
+    }
+
     function initializeDefaultMaxAge() {
         const params = new URLSearchParams(window.location.search);
         const hasExplicitTimeFilter =
@@ -937,11 +998,14 @@ function initializeInterface() {
 
     // Load channels and MQTT sources on interface init
     loadPrimaryChannels();
+    renderRoleFilterOptions();
     loadMqttSources();
     initializeDefaultMaxAge();
 
     // Trigger change events for all form fields to initialize them based on default values
-    const formFields = document.querySelectorAll('#locationFilterForm select, #locationFilterForm input');
+    const formFields = document.querySelectorAll(
+        '#locationFilterForm select, #locationFilterForm input:not(.map-channel-checkbox):not(.map-role-checkbox)'
+    );
     formFields.forEach(field => {
         if (field.value) {
             // Manually trigger the change event handler
@@ -1048,14 +1112,6 @@ function syncMapFiltersToUrl(mqttSource, selectedRoles = []) {
         url.searchParams.delete('roleFilter');
     }
     window.history.replaceState({}, '', url.toString());
-}
-
-function getSelectedRoleFilters() {
-    const roleFilterSelect = document.getElementById('roleFilter');
-    if (!roleFilterSelect) return [];
-    return Array.from(roleFilterSelect.selectedOptions)
-        .map((option) => (option.value || '').trim())
-        .filter(Boolean);
 }
 
 function getMapMqttSourceValue(formData = null) {
