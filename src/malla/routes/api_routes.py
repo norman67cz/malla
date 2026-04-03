@@ -39,7 +39,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 _STATS_CACHE: dict[tuple[str | None, str | None], tuple[float, dict[str, Any]]] = {}
 _STATS_CACHE_TTL_SEC = 30
 _DASHBOARD_PAYLOAD_CACHE: dict[
-    tuple[str | None, int | None, int | None, int, str | None],
+    tuple[str | None, int | None, int | None, int, str | None, str],
     tuple[float, dict[str, Any]],
 ] = {}
 _DASHBOARD_PAYLOAD_CACHE_TTL_SEC = 30
@@ -174,8 +174,16 @@ def _get_dashboard_payload(
     hop_count: int | None = None,
     temporal_window_hours: int = 24,
     mqtt_source: str | None = None,
+    active_node_history_period: str = "7d",
 ) -> dict[str, Any]:
-    cache_key = (gateway_id, from_node, hop_count, temporal_window_hours, mqtt_source)
+    cache_key = (
+        gateway_id,
+        from_node,
+        hop_count,
+        temporal_window_hours,
+        mqtt_source,
+        active_node_history_period,
+    )
     now_ts = time.time()
     cached = _DASHBOARD_PAYLOAD_CACHE.get(cache_key)
     if cached and (now_ts - cached[0] < _DASHBOARD_PAYLOAD_CACHE_TTL_SEC):
@@ -191,10 +199,15 @@ def _get_dashboard_payload(
         temporal_window_hours=temporal_window_hours,
         mqtt_source=mqtt_source,
     )
+    active_node_history = DashboardRepository.get_active_node_history(
+        mqtt_source=mqtt_source,
+        period=active_node_history_period,
+    )
 
     payload = {
         "stats": stats,
         "analytics": analytics,
+        "active_node_history": active_node_history,
     }
     _DASHBOARD_PAYLOAD_CACHE[cache_key] = (now_ts, payload)
     return payload
@@ -324,8 +337,11 @@ def api_dashboard_data():
         hop_count = request.args.get("hop_count", type=int)
         mqtt_source = request.args.get("mqtt_source")
         temporal_window_hours = request.args.get("temporal_window_hours", 24, type=int)
+        active_node_history_period = request.args.get("active_node_history_period", "7d")
         if temporal_window_hours not in {24, 72, 168, 336}:
             temporal_window_hours = 24
+        if active_node_history_period not in {"7d", "14d", "30d", "all"}:
+            active_node_history_period = "7d"
         return safe_jsonify(
             _get_dashboard_payload(
                 gateway_id=gateway_id,
@@ -333,6 +349,7 @@ def api_dashboard_data():
                 hop_count=hop_count,
                 temporal_window_hours=temporal_window_hours,
                 mqtt_source=mqtt_source,
+                active_node_history_period=active_node_history_period,
             )
         )
     except Exception as e:

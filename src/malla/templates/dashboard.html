@@ -200,6 +200,40 @@
         </div>
     </div>
 
+    <!-- Active Nodes History -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-header">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <h5 class="card-title mb-0 dashboard-card-title">
+                            <i class="bi bi-people-fill"></i> {{ t('dashboard.active_nodes_history') }}
+                            <i class="bi bi-info-circle ms-1 text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="{{ t('dashboard.active_nodes_history_help') }}"></i>
+                        </h5>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Active node history period">
+                            <button type="button" class="btn btn-outline-secondary active-node-history-period-btn active" data-period="7d">7d</button>
+                            <button type="button" class="btn btn-outline-secondary active-node-history-period-btn" data-period="14d">14d</button>
+                            <button type="button" class="btn btn-outline-secondary active-node-history-period-btn" data-period="30d">30d</button>
+                            <button type="button" class="btn btn-outline-secondary active-node-history-period-btn" data-period="all">all</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="activeNodeHistoryChartLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">{{ t('common.loading') }}</span>
+                        </div>
+                        <p class="mt-2 text-muted">{{ t('common.loading_chart_data') }}</p>
+                    </div>
+                    <canvas id="activeNodeHistoryChart" style="height: 300px; display: none;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Signal Quality and Activity Charts Row -->
     <div class="row mb-4">
         <!-- Active Nodes Distribution -->
@@ -526,6 +560,7 @@
 <script>
 // Load analytics data asynchronously to improve initial page load time
 let analyticsData = null;
+let activeNodeHistoryData = null;
 let chartInstances = {}; // Store chart instances for theme updates
 let dashboardRefreshTimer = null;
 let dashboardRefreshInFlight = false;
@@ -537,6 +572,9 @@ let temporalWindowHours = [24, 72, 168, 336].includes(Number(dashboardUrlParams.
 let selectedMqttSource = dashboardUrlParams.has('mqtt_source')
     ? ((dashboardUrlParams.get('mqtt_source') || '') === 'all' ? '' : (dashboardUrlParams.get('mqtt_source') || ''))
     : 'cz';
+let activeNodeHistoryPeriod = ['7d', '14d', '30d', 'all'].includes(dashboardUrlParams.get('active_node_history_period'))
+    ? dashboardUrlParams.get('active_node_history_period')
+    : '7d';
 
 // Get theme-aware colors for charts
 function getChartColors() {
@@ -616,6 +654,7 @@ function updateChartsForTheme() {
 
         // Recreate charts with new theme
         safeRenderChart('timeSeriesChart', () => createTimeSeriesChart(analyticsData.temporal_patterns));
+        safeRenderChart('activeNodeHistoryChart', () => createActiveNodeHistoryChart(activeNodeHistoryData));
         safeRenderChart('nodeActivityChart', () => createNodeActivityChart(analyticsData.node_statistics));
         safeRenderChart('gatewayActivityChart', () => createGatewayActivityChart(analyticsData.gateway_distribution));
         safeRenderChart('signalDistributionChart', () => createSignalDistributionChart(analyticsData.signal_quality));
@@ -636,6 +675,11 @@ function syncDashboardUrl() {
         url.searchParams.set('temporal_window_hours', String(temporalWindowHours));
     } else {
         url.searchParams.delete('temporal_window_hours');
+    }
+    if (activeNodeHistoryPeriod !== '7d') {
+        url.searchParams.set('active_node_history_period', activeNodeHistoryPeriod);
+    } else {
+        url.searchParams.delete('active_node_history_period');
     }
     window.history.replaceState({}, '', url);
 }
@@ -659,6 +703,17 @@ document.addEventListener('DOMContentLoaded', function () {
             if (nextHours === temporalWindowHours) return;
             temporalWindowHours = nextHours;
             updateTemporalWindowButtons();
+            syncDashboardUrl();
+            refreshDashboardData();
+        });
+    });
+
+    document.querySelectorAll('.active-node-history-period-btn').forEach((button) => {
+        button.addEventListener('click', function() {
+            const nextPeriod = this.dataset.period || '7d';
+            if (nextPeriod === activeNodeHistoryPeriod) return;
+            activeNodeHistoryPeriod = nextPeriod;
+            updateActiveNodeHistoryButtons();
             syncDashboardUrl();
             refreshDashboardData();
         });
@@ -705,6 +760,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     updateTemporalWindowButtons();
+    updateActiveNodeHistoryButtons();
     refreshDashboardData();
     startDashboardAutoRefresh();
 
@@ -732,6 +788,7 @@ async function refreshDashboardData() {
 
     try {
         const params = new URLSearchParams({ temporal_window_hours: String(temporalWindowHours) });
+        params.set('active_node_history_period', activeNodeHistoryPeriod);
         if (selectedMqttSource) {
             params.set('mqtt_source', selectedMqttSource);
         }
@@ -743,6 +800,7 @@ async function refreshDashboardData() {
         const dashboardData = await dashboardResponse.json();
         const statsData = dashboardData.stats || {};
         analyticsData = dashboardData.analytics || null;
+        activeNodeHistoryData = dashboardData.active_node_history || null;
 
         updateDashboardStats(statsData);
         renderAnalyticsData();
@@ -791,6 +849,7 @@ function renderAnalyticsData() {
     chartInstances = {};
 
     safeRenderChart('timeSeriesChart', () => createTimeSeriesChart(analyticsData.temporal_patterns));
+    safeRenderChart('activeNodeHistoryChart', () => createActiveNodeHistoryChart(activeNodeHistoryData));
     safeRenderChart('nodeActivityChart', () => createNodeActivityChart(analyticsData.node_statistics));
     safeRenderChart('gatewayActivityChart', () => createGatewayActivityChart(analyticsData.gateway_distribution));
     safeRenderChart('signalDistributionChart', () => createSignalDistributionChart(analyticsData.signal_quality));
@@ -949,6 +1008,64 @@ function createTimeSeriesChart(temporalData) {
                 borderColor: colors.info,
                 backgroundColor: colors.infoBg,
                 tension: 0.1
+            }]
+        },
+        options: options
+    });
+}
+
+function updateActiveNodeHistoryButtons() {
+    document.querySelectorAll('.active-node-history-period-btn').forEach((button) => {
+        const buttonPeriod = button.dataset.period || '7d';
+        button.classList.toggle('active', buttonPeriod === activeNodeHistoryPeriod);
+        button.classList.toggle('btn-secondary', buttonPeriod === activeNodeHistoryPeriod);
+        button.classList.toggle('btn-outline-secondary', buttonPeriod !== activeNodeHistoryPeriod);
+    });
+}
+
+function createActiveNodeHistoryChart(historyData) {
+    if (!historyData || !Array.isArray(historyData.points) || historyData.points.length === 0) {
+        showNoDataState('activeNodeHistoryChart');
+        return;
+    }
+
+    hideLoadingSpinner('activeNodeHistoryChart');
+    const ctx = document.getElementById('activeNodeHistoryChart');
+    if (!ctx) return;
+
+    const tzPref = (typeof getTimezonePreference === 'function') ? getTimezonePreference() : 'local';
+    const labels = historyData.points.map((point) => {
+        const dt = new Date((point.snapshot_time || 0) * 1000);
+        if (tzPref === 'utc') {
+            return activeNodeHistoryPeriod === 'all'
+                ? dt.toISOString().slice(0, 16).replace('T', ' ')
+                : dt.toISOString().slice(5, 16).replace('T', ' ');
+        }
+        const month = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        const hour = String(dt.getHours()).padStart(2, '0');
+        const minute = String(dt.getMinutes()).padStart(2, '0');
+        return activeNodeHistoryPeriod === 'all'
+            ? `${dt.getFullYear()}-${month}-${day} ${hour}:${minute}`
+            : `${month}-${day} ${hour}:${minute}`;
+    });
+    const data = historyData.points.map((point) => point.active_nodes || 0);
+
+    const colors = getChartColors();
+    const options = getDefaultChartOptions();
+    options.plugins.legend.display = false;
+
+    chartInstances.activeNodeHistoryChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Active Nodes',
+                data: data,
+                borderColor: colors.success,
+                backgroundColor: colors.successBg,
+                fill: true,
+                tension: 0.15
             }]
         },
         options: options

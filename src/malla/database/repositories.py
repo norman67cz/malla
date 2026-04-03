@@ -335,6 +335,57 @@ class DashboardRepository:
     """Repository for dashboard statistics."""
 
     @staticmethod
+    def get_active_node_history(mqtt_source: str | None = None, period: str = "7d") -> dict[str, Any]:
+        """Return persisted active-node snapshots for the requested dashboard period."""
+        allowed_periods = {"7d": 7, "14d": 14, "30d": 30, "all": None}
+        normalized_period = period if period in allowed_periods else "7d"
+        source_key = mqtt_source or "all"
+
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            where_conditions = ["mqtt_source = ?"]
+            params: list[Any] = [source_key]
+
+            if allowed_periods[normalized_period] is not None:
+                cutoff = time.time() - (allowed_periods[normalized_period] * 24 * 3600)
+                where_conditions.append("snapshot_time >= ?")
+                params.append(cutoff)
+
+            cursor.execute(
+                f"""
+                SELECT snapshot_time, active_nodes
+                FROM active_node_snapshots
+                WHERE {' AND '.join(where_conditions)}
+                ORDER BY snapshot_time ASC
+                """
+                ,
+                params,
+            )
+            rows = cursor.fetchall()
+            conn.close()
+
+            return {
+                "period": normalized_period,
+                "mqtt_source": source_key,
+                "points": [
+                    {
+                        "snapshot_time": float(row["snapshot_time"] or 0),
+                        "active_nodes": int(row["active_nodes"] or 0),
+                    }
+                    for row in rows
+                ],
+            }
+        except Exception as e:
+            logger.error(f"Error getting active node history: {e}")
+            return {
+                "period": normalized_period,
+                "mqtt_source": source_key,
+                "points": [],
+            }
+
+    @staticmethod
     def get_cleanup_status() -> dict[str, Any] | None:
         """Get the latest persisted cleanup run status for dashboard display."""
         try:

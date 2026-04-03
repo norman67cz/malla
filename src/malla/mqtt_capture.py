@@ -97,9 +97,11 @@ node_cache: dict[
     int, dict[str, Any]
 ] = {}  # In-memory cache: {node_id_numeric: {'hex_id': '!abc123', 'long_name': 'Name', 'short_name': 'Short', 'last_updated': timestamp}}
 cleanup_thread: threading.Thread | None = None  # Background thread for data cleanup
+active_node_snapshot_thread: threading.Thread | None = None
 stop_cleanup = threading.Event()  # Event to signal cleanup thread to stop
 source_allowed_node_ids: dict[str, set[int]] = {}
 source_allow_cache_lock = threading.Lock()
+ACTIVE_NODE_SNAPSHOT_INTERVAL_SEC = 4 * 3600
 
 COUNTRY_BOUNDING_BOXES: dict[str, list[tuple[float, float, float, float]]] = {
     "CZ": [(48.50, 12.05, 51.10, 18.90)],
@@ -807,6 +809,21 @@ def init_database() -> None:
             nodes_deleted BIGINT NOT NULL
         )
     """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS active_node_snapshots (
+            mqtt_source TEXT NOT NULL,
+            snapshot_time DOUBLE PRECISION NOT NULL,
+            active_nodes BIGINT NOT NULL,
+            recorded_at DOUBLE PRECISION NOT NULL,
+            PRIMARY KEY (mqtt_source, snapshot_time)
+        )
+    """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_active_node_snapshots_source_time ON active_node_snapshots(mqtt_source, snapshot_time)"
     )
 
     # Composite indexes for /api/nodes aggregation queries (96% faster than single-column indexes)
@@ -1764,6 +1781,110 @@ def cleanup_worker() -> None:
     logging.info("Cleanup worker thread stopped")
 
 
+def persist_active_node_snapshots(force: bool = False) -> bool:
+    """Persist active-node snapshots for all/dashboard MQTT sources every 4 hours."""
+    current_time = time.time()
+
+    with db_lock:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT snapshot_time
+                FROM active_node_snapshots
+                WHERE mqtt_source = ?
+                ORDER BY snapshot_time DESC
+                LIMIT 1
+                """,
+                ("all",),
+            )
+            latest_row = cursor.fetchone()
+            latest_snapshot_time = float(latest_row[0]) if latest_row else 0.0
+            if not force and latest_snapshot_time and (
+                current_time - latest_snapshot_time < ACTIVE_NODE_SNAPSHOT_INTERVAL_SEC
+            ):
+                return False
+
+            snapshot_sources = ["all"]
+            snapshot_sources.extend(
+                str(source.get("name", "")).strip()
+                for source in MQTT_SOURCES
+                if str(source.get("name", "")).strip() and source.get("enabled", True)
+            )
+
+            snapshot_sources = list(dict.fromkeys(snapshot_sources))
+            active_since = current_time - (24 * 3600)
+
+            for snapshot_source in snapshot_sources:
+                if snapshot_source == "all":
+                    cursor.execute(
+                        """
+                        SELECT COUNT(DISTINCT from_node_id)
+                        FROM packet_history
+                        WHERE timestamp > ? AND from_node_id IS NOT NULL
+                        """,
+                        (active_since,),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT COUNT(DISTINCT from_node_id)
+                        FROM packet_history
+                        WHERE timestamp > ? AND from_node_id IS NOT NULL AND mqtt_source = ?
+                        """,
+                        (active_since, snapshot_source),
+                    )
+                active_nodes = int(cursor.fetchone()[0] or 0)
+
+                cursor.execute(
+                    """
+                    INSERT INTO active_node_snapshots (
+                        mqtt_source,
+                        snapshot_time,
+                        active_nodes,
+                        recorded_at
+                    )
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(mqtt_source, snapshot_time) DO UPDATE SET
+                        active_nodes = excluded.active_nodes,
+                        recorded_at = excluded.recorded_at
+                    """,
+                    (
+                        snapshot_source,
+                        current_time,
+                        active_nodes,
+                        current_time,
+                    ),
+                )
+
+            conn.commit()
+            logging.info(
+                "Persisted active node snapshots for %s source(s) at %s",
+                len(snapshot_sources),
+                int(current_time),
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logging.error("Error persisting active node snapshots: %s", exc)
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+
+def active_node_snapshot_worker() -> None:
+    """Persist active-node snapshots in the background every 4 hours."""
+    logging.info("Active node snapshot worker thread started")
+
+    persist_active_node_snapshots(force=False)
+
+    while not stop_cleanup.wait(3600):
+        persist_active_node_snapshots(force=False)
+
+    logging.info("Active node snapshot worker thread stopped")
+
+
 def get_node_statistics() -> dict[str, Any]:
     """Get statistics about known nodes."""
     with db_lock:
@@ -2453,10 +2574,17 @@ def main() -> None:
 
     # Start the cleanup thread
     global cleanup_thread
+    global active_node_snapshot_thread
     stop_cleanup.clear()
     cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
     cleanup_thread.start()
     logging.info("Data cleanup thread started.")
+    active_node_snapshot_thread = threading.Thread(
+        target=active_node_snapshot_worker,
+        daemon=True,
+    )
+    active_node_snapshot_thread.start()
+    logging.info("Active node snapshot thread started.")
 
     try:
         # Keep the main thread alive
@@ -2478,6 +2606,11 @@ def main() -> None:
             cleanup_thread.join(timeout=5)
             if cleanup_thread.is_alive():
                 logging.warning("Cleanup thread did not finish gracefully")
+        if active_node_snapshot_thread and active_node_snapshot_thread.is_alive():
+            logging.info("Waiting for active node snapshot thread to finish...")
+            active_node_snapshot_thread.join(timeout=5)
+            if active_node_snapshot_thread.is_alive():
+                logging.warning("Active node snapshot thread did not finish gracefully")
 
         logging.info("Stopping MQTT client loops...")
         for mqtt_client in mqtt_clients:
