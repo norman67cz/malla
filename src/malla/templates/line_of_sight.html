@@ -182,6 +182,17 @@
     </div>
 </div>
 
+<!-- Prefill Loading State -->
+<div id="prefillLoadingState" class="card mb-4" style="display: none;">
+    <div class="card-body d-flex align-items-center gap-3 py-3">
+        <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+        <div>
+            <div class="fw-semibold">Looking up selected nodes...</div>
+            <div class="text-muted small mb-0">Fetching node details from backend before starting the analysis.</div>
+        </div>
+    </div>
+</div>
+
 <!-- Loading State -->
 <div id="loadingState" class="card mb-4" style="display: none;">
     <div class="card-body text-center py-5">
@@ -307,6 +318,21 @@ let toNodePicker = null;
 let chartHoverMarker = null;
 let chartLine = null;
 
+function setPrefillLoadingState(visible) {
+    const prefillLoadingState = document.getElementById('prefillLoadingState');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    if (prefillLoadingState) {
+        prefillLoadingState.style.display = visible ? 'block' : 'none';
+    }
+    if (analyzeBtn) {
+        analyzeBtn.disabled = visible || !(
+            document.getElementById('fromNode_value').value &&
+            document.getElementById('toNode_value').value &&
+            document.getElementById('fromNode_value').value !== document.getElementById('toNode_value').value
+        );
+    }
+}
+
 // Haversine formula to calculate distance between two points
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in km
@@ -321,12 +347,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
-    // Load caches in parallel
-    await Promise.all([
-        window.NodeCache.load(),
-        window.LocationCache.load()
-    ]);
-
     // Initialize map
     initializeMap();
 
@@ -351,22 +371,61 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
+    // Warm caches in background; do not block URL prefill on full dataset loads.
+    window.NodeCache.load().catch((error) => {
+        console.warn('Background NodeCache warmup failed:', error);
+    });
+    window.LocationCache.load().catch((error) => {
+        console.warn('Background LocationCache warmup failed:', error);
+    });
+
     // Check if pre-loaded from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const fromNodeId = urlParams.get('from');
     const toNodeId = urlParams.get('to');
 
     if (fromNodeId && toNodeId) {
-        // Set values and trigger analysis
-        await setNodePickerValues(fromNodeId, toNodeId);
+        setPrefillLoadingState(true);
+        try {
+            // Set values and trigger analysis
+            await setNodePickerValues(fromNodeId, toNodeId);
+        } finally {
+            setPrefillLoadingState(false);
+        }
     }
 });
+
+async function fetchNodeForPrefill(nodeId) {
+    const idStr = nodeId.toString();
+    try {
+        const response = await fetch(`/api/node/${encodeURIComponent(idStr)}/info`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        if (data && data.node) {
+            if (window.NodeCache && typeof window.NodeCache.addNode === 'function') {
+                window.NodeCache.addNode(data.node);
+            }
+            if (data.location && window.LocationCache && typeof window.LocationCache.addLocation === 'function') {
+                window.LocationCache.addLocation(data.location);
+            }
+            return data.node;
+        }
+    } catch (error) {
+        console.warn(`Failed direct node prefill lookup for ${idStr}:`, error);
+    }
+
+    return window.NodeCache.getNode(parseInt(nodeId));
+}
 
 // Set node picker values from URL params
 async function setNodePickerValues(fromNodeId, toNodeId) {
     try {
-        const fromNode = await window.NodeCache.getNode(parseInt(fromNodeId));
-        const toNode = await window.NodeCache.getNode(parseInt(toNodeId));
+        const [fromNode, toNode] = await Promise.all([
+            fetchNodeForPrefill(fromNodeId),
+            fetchNodeForPrefill(toNodeId)
+        ]);
 
         if (fromNode && toNode) {
             // Set from node
@@ -568,12 +627,17 @@ async function performAnalysis() {
     const fromNodeId = parseInt(document.getElementById('fromNode_value').value);
     const toNodeId = parseInt(document.getElementById('toNode_value').value);
 
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('resultsContainer').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+
     // Get location data from cache
     try {
         const fromLoc = await window.LocationCache.getLocation(fromNodeId);
         const toLoc = await window.LocationCache.getLocation(toNodeId);
 
         if (!fromLoc || !toLoc || !fromLoc.latitude || !fromLoc.longitude || !toLoc.latitude || !toLoc.longitude) {
+            document.getElementById('loadingState').style.display = 'none';
             showError('One or both selected nodes do not have location data');
             return;
         }
@@ -597,11 +661,6 @@ async function performAnalysis() {
             longitude: toLoc.longitude,
             altitude: toLoc.altitude || 0
         };
-
-        // Show loading state
-        document.getElementById('loadingState').style.display = 'block';
-        document.getElementById('resultsContainer').style.display = 'none';
-        document.getElementById('errorState').style.display = 'none';
 
         // Fetch elevation data
         const elevationData = await fetchElevationData(
