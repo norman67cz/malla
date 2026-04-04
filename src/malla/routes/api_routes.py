@@ -2228,6 +2228,7 @@ def api_nodes_data():
                     "last_packet_str": node.get("last_packet_str", "Never"),
                     "last_packet_time": node.get("last_packet_time"),
                     "packet_count_24h": node.get("packet_count_24h", 0),
+                    "observed_max_hop_start": node.get("observed_max_hop_start"),
                     "status": status,
                 }
             )
