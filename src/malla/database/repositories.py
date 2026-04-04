@@ -1823,7 +1823,7 @@ class NodeRepository:
                 "hw_model",
                 "last_updated",
                 "packet_count_24h",
-                "observed_max_hop_start",
+                "latest_hop_start",
             ]
             if order_by not in valid_order_columns:
                 order_by = "last_packet_time"  # Default to last seen time
@@ -1833,7 +1833,7 @@ class NodeRepository:
             # Check if we need 24h stats for sorting or filtering
             needs_24h_stats = (
                 order_by == "packet_count_24h"
-                or order_by == "observed_max_hop_start"
+                or order_by == "latest_hop_start"
                 or filters.get("active_only")
                 or filters.get("direct_receptions")
                 or filters.get("activity_group")
@@ -1849,7 +1849,7 @@ class NodeRepository:
                     "hw_model": "ni.hw_model",
                     "last_updated": "ni.last_updated",
                     "packet_count_24h": "stats.packet_count_24h",
-                    "observed_max_hop_start": "COALESCE(hopstats.observed_max_hop_start, 0)",
+                    "latest_hop_start": "COALESCE(hopstats.latest_hop_start, 0)",
                     "last_packet_time": "COALESCE(stats.last_packet_time, ni.last_updated)",
                 }
                 order_column = order_mappings.get(
@@ -1930,7 +1930,7 @@ class NodeRepository:
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
-                        hopstats.observed_max_hop_start as observed_max_hop_start,
+                        hopstats.latest_hop_start as latest_hop_start,
                         stats.avg_rssi_24h as avg_rssi_24h,
                         COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                         COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
@@ -1959,12 +1959,22 @@ class NodeRepository:
                     ) stats ON ni.node_id = stats.node_id
                     LEFT JOIN (
                         SELECT
-                            from_node_id as node_id,
-                            MAX(CASE WHEN hop_start IS NOT NULL AND hop_start > 0 THEN hop_start END) as observed_max_hop_start
-                        FROM packet_history
-                        WHERE 1=1
-                          {"AND mqtt_source = ?" if mqtt_source else ""}
-                        GROUP BY from_node_id
+                            p1.from_node_id as node_id,
+                            MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
+                        FROM packet_history p1
+                        INNER JOIN (
+                            SELECT
+                                from_node_id,
+                                MAX(timestamp) as latest_timestamp
+                            FROM packet_history
+                            WHERE hop_start IS NOT NULL AND hop_start > 0
+                              {"AND mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY from_node_id
+                        ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
+                                     AND p1.timestamp = latest_hop.latest_timestamp
+                        WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
+                          {"AND p1.mqtt_source = ?" if mqtt_source else ""}
+                        GROUP BY p1.from_node_id
                     ) hopstats ON ni.node_id = hopstats.node_id
                     LEFT JOIN (
                         SELECT
@@ -1987,7 +1997,7 @@ class NodeRepository:
                     "long_name": "ni.long_name",
                     "hw_model": "ni.hw_model",
                     "last_updated": "ni.last_updated",
-                    "observed_max_hop_start": "0",
+                    "latest_hop_start": "0",
                 }
                 order_column = order_mappings.get(order_by, "ni.last_updated")
 
@@ -2003,7 +2013,7 @@ class NodeRepository:
                         ni.last_updated,
                         printf('!%08x', ni.node_id) as hex_id,
                         0 as packet_count_24h,
-                        NULL as observed_max_hop_start,
+                        NULL as latest_hop_start,
                         NULL as avg_rssi_24h,
                         0 as direct_packet_count_24h,
                         0 as gateway_packet_count_24h,
@@ -2061,7 +2071,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
-                            hopstats.observed_max_hop_start as observed_max_hop_start,
+                            hopstats.latest_hop_start as latest_hop_start,
                             stats.avg_rssi_24h as avg_rssi_24h,
                             COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                             COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
@@ -2092,11 +2102,21 @@ class NodeRepository:
                         LEFT JOIN (
                             SELECT
                                 from_node_id as node_id,
-                                MAX(CASE WHEN hop_start IS NOT NULL AND hop_start > 0 THEN hop_start END) as observed_max_hop_start
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
+                                MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
+                            FROM packet_history p1
+                            INNER JOIN (
+                                SELECT
+                                    from_node_id,
+                                    MAX(timestamp) as latest_timestamp
+                                FROM packet_history
+                                WHERE hop_start IS NOT NULL AND hop_start > 0
+                                  {"AND mqtt_source = ?" if mqtt_source else ""}
+                                GROUP BY from_node_id
+                            ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
+                                         AND p1.timestamp = latest_hop.latest_timestamp
+                            WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
+                              {"AND p1.mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY p1.from_node_id
                         ) hopstats ON ni.node_id = hopstats.node_id
                         LEFT JOIN (
                             SELECT
@@ -2140,7 +2160,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             0 as packet_count_24h,
-                            NULL as observed_max_hop_start,
+                            NULL as latest_hop_start,
                             NULL as avg_rssi_24h,
                             0 as direct_packet_count_24h,
                             0 as gateway_packet_count_24h,
@@ -2198,7 +2218,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             COALESCE(stats.packet_count_24h, 0) as packet_count_24h,
-                            hopstats.observed_max_hop_start as observed_max_hop_start,
+                            hopstats.latest_hop_start as latest_hop_start,
                             stats.avg_rssi_24h as avg_rssi_24h,
                             COALESCE(stats.direct_packet_count_24h, 0) as direct_packet_count_24h,
                             COALESCE(gstats.gateway_packet_count_24h, 0) as gateway_packet_count_24h,
@@ -2229,12 +2249,22 @@ class NodeRepository:
                         ) stats ON ni.node_id = stats.node_id
                         LEFT JOIN (
                             SELECT
-                                from_node_id as node_id,
-                                MAX(CASE WHEN hop_start IS NOT NULL AND hop_start > 0 THEN hop_start END) as observed_max_hop_start
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
+                                p1.from_node_id as node_id,
+                                MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
+                            FROM packet_history p1
+                            INNER JOIN (
+                                SELECT
+                                    from_node_id,
+                                    MAX(timestamp) as latest_timestamp
+                                FROM packet_history
+                                WHERE hop_start IS NOT NULL AND hop_start > 0
+                                  {"AND mqtt_source = ?" if mqtt_source else ""}
+                                GROUP BY from_node_id
+                            ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
+                                         AND p1.timestamp = latest_hop.latest_timestamp
+                            WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
+                              {"AND p1.mqtt_source = ?" if mqtt_source else ""}
+                            GROUP BY p1.from_node_id
                         ) hopstats ON ni.node_id = hopstats.node_id
                         LEFT JOIN (
                             SELECT
@@ -2280,7 +2310,7 @@ class NodeRepository:
                             ni.last_updated,
                             printf('!%08x', ni.node_id) as hex_id,
                             0 as packet_count_24h,
-                            NULL as observed_max_hop_start,
+                            NULL as latest_hop_start,
                             NULL as avg_rssi_24h,
                             0 as direct_packet_count_24h,
                             0 as gateway_packet_count_24h,
@@ -2371,8 +2401,8 @@ class NodeRepository:
                         value = item.get("last_updated") or 0
                     elif order_by == "packet_count_24h":
                         value = item.get("packet_count_24h") or 0
-                    elif order_by == "observed_max_hop_start":
-                        value = item.get("observed_max_hop_start") or 0
+                    elif order_by == "latest_hop_start":
+                        value = item.get("latest_hop_start") or 0
                     else:
                         value = item.get("last_packet_time") or item.get("last_updated") or 0
 
@@ -2392,7 +2422,7 @@ class NodeRepository:
             else:
                 query_params: list[Any] = base_params.copy()
                 if mqtt_source and needs_24h_stats:
-                    query_params.extend([mqtt_source, mqtt_source, mqtt_source])
+                    query_params.extend([mqtt_source, mqtt_source, mqtt_source, mqtt_source])
                 query_params.extend(params)
                 query_params.extend([limit, offset])
                 cursor.execute(query, query_params)
@@ -2492,6 +2522,25 @@ class NodeRepository:
             cursor.execute(query, (node_id,))
             node_row = cursor.fetchone()
 
+            cursor.execute(
+                """
+                SELECT hop_start
+                FROM packet_history
+                WHERE from_node_id = ?
+                  AND hop_start IS NOT NULL
+                  AND hop_start > 0
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (node_id,),
+            )
+            latest_hop_row = cursor.fetchone()
+            latest_hop_start = (
+                int(latest_hop_row["hop_start"])
+                if latest_hop_row and latest_hop_row["hop_start"] is not None
+                else None
+            )
+
             if not node_row:
                 # Check if node exists in node_info but has no packets
                 cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (node_id,))
@@ -2566,6 +2615,7 @@ class NodeRepository:
                     "unique_destinations": 0,
                     "unique_gateways": 0,
                     "observed_max_hop_start": None,
+                    "latest_hop_start": None,
                     "avg_rssi": None,
                     "avg_snr": None,
                     "avg_hops": None,
@@ -2670,6 +2720,7 @@ class NodeRepository:
                     if node_row["observed_max_hop_start"] is not None
                     else None
                 ),
+                "latest_hop_start": latest_hop_start,
                 "avg_rssi": round(node_row["avg_rssi"], 1)
                 if node_row["avg_rssi"]
                 else None,

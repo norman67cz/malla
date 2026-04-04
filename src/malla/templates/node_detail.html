@@ -264,6 +264,16 @@
                                         {% endif %}
                                     </td>
                                 </tr>
+                                <tr>
+                                    <th>Latest Hop Start:</th>
+                                    <td>
+                                        {% if node.latest_hop_start is not none %}
+                                            <code>{{ node.latest_hop_start }}</code>
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
                                 {% if node.last_mqtt_source or node.mqtt_sources %}
                                 <tr>
                                     <th>MQTT Source:</th>
