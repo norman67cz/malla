@@ -2434,6 +2434,8 @@ class NodeRepository:
                 MIN(p.timestamp) as first_seen,
                 COUNT(DISTINCT p.to_node_id) as unique_destinations,
                 COUNT(DISTINCT p.gateway_id) as unique_gateways,
+                MAX(CASE WHEN p.hop_start IS NOT NULL AND p.hop_start > 0
+                    THEN p.hop_start ELSE NULL END) as observed_max_hop_start,
                 AVG(CASE WHEN (p.hop_start IS NULL OR p.hop_limit IS NULL OR (p.hop_start - p.hop_limit) = 0)
                      THEN CAST(p.rssi AS FLOAT) END) as avg_rssi,
                 AVG(CASE WHEN (p.hop_start IS NULL OR p.hop_limit IS NULL OR (p.hop_start - p.hop_limit) = 0)
@@ -2524,6 +2526,7 @@ class NodeRepository:
                     "last_seen_relative": "Never",
                     "unique_destinations": 0,
                     "unique_gateways": 0,
+                    "observed_max_hop_start": None,
                     "avg_rssi": None,
                     "avg_snr": None,
                     "avg_hops": None,
@@ -2623,6 +2626,11 @@ class NodeRepository:
                 "last_seen_relative": format_time_ago(last_seen),
                 "unique_destinations": node_row["unique_destinations"],
                 "unique_gateways": node_row["unique_gateways"],
+                "observed_max_hop_start": (
+                    int(node_row["observed_max_hop_start"])
+                    if node_row["observed_max_hop_start"] is not None
+                    else None
+                ),
                 "avg_rssi": round(node_row["avg_rssi"], 1)
                 if node_row["avg_rssi"]
                 else None,
