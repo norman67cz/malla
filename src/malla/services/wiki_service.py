@@ -30,9 +30,10 @@ class WikiService:
     _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]|]+?))?(?:\|([^\]]+))?\]\]")
     _WIKI_SPACE_RE = re.compile(r"\[\[space:(\d{1,4})\]\]", re.IGNORECASE)
     _WIKI_IMAGE_RE = re.compile(r"\[\[img:([^\]|]+?)(?:\|([^\]]+))?\]\]", re.IGNORECASE)
-    _ALLOWED_IMAGE_EXTENSIONS = {".png", ".gif"}
+    _ALLOWED_IMAGE_EXTENSIONS = {".png", ".gif", ".jpg", ".jpeg"}
     _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
     _GIF_SIGNATURES = {b"GIF87a", b"GIF89a"}
+    _JPEG_SIGNATURE = b"\xff\xd8\xff"
 
     @staticmethod
     def _sort_key(page_path: str) -> tuple[list[int], str]:
@@ -158,6 +159,10 @@ class WikiService:
             raise ValueError("Invalid PNG signature")
         if suffix == ".gif" and header[:6] not in WikiService._GIF_SIGNATURES:
             raise ValueError("Invalid GIF signature")
+        if suffix in {".jpg", ".jpeg"} and not header.startswith(
+            WikiService._JPEG_SIGNATURE
+        ):
+            raise ValueError("Invalid JPEG signature")
         image_path.parent.mkdir(parents=True, exist_ok=True)
         upload.save(image_path)
         return image_name
