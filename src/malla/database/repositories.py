@@ -21,6 +21,35 @@ from .connection import get_db_connection
 logger = logging.getLogger(__name__)
 
 
+_PACKET_TYPE_STAT_PORTS: list[tuple[str, str]] = [
+    ("telemetry", "TELEMETRY_APP"),
+    ("position", "POSITION_APP"),
+    ("nodeinfo", "NODEINFO_APP"),
+    ("traceroute", "TRACEROUTE_APP"),
+    ("textmessage", "TEXT_MESSAGE_APP"),
+    ("mapreport", "MAP_REPORT_APP"),
+    ("routing", "ROUTING_APP"),
+    ("neighborinfo", "NEIGHBORINFO_APP"),
+    ("admin", "ADMIN_APP"),
+    ("waypoint", "WAYPOINT_APP"),
+]
+_PACKET_TYPE_STAT_ORDER_MAP: dict[str, str] = {
+    "node_name": "node_name",
+    **{alias: alias for alias, _ in _PACKET_TYPE_STAT_PORTS},
+    "unknown": "unknown",
+}
+_PACKET_TYPE_STAT_KNOWN_PORT_NAMES = ", ".join(
+    f"'{port_name}'" for _, port_name in _PACKET_TYPE_STAT_PORTS
+)
+_PACKET_TYPE_STAT_AGGREGATE_SQL = ",\n".join(
+    f"                        SUM(CASE WHEN dp.portnum_name = '{port_name}' THEN 1 ELSE 0 END) AS {alias}"
+    for alias, port_name in _PACKET_TYPE_STAT_PORTS
+)
+_PACKET_TYPE_STAT_SELECT_SQL = ",\n                    ".join(
+    alias for alias, _ in _PACKET_TYPE_STAT_PORTS
+)
+
+
 def _format_lora_modem_preset(preset_name: str | None) -> str | None:
     """Convert enum-style names such as ``MEDIUM_FAST`` to ``MEDIUM-FAST``."""
     if not preset_name:
@@ -329,6 +358,156 @@ def _get_latest_nodeinfo_public_key(cursor, node_id: int) -> str | None:
         logger.debug("Could not extract public key for %s: %s", node_id, exc)
 
     return None
+
+
+def _node_24h_stats_join_sql(mqtt_source: str | None) -> tuple[str, list[Any]]:
+    """Return reusable 24h packet statistics join for node listings."""
+    return (
+        f"""
+        LEFT JOIN (
+            SELECT
+                from_node_id as node_id,
+                COUNT(*) as packet_count_24h,
+                AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
+                SUM(
+                    CASE
+                        WHEN hop_start IS NOT NULL
+                         AND hop_limit IS NOT NULL
+                         AND (hop_start - hop_limit) = 0
+                        THEN 1
+                        ELSE 0
+                    END
+                ) as direct_packet_count_24h,
+                MAX(timestamp) as last_packet_time
+            FROM packet_history
+            WHERE timestamp > (strftime('%s', 'now') - 86400)
+              {"AND mqtt_source = ?" if mqtt_source else ""}
+            GROUP BY from_node_id
+        ) stats ON ni.node_id = stats.node_id
+        """,
+        [mqtt_source] if mqtt_source else [],
+    )
+
+
+def _node_latest_hop_start_join_sql(
+    mqtt_source: str | None,
+) -> tuple[str, list[Any]]:
+    """Return reusable latest outgoing hop_start join for node listings."""
+    return (
+        f"""
+        LEFT JOIN (
+            SELECT
+                p1.from_node_id as node_id,
+                MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
+            FROM packet_history p1
+            INNER JOIN (
+                SELECT
+                    from_node_id,
+                    MAX(timestamp) as latest_timestamp
+                FROM packet_history
+                WHERE hop_start IS NOT NULL AND hop_start > 0
+                  {"AND mqtt_source = ?" if mqtt_source else ""}
+                GROUP BY from_node_id
+            ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
+                         AND p1.timestamp = latest_hop.latest_timestamp
+            WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
+              {"AND p1.mqtt_source = ?" if mqtt_source else ""}
+            GROUP BY p1.from_node_id
+        ) hopstats ON ni.node_id = hopstats.node_id
+        """,
+        ([mqtt_source, mqtt_source] if mqtt_source else []),
+    )
+
+
+def _node_gateway_stats_join_sql(mqtt_source: str | None) -> tuple[str, list[Any]]:
+    """Return reusable 24h gateway activity join for node listings."""
+    return (
+        f"""
+        LEFT JOIN (
+            SELECT
+                gateway_id,
+                COUNT(*) as gateway_packet_count_24h
+            FROM packet_history
+            WHERE timestamp > (strftime('%s', 'now') - 86400)
+              {"AND mqtt_source = ?" if mqtt_source else ""}
+              AND gateway_id IS NOT NULL AND gateway_id != ''
+            GROUP BY gateway_id
+        ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
+        """,
+        [mqtt_source] if mqtt_source else [],
+    )
+
+
+def _node_alltime_stats_join_sql(mqtt_source: str | None) -> tuple[str, list[Any]]:
+    """Return reusable all-time packet stats join for firmware-related node filters."""
+    return (
+        f"""
+        LEFT JOIN (
+            SELECT
+                from_node_id as node_id,
+                COUNT(*) as packet_count_total,
+                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
+            FROM packet_history
+            WHERE 1=1
+              {"AND mqtt_source = ?" if mqtt_source else ""}
+            GROUP BY from_node_id
+        ) alltime ON ni.node_id = alltime.node_id
+        """,
+        [mqtt_source] if mqtt_source else [],
+    )
+
+
+def _packet_type_statistics_base_cte(where_clause: str) -> str:
+    """Return reusable packet-type aggregation CTE for the Statistic page."""
+    return f"""
+        WITH source_packets AS (
+            SELECT
+                p.id,
+                p.from_node_id,
+                p.portnum_name,
+                p.mesh_packet_id,
+                ni.long_name,
+                ni.short_name,
+                CASE
+                    WHEN p.mesh_packet_id IS NOT NULL AND p.mesh_packet_id != 0
+                    THEN 'mesh:' || CAST(p.mesh_packet_id AS TEXT)
+                    ELSE 'row:' || CAST(p.id AS TEXT)
+                END AS packet_key
+            FROM packet_history p
+            LEFT JOIN node_info ni ON ni.node_id = p.from_node_id
+            WHERE {where_clause}
+        ),
+        deduplicated_packets AS (
+            SELECT DISTINCT
+                from_node_id,
+                long_name,
+                short_name,
+                portnum_name,
+                packet_key
+            FROM source_packets
+        ),
+        aggregated_nodes AS (
+            SELECT
+                dp.from_node_id AS node_id,
+                COALESCE(
+                    dp.long_name,
+                    dp.short_name,
+                    printf('!%08x', dp.from_node_id)
+                ) AS node_name,
+{_PACKET_TYPE_STAT_AGGREGATE_SQL},
+                SUM(
+                    CASE
+                        WHEN dp.portnum_name IS NULL
+                          OR dp.portnum_name = 'UNKNOWN_APP'
+                          OR dp.portnum_name NOT IN ({_PACKET_TYPE_STAT_KNOWN_PORT_NAMES})
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS unknown
+            FROM deduplicated_packets dp
+            GROUP BY dp.from_node_id, dp.long_name, dp.short_name
+        )
+    """
 
 
 class DashboardRepository:
@@ -1576,21 +1755,7 @@ class NodeRepository:
         seconds = period_map.get(period, period_map["1d"])
         since_ts = time.time() - seconds
 
-        order_map = {
-            "node_name": "node_name",
-            "telemetry": "telemetry",
-            "position": "position",
-            "nodeinfo": "nodeinfo",
-            "traceroute": "traceroute",
-            "textmessage": "textmessage",
-            "mapreport": "mapreport",
-            "routing": "routing",
-            "neighborinfo": "neighborinfo",
-            "admin": "admin",
-            "waypoint": "waypoint",
-            "unknown": "unknown",
-        }
-        order_column = order_map.get(order_by, "node_name")
+        order_column = _PACKET_TYPE_STAT_ORDER_MAP.get(order_by, "node_name")
         order_direction = "DESC" if str(order_dir).lower() == "desc" else "ASC"
 
         try:
@@ -1623,72 +1788,7 @@ class NodeRepository:
 
             where_clause = " AND ".join(where_conditions)
 
-            base_cte = f"""
-                WITH source_packets AS (
-                    SELECT
-                        p.id,
-                        p.from_node_id,
-                        p.portnum_name,
-                        p.mesh_packet_id,
-                        ni.long_name,
-                        ni.short_name,
-                        CASE
-                            WHEN p.mesh_packet_id IS NOT NULL AND p.mesh_packet_id != 0
-                            THEN 'mesh:' || CAST(p.mesh_packet_id AS TEXT)
-                            ELSE 'row:' || CAST(p.id AS TEXT)
-                        END AS packet_key
-                    FROM packet_history p
-                    LEFT JOIN node_info ni ON ni.node_id = p.from_node_id
-                    WHERE {where_clause}
-                ),
-                deduplicated_packets AS (
-                    SELECT DISTINCT
-                        from_node_id,
-                        long_name,
-                        short_name,
-                        portnum_name,
-                        packet_key
-                    FROM source_packets
-                ),
-                aggregated_nodes AS (
-                    SELECT
-                        dp.from_node_id AS node_id,
-                        COALESCE(
-                            dp.long_name,
-                            dp.short_name,
-                            printf('!%08x', dp.from_node_id)
-                        ) AS node_name,
-                        SUM(CASE WHEN dp.portnum_name = 'TELEMETRY_APP' THEN 1 ELSE 0 END) AS telemetry,
-                        SUM(CASE WHEN dp.portnum_name = 'POSITION_APP' THEN 1 ELSE 0 END) AS position,
-                        SUM(CASE WHEN dp.portnum_name = 'NODEINFO_APP' THEN 1 ELSE 0 END) AS nodeinfo,
-                        SUM(CASE WHEN dp.portnum_name = 'TRACEROUTE_APP' THEN 1 ELSE 0 END) AS traceroute,
-                        SUM(CASE WHEN dp.portnum_name = 'TEXT_MESSAGE_APP' THEN 1 ELSE 0 END) AS textmessage,
-                        SUM(CASE WHEN dp.portnum_name = 'MAP_REPORT_APP' THEN 1 ELSE 0 END) AS mapreport,
-                        SUM(CASE WHEN dp.portnum_name = 'ROUTING_APP' THEN 1 ELSE 0 END) AS routing,
-                        SUM(CASE WHEN dp.portnum_name = 'NEIGHBORINFO_APP' THEN 1 ELSE 0 END) AS neighborinfo,
-                        SUM(CASE WHEN dp.portnum_name = 'ADMIN_APP' THEN 1 ELSE 0 END) AS admin,
-                        SUM(CASE WHEN dp.portnum_name = 'WAYPOINT_APP' THEN 1 ELSE 0 END) AS waypoint,
-                        SUM(
-                            CASE
-                                WHEN dp.portnum_name IS NULL OR dp.portnum_name = 'UNKNOWN_APP' OR dp.portnum_name NOT IN (
-                                    'TELEMETRY_APP',
-                                    'POSITION_APP',
-                                    'NODEINFO_APP',
-                                    'TRACEROUTE_APP',
-                                    'TEXT_MESSAGE_APP',
-                                    'MAP_REPORT_APP',
-                                    'ROUTING_APP',
-                                    'NEIGHBORINFO_APP',
-                                    'ADMIN_APP',
-                                    'WAYPOINT_APP'
-                                ) THEN 1
-                                ELSE 0
-                            END
-                        ) AS unknown
-                    FROM deduplicated_packets dp
-                    GROUP BY dp.from_node_id, dp.long_name, dp.short_name
-                )
-            """
+            base_cte = _packet_type_statistics_base_cte(where_clause)
 
             data_query = (
                 base_cte
@@ -1696,16 +1796,7 @@ class NodeRepository:
                 SELECT
                     node_id,
                     node_name,
-                    telemetry,
-                    position,
-                    nodeinfo,
-                    traceroute,
-                    textmessage,
-                    mapreport,
-                    routing,
-                    neighborinfo,
-                    admin,
-                    waypoint,
+                    {_PACKET_TYPE_STAT_SELECT_SQL},
                     unknown,
                     COUNT(*) OVER() AS total_count
                 FROM aggregated_nodes
@@ -1807,6 +1898,22 @@ class NodeRepository:
             if where_conditions:
                 where_clause = "WHERE " + " AND ".join(where_conditions)
 
+            node_stats_join_sql, node_stats_join_params = _node_24h_stats_join_sql(
+                mqtt_source
+            )
+            (
+                node_latest_hop_join_sql,
+                node_latest_hop_join_params,
+            ) = _node_latest_hop_start_join_sql(mqtt_source)
+            (
+                node_gateway_join_sql,
+                node_gateway_join_params,
+            ) = _node_gateway_stats_join_sql(mqtt_source)
+            (
+                node_alltime_join_sql,
+                node_alltime_join_params,
+            ) = _node_alltime_stats_join_sql(mqtt_source)
+
             # Fast count query using only node_info
             count_query = f"""
                 SELECT COUNT(*) as total
@@ -1892,29 +1999,10 @@ class NodeRepository:
                 count_query = f"""
                     SELECT COUNT(*) as total
                     {base_from_clause}
-                    LEFT JOIN (
-                        SELECT
-                            from_node_id as node_id,
-                            COUNT(*) as packet_count_24h,
-                            AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
-                            SUM(
-                                CASE
-                                    WHEN hop_start IS NOT NULL
-                                     AND hop_limit IS NOT NULL
-                                     AND (hop_start - hop_limit) = 0
-                                    THEN 1
-                                    ELSE 0
-                                END
-                            ) as direct_packet_count_24h,
-                            MAX(timestamp) as last_packet_time
-                        FROM packet_history
-                        WHERE timestamp > (strftime('%s', 'now') - 86400)
-                          {"AND mqtt_source = ?" if mqtt_source else ""}
-                        GROUP BY from_node_id
-                    ) stats ON ni.node_id = stats.node_id
+                    {node_stats_join_sql}
                     {where_clause}
                 """
-                count_params = base_params + ([mqtt_source] if mqtt_source else []) + params
+                count_params = base_params + node_stats_join_params + params
                 cursor.execute(count_query, count_params)
                 total_count = cursor.fetchone()["total"]
 
@@ -1937,55 +2025,9 @@ class NodeRepository:
                         COALESCE(stats.last_packet_time, ni.last_updated) as last_packet_time,
                         datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str
                     {base_from_clause}
-                    LEFT JOIN (
-                        SELECT
-                            from_node_id as node_id,
-                            COUNT(*) as packet_count_24h,
-                            AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
-                            SUM(
-                                CASE
-                                    WHEN hop_start IS NOT NULL
-                                     AND hop_limit IS NOT NULL
-                                     AND (hop_start - hop_limit) = 0
-                                    THEN 1
-                                    ELSE 0
-                                END
-                            ) as direct_packet_count_24h,
-                            MAX(timestamp) as last_packet_time
-                        FROM packet_history
-                        WHERE timestamp > (strftime('%s', 'now') - 86400)
-                          {"AND mqtt_source = ?" if mqtt_source else ""}
-                        GROUP BY from_node_id
-                    ) stats ON ni.node_id = stats.node_id
-                    LEFT JOIN (
-                        SELECT
-                            p1.from_node_id as node_id,
-                            MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
-                        FROM packet_history p1
-                        INNER JOIN (
-                            SELECT
-                                from_node_id,
-                                MAX(timestamp) as latest_timestamp
-                            FROM packet_history
-                            WHERE hop_start IS NOT NULL AND hop_start > 0
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
-                                     AND p1.timestamp = latest_hop.latest_timestamp
-                        WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
-                          {"AND p1.mqtt_source = ?" if mqtt_source else ""}
-                        GROUP BY p1.from_node_id
-                    ) hopstats ON ni.node_id = hopstats.node_id
-                    LEFT JOIN (
-                        SELECT
-                            gateway_id,
-                            COUNT(*) as gateway_packet_count_24h
-                        FROM packet_history
-                        WHERE timestamp > (strftime('%s', 'now') - 86400)
-                          {"AND mqtt_source = ?" if mqtt_source else ""}
-                          AND gateway_id IS NOT NULL AND gateway_id != ''
-                        GROUP BY gateway_id
-                    ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
+                    {node_stats_join_sql}
+                    {node_latest_hop_join_sql}
+                    {node_gateway_join_sql}
                     {where_clause}
                     ORDER BY {order_column} {order_dir}
                     LIMIT ? OFFSET ?
@@ -2079,72 +2121,22 @@ class NodeRepository:
                             datetime(COALESCE(stats.last_packet_time, ni.last_updated), 'unixepoch') as last_packet_str,
                             COUNT(*) OVER() as total_count
                         {firmware_from_clause}
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_24h,
-                                AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
-                                SUM(
-                                    CASE
-                                        WHEN hop_start IS NOT NULL
-                                         AND hop_limit IS NOT NULL
-                                         AND (hop_start - hop_limit) = 0
-                                        THEN 1
-                                        ELSE 0
-                                    END
-                                ) as direct_packet_count_24h,
-                                MAX(timestamp) as last_packet_time
-                            FROM packet_history
-                            WHERE timestamp > (strftime('%s', 'now') - 86400)
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) stats ON ni.node_id = stats.node_id
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
-                            FROM packet_history p1
-                            INNER JOIN (
-                                SELECT
-                                    from_node_id,
-                                    MAX(timestamp) as latest_timestamp
-                                FROM packet_history
-                                WHERE hop_start IS NOT NULL AND hop_start > 0
-                                  {"AND mqtt_source = ?" if mqtt_source else ""}
-                                GROUP BY from_node_id
-                            ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
-                                         AND p1.timestamp = latest_hop.latest_timestamp
-                            WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
-                              {"AND p1.mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY p1.from_node_id
-                        ) hopstats ON ni.node_id = hopstats.node_id
-                        LEFT JOIN (
-                            SELECT
-                                gateway_id,
-                                COUNT(*) as gateway_packet_count_24h
-                            FROM packet_history
-                            WHERE timestamp > (strftime('%s', 'now') - 86400)
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                              AND gateway_id IS NOT NULL AND gateway_id != ''
-                            GROUP BY gateway_id
-                        ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_total,
-                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) alltime ON ni.node_id = alltime.node_id
+                        {node_stats_join_sql}
+                        {node_latest_hop_join_sql}
+                        {node_gateway_join_sql}
+                        {node_alltime_join_sql}
                         {firmware_where_clause}
                         ORDER BY {order_column} {order_dir}
                         LIMIT ? OFFSET ?
                     """
                     query_params: list[Any] = []
                     if mqtt_source:
-                        query_params.extend([mqtt_source, mqtt_source, mqtt_source, mqtt_source])
+                        query_params.extend(
+                            node_stats_join_params
+                            + node_latest_hop_join_params
+                            + node_gateway_join_params
+                            + node_alltime_join_params
+                        )
                     query_params.extend(params)
                     query_params.extend([limit, offset])
                 else:
@@ -2168,23 +2160,14 @@ class NodeRepository:
                             datetime(ni.last_updated, 'unixepoch') as last_packet_str,
                             COUNT(*) OVER() as total_count
                         {firmware_from_clause}
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_total,
-                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) alltime ON ni.node_id = alltime.node_id
+                        {node_alltime_join_sql}
                         {firmware_where_clause}
                         ORDER BY {order_column} {order_dir}
                         LIMIT ? OFFSET ?
                     """
                     query_params = []
                     if mqtt_source:
-                        query_params.append(mqtt_source)
+                        query_params.extend(node_alltime_join_params)
                     query_params.extend(params)
                     query_params.extend([limit, offset])
 
@@ -2227,65 +2210,10 @@ class NodeRepository:
                             COALESCE(alltime.packet_count_total, 0) as packet_count_total,
                             COALESCE(alltime.pki_packet_count_total, 0) as pki_packet_count_total
                         FROM node_info ni
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_24h,
-                                AVG(CASE WHEN rssi IS NOT NULL AND rssi != 0 THEN CAST(rssi AS FLOAT) END) as avg_rssi_24h,
-                                SUM(
-                                    CASE
-                                        WHEN hop_start IS NOT NULL
-                                         AND hop_limit IS NOT NULL
-                                         AND (hop_start - hop_limit) = 0
-                                        THEN 1
-                                        ELSE 0
-                                    END
-                                ) as direct_packet_count_24h,
-                                MAX(timestamp) as last_packet_time
-                            FROM packet_history
-                            WHERE timestamp > (strftime('%s', 'now') - 86400)
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) stats ON ni.node_id = stats.node_id
-                        LEFT JOIN (
-                            SELECT
-                                p1.from_node_id as node_id,
-                                MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
-                            FROM packet_history p1
-                            INNER JOIN (
-                                SELECT
-                                    from_node_id,
-                                    MAX(timestamp) as latest_timestamp
-                                FROM packet_history
-                                WHERE hop_start IS NOT NULL AND hop_start > 0
-                                  {"AND mqtt_source = ?" if mqtt_source else ""}
-                                GROUP BY from_node_id
-                            ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
-                                         AND p1.timestamp = latest_hop.latest_timestamp
-                            WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
-                              {"AND p1.mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY p1.from_node_id
-                        ) hopstats ON ni.node_id = hopstats.node_id
-                        LEFT JOIN (
-                            SELECT
-                                gateway_id,
-                                COUNT(*) as gateway_packet_count_24h
-                            FROM packet_history
-                            WHERE timestamp > (strftime('%s', 'now') - 86400)
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                              AND gateway_id IS NOT NULL AND gateway_id != ''
-                            GROUP BY gateway_id
-                        ) gstats ON gstats.gateway_id = printf('!%08x', ni.node_id)
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_total,
-                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) alltime ON ni.node_id = alltime.node_id
+                        {node_stats_join_sql}
+                        {node_latest_hop_join_sql}
+                        {node_gateway_join_sql}
+                        {node_alltime_join_sql}
                         {older_than_where_clause}
                         {" AND " if older_than_where_clause else "WHERE "}
                         (
@@ -2319,16 +2247,7 @@ class NodeRepository:
                             COALESCE(alltime.packet_count_total, 0) as packet_count_total,
                             COALESCE(alltime.pki_packet_count_total, 0) as pki_packet_count_total
                         FROM node_info ni
-                        LEFT JOIN (
-                            SELECT
-                                from_node_id as node_id,
-                                COUNT(*) as packet_count_total,
-                                SUM(CASE WHEN pki_encrypted IS TRUE THEN 1 ELSE 0 END) as pki_packet_count_total
-                            FROM packet_history
-                            WHERE 1=1
-                              {"AND mqtt_source = ?" if mqtt_source else ""}
-                            GROUP BY from_node_id
-                        ) alltime ON ni.node_id = alltime.node_id
+                        {node_alltime_join_sql}
                         {older_than_where_clause}
                         {" AND " if older_than_where_clause else "WHERE "}
                         (
@@ -2342,7 +2261,12 @@ class NodeRepository:
                     """
                 query_no_paging_params: list[Any] = []
                 if mqtt_source and needs_24h_stats:
-                    query_no_paging_params.extend([mqtt_source, mqtt_source, mqtt_source, mqtt_source])
+                    query_no_paging_params.extend(
+                        node_stats_join_params
+                        + node_latest_hop_join_params
+                        + node_gateway_join_params
+                        + node_alltime_join_params
+                    )
                 elif mqtt_source:
                     query_no_paging_params.append(mqtt_source)
                 query_no_paging_params.extend(params)
@@ -2422,7 +2346,11 @@ class NodeRepository:
             else:
                 query_params: list[Any] = base_params.copy()
                 if mqtt_source and needs_24h_stats:
-                    query_params.extend([mqtt_source, mqtt_source, mqtt_source, mqtt_source])
+                    query_params.extend(
+                        node_stats_join_params
+                        + node_latest_hop_join_params
+                        + node_gateway_join_params
+                    )
                 query_params.extend(params)
                 query_params.extend([limit, offset])
                 cursor.execute(query, query_params)
