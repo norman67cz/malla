@@ -396,23 +396,52 @@ def _node_latest_hop_start_join_sql(
     return (
         f"""
         LEFT JOIN (
-            SELECT
-                p1.from_node_id as node_id,
-                MAX(CASE WHEN p1.hop_start IS NOT NULL AND p1.hop_start > 0 THEN p1.hop_start END) as latest_hop_start
-            FROM packet_history p1
-            INNER JOIN (
+            WITH latest_unique_packets AS (
                 SELECT
                     from_node_id,
-                    MAX(timestamp) as latest_timestamp
+                    COALESCE(
+                        CASE
+                            WHEN mesh_packet_id IS NOT NULL AND mesh_packet_id != 0
+                            THEN 'mesh:' || CAST(mesh_packet_id AS TEXT)
+                            ELSE NULL
+                        END,
+                        'row:' || CAST(id AS TEXT)
+                    ) AS packet_key,
+                    MAX(timestamp) AS latest_timestamp
                 FROM packet_history
                 WHERE hop_start IS NOT NULL AND hop_start > 0
                   {"AND mqtt_source = ?" if mqtt_source else ""}
-                GROUP BY from_node_id
-            ) latest_hop ON p1.from_node_id = latest_hop.from_node_id
-                         AND p1.timestamp = latest_hop.latest_timestamp
-            WHERE p1.hop_start IS NOT NULL AND p1.hop_start > 0
-              {"AND p1.mqtt_source = ?" if mqtt_source else ""}
-            GROUP BY p1.from_node_id
+                GROUP BY from_node_id, packet_key
+            ),
+            latest_packet_per_node AS (
+                SELECT
+                    from_node_id,
+                    packet_key,
+                    latest_timestamp,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY from_node_id
+                        ORDER BY latest_timestamp DESC
+                    ) AS rn
+                FROM latest_unique_packets
+            )
+            SELECT
+                p.from_node_id AS node_id,
+                MAX(CASE WHEN p.hop_start IS NOT NULL AND p.hop_start > 0 THEN p.hop_start END) AS latest_hop_start
+            FROM packet_history p
+            INNER JOIN latest_packet_per_node lp
+                ON p.from_node_id = lp.from_node_id
+               AND lp.rn = 1
+               AND COALESCE(
+                    CASE
+                        WHEN p.mesh_packet_id IS NOT NULL AND p.mesh_packet_id != 0
+                        THEN 'mesh:' || CAST(p.mesh_packet_id AS TEXT)
+                        ELSE NULL
+                    END,
+                    'row:' || CAST(p.id AS TEXT)
+               ) = lp.packet_key
+            WHERE p.hop_start IS NOT NULL AND p.hop_start > 0
+              {"AND p.mqtt_source = ?" if mqtt_source else ""}
+            GROUP BY p.from_node_id
         ) hopstats ON ni.node_id = hopstats.node_id
         """,
         ([mqtt_source, mqtt_source] if mqtt_source else []),
@@ -2452,15 +2481,41 @@ class NodeRepository:
 
             cursor.execute(
                 """
-                SELECT hop_start
-                FROM packet_history
-                WHERE from_node_id = ?
-                  AND hop_start IS NOT NULL
-                  AND hop_start > 0
-                ORDER BY timestamp DESC
-                LIMIT 1
+                WITH latest_unique_packet AS (
+                    SELECT
+                        COALESCE(
+                            CASE
+                                WHEN mesh_packet_id IS NOT NULL AND mesh_packet_id != 0
+                                THEN 'mesh:' || CAST(mesh_packet_id AS TEXT)
+                                ELSE NULL
+                            END,
+                            'row:' || CAST(id AS TEXT)
+                        ) AS packet_key,
+                        MAX(timestamp) AS latest_timestamp
+                    FROM packet_history
+                    WHERE from_node_id = ?
+                      AND hop_start IS NOT NULL
+                      AND hop_start > 0
+                    GROUP BY packet_key
+                    ORDER BY latest_timestamp DESC
+                    LIMIT 1
+                )
+                SELECT MAX(p.hop_start) AS hop_start
+                FROM packet_history p
+                INNER JOIN latest_unique_packet lup
+                  ON COALESCE(
+                        CASE
+                            WHEN p.mesh_packet_id IS NOT NULL AND p.mesh_packet_id != 0
+                            THEN 'mesh:' || CAST(p.mesh_packet_id AS TEXT)
+                            ELSE NULL
+                        END,
+                        'row:' || CAST(p.id AS TEXT)
+                     ) = lup.packet_key
+                WHERE p.from_node_id = ?
+                  AND p.hop_start IS NOT NULL
+                  AND p.hop_start > 0
                 """,
-                (node_id,),
+                (node_id, node_id),
             )
             latest_hop_row = cursor.fetchone()
             latest_hop_start = (
