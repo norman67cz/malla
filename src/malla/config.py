@@ -43,6 +43,7 @@ class AppConfig:
     mqtt_password: str | None = None
     mqtt_topic_prefix: str = "msh"
     mqtt_topic_suffix: str = "/+/+/+/#"
+    mqtt_client_id: str | None = None
     mqtt_sources: list[dict[str, Any]] = field(default_factory=list)
 
     # Meshtastic channel default key (for optional packet decryption)

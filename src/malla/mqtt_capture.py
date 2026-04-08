@@ -73,6 +73,13 @@ MQTT_SOURCE_BY_NAME: dict[str, dict[str, Any]] = {
     str(source.get("name") or "default"): source for source in MQTT_SOURCES
 }
 PACKET_REPLAY_DEDUPE_WINDOW_SEC = 15 * 60
+MQTT_CLIENT_ID: str | None = _cfg.mqtt_client_id
+MQTT_BROKER_ADDRESS: str = _cfg.mqtt_broker_address
+MQTT_PORT: int = _cfg.mqtt_port
+MQTT_USERNAME: str | None = _cfg.mqtt_username
+MQTT_PASSWORD: str | None = _cfg.mqtt_password
+MQTT_TOPIC_PREFIX: str = _cfg.mqtt_topic_prefix
+MQTT_TOPIC_SUFFIX: str = _cfg.mqtt_topic_suffix
 
 # Database file path
 DATABASE_FILE: str = _cfg.database_file
@@ -2590,6 +2597,11 @@ def main() -> None:
 
     mqtt_clients: list[mqtt.Client] = []
 
+    if MQTT_CLIENT_ID:
+        logging.info("Using configured MQTT client ID: %s", MQTT_CLIENT_ID)
+    else:
+        logging.info("Using randomly generated MQTT client IDs")
+
     for source in MQTT_SOURCES:
         if not source.get("enabled", True):
             logging.info(
@@ -2609,6 +2621,7 @@ def main() -> None:
 
         mqtt_client = mqtt.Client(
             CallbackAPIVersion.VERSION2,
+            client_id=MQTT_CLIENT_ID or "",
             userdata=source,
         )
 
