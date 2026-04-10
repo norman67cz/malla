@@ -35,6 +35,8 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
     """Get comprehensive details for a specific packet including all receptions."""
     logger.info(f"Getting packet details for packet {packet_id}")
 
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -392,8 +394,6 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
         # Always generate raw analysis to show packet structure, even without payload
         raw_analysis = get_raw_packet_analysis(packet)
 
-        conn.close()
-
         # Convert any remaining bytes objects to base64 for JSON serialization
         from ..utils.serialization_utils import convert_bytes_to_base64
 
@@ -427,6 +427,17 @@ def get_packet_details(packet_id: int) -> dict[str, Any] | None:
     except Exception as e:
         logger.error(f"Error getting packet details for packet {packet_id}: {e}")
         raise
+    finally:
+        if cursor is not None:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def decode_packet_payload(packet: dict[str, Any]) -> dict[str, Any] | None:
