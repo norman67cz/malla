@@ -57,14 +57,16 @@ class RelayNodeAnalysis {
 
             this.data = data;
 
+            if (!data.relay_node_stats || data.relay_node_stats.length === 0) {
+                cardContainer.style.display = 'none';
+                loadingIndicator.style.display = 'none';
+                contentDiv.style.display = 'none';
+                return;
+            }
+
             // Hide loading, show content
             loadingIndicator.style.display = 'none';
             contentDiv.style.display = 'block';
-
-            if (!data.relay_node_stats || data.relay_node_stats.length === 0) {
-                this.showNoDataMessage(tableContainer);
-                return;
-            }
 
             // Render the table
             this.renderTable(data.relay_node_stats, tableContainer);

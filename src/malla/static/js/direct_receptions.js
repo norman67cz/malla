@@ -14,6 +14,20 @@ class DirectReceptionsChart {
     }
 
     /**
+     * Fetch API payload for one direction.
+     */
+    async fetchDirectionData(direction) {
+        const response = await fetch(`/api/node/${this.nodeId}/direct-receptions?limit=1000&direction=${direction}`);
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        return data;
+    }
+
+    /**
      * Initialize event listeners for direction and metric toggles
      */
     initializeEventListeners() {
@@ -70,12 +84,7 @@ class DirectReceptionsChart {
             document.getElementById('direct-receptions-loading').style.display = 'block';
             document.getElementById('direct-receptions-content').style.display = 'none';
 
-            const response = await fetch(`/api/node/${this.nodeId}/direct-receptions?limit=1000&direction=${direction}`);
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
+            const data = await this.fetchDirectionData(direction);
 
             // Update description based on direction
             this.updateDescription(direction);
@@ -428,7 +437,38 @@ class DirectReceptionsChart {
      * Initialize the component
      */
     async initialize() {
-        await this.loadChart();
+        const cardContainer = document.getElementById('direct-receptions-card');
+        if (!cardContainer) {
+            return;
+        }
+
+        try {
+            const [receivedData, transmittedData] = await Promise.all([
+                this.fetchDirectionData('received'),
+                this.fetchDirectionData('transmitted'),
+            ]);
+
+            const hasReceived = Array.isArray(receivedData.direct_receptions) && receivedData.direct_receptions.length > 0;
+            const hasTransmitted = Array.isArray(transmittedData.direct_receptions) && transmittedData.direct_receptions.length > 0;
+
+            if (!hasReceived && !hasTransmitted) {
+                cardContainer.style.display = 'none';
+                return;
+            }
+
+            const initialDirection = hasReceived ? 'received' : 'transmitted';
+            const directionToggleGroup = document.getElementById('direction-toggle-group');
+            if (directionToggleGroup) {
+                directionToggleGroup.querySelectorAll('button[data-direction]').forEach((btn) => {
+                    btn.classList.toggle('active', btn.getAttribute('data-direction') === initialDirection);
+                });
+            }
+
+            await this.loadChart(initialDirection);
+        } catch (error) {
+            console.error('Error initializing direct receptions:', error);
+            await this.loadChart();
+        }
     }
 }
 

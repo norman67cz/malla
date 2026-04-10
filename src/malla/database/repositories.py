@@ -3023,7 +3023,7 @@ class NodeRepository:
             try:
                 cursor.execute(
                     """
-                    SELECT id, timestamp, raw_payload
+                    SELECT id, timestamp, raw_payload, mqtt_source
                     FROM packet_history
                     WHERE from_node_id = ?
                       AND portnum_name = 'NEIGHBORINFO_APP'
@@ -3111,6 +3111,7 @@ class NodeRepository:
                     )
                     neighbor_info = {
                         "packet_id": neighbor_row["id"],
+                        "mqtt_source": neighbor_row["mqtt_source"],
                         "timestamp": report_timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
                         "timestamp_unix": neighbor_row["timestamp"],
                         "timestamp_relative": format_time_ago(report_timestamp),
