@@ -190,9 +190,36 @@ def delete_orphaned_nodes(conn: Any) -> int:
         return int(cur.rowcount)
 
 
+def import_postgres_driver() -> Any:
+    """Import an available PostgreSQL driver with a helpful fallback error."""
+    try:
+        import psycopg  # type: ignore
+
+        return psycopg
+    except ModuleNotFoundError:
+        pass
+
+    try:
+        import psycopg2 as psycopg  # type: ignore
+
+        return psycopg
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "PostgreSQL driver is not available in this Python environment.\n"
+            "Run the script inside the Malla container or project environment, for example:\n"
+            "  docker compose exec -T malla-web python /app/scripts/delete_postgres_source_data.py --source official --all\n"
+            "or:\n"
+            "  uv run python scripts/delete_postgres_source_data.py --source official --all"
+        ) from exc
+
+
 def main() -> None:
     args = parse_args()
-    import psycopg
+    try:
+        psycopg = import_postgres_driver()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from exc
 
     dsn = resolve_postgres_dsn(args.postgres_dsn, args.config_file)
     where_clause, params = build_where_clause(
