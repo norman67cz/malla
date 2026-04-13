@@ -176,12 +176,48 @@ def delete_matching_rows(conn: Any, where_clause: str, params: list[Any]) -> int
         return int(cur.rowcount)
 
 
+def collect_candidate_nodes(conn: Any, where_clause: str, params: list[Any]) -> int:
+    """Collect node IDs touched by the packet delete into a temp table.
+
+    This keeps the orphan cleanup bounded to nodes that were actually affected
+    by the delete instead of scanning the whole node_info table.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TEMP TABLE IF NOT EXISTS cleanup_candidate_nodes (
+                node_id BIGINT PRIMARY KEY
+            ) ON COMMIT DROP
+            """
+        )
+        cur.execute("TRUNCATE cleanup_candidate_nodes")
+        cur.execute(
+            f"""
+            INSERT INTO cleanup_candidate_nodes (node_id)
+            SELECT node_id
+            FROM (
+                SELECT from_node_id AS node_id
+                FROM packet_history
+                WHERE {where_clause} AND from_node_id IS NOT NULL
+                UNION
+                SELECT to_node_id AS node_id
+                FROM packet_history
+                WHERE {where_clause} AND to_node_id IS NOT NULL
+            ) affected_nodes
+            """,
+            params + params,
+        )
+        return int(cur.rowcount)
+
+
 def delete_orphaned_nodes(conn: Any) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
             DELETE FROM node_info ni
-            WHERE NOT EXISTS (
+            USING cleanup_candidate_nodes ccn
+            WHERE ni.node_id = ccn.node_id
+              AND NOT EXISTS (
                 SELECT 1 FROM packet_history ph
                 WHERE ph.from_node_id = ni.node_id OR ph.to_node_id = ni.node_id
             )
@@ -242,10 +278,12 @@ def main() -> None:
             print("Dry run only, no data deleted.")
             return
 
+        candidate_nodes = collect_candidate_nodes(conn, where_clause, params)
         deleted_packets = delete_matching_rows(conn, where_clause, params)
         deleted_nodes = delete_orphaned_nodes(conn)
         conn.commit()
 
+        print(f"Candidate node_info rows checked: {candidate_nodes}")
         print(f"Deleted packet_history rows: {deleted_packets}")
         print(f"Deleted orphaned node_info rows: {deleted_nodes}")
 
