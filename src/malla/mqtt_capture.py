@@ -89,6 +89,7 @@ LOG_LEVEL = _cfg.log_level.upper()
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(levelname)s - %(message)s",
+    force=True,
 )
 
 # --- Global Variables ---
