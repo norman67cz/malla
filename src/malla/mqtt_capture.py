@@ -1435,6 +1435,130 @@ def _signal_score_components(
     return (snr_value, rssi_value, float(timestamp_value))
 
 
+def _format_telemetry_summary(telemetry_data: telemetry_pb2.Telemetry) -> str:
+    """Return a concise log summary for a TELEMETRY_APP payload."""
+    if telemetry_data.HasField("device_metrics"):
+        metrics = telemetry_data.device_metrics
+        if not metrics.ListFields():
+            return "Device telemetry request"
+        battery = (
+            f"{metrics.battery_level}%"
+            if metrics.HasField("battery_level")
+            else "N/A"
+        )
+        voltage = (
+            f"{metrics.voltage / 1000.0:.2f}V"
+            if metrics.HasField("voltage")
+            else "N/A"
+        )
+        return f"Device telemetry: Battery {battery}, Voltage {voltage}"
+
+    if telemetry_data.HasField("environment_metrics"):
+        metrics = telemetry_data.environment_metrics
+        if not metrics.ListFields():
+            return "Environment telemetry request"
+        temp = (
+            f"{metrics.temperature:.1f}°C"
+            if metrics.HasField("temperature")
+            else "N/A"
+        )
+        humidity = (
+            f"{metrics.relative_humidity:.1f}%"
+            if metrics.HasField("relative_humidity")
+            else "N/A"
+        )
+        return f"Environment telemetry: Temp {temp}, Humidity {humidity}"
+
+    if telemetry_data.HasField("power_metrics"):
+        metrics = telemetry_data.power_metrics
+        if not metrics.ListFields():
+            return "Power telemetry request"
+        channels = []
+        for index in (1, 2, 3):
+            voltage_field = f"ch{index}_voltage"
+            current_field = f"ch{index}_current"
+            if metrics.HasField(voltage_field) or metrics.HasField(current_field):
+                voltage = (
+                    f"{getattr(metrics, voltage_field):.3f}V"
+                    if metrics.HasField(voltage_field)
+                    else "N/A"
+                )
+                current = (
+                    f"{getattr(metrics, current_field):.3f}mA"
+                    if metrics.HasField(current_field)
+                    else "N/A"
+                )
+                channels.append(f"ch{index}={voltage}/{current}")
+        channel_summary = ", ".join(channels) if channels else "no populated channels"
+        return f"Power telemetry: {channel_summary}"
+
+    if telemetry_data.HasField("local_stats"):
+        stats = telemetry_data.local_stats
+        if not stats.ListFields():
+            return "Local stats telemetry request"
+        online = (
+            f"{stats.num_online_nodes}"
+            if stats.HasField("num_online_nodes")
+            else "N/A"
+        )
+        total = (
+            f"{stats.num_total_nodes}"
+            if stats.HasField("num_total_nodes")
+            else "N/A"
+        )
+        uptime = (
+            f"{stats.uptime_seconds}s"
+            if stats.HasField("uptime_seconds")
+            else "N/A"
+        )
+        return f"Local stats telemetry: online {online}/{total}, uptime {uptime}"
+
+    if telemetry_data.HasField("host_metrics"):
+        if not telemetry_data.host_metrics.ListFields():
+            return "Host metrics telemetry request"
+        return "Host metrics telemetry"
+
+    if telemetry_data.HasField("air_quality_metrics"):
+        if not telemetry_data.air_quality_metrics.ListFields():
+            return "Air quality telemetry request"
+        return "Air quality telemetry"
+
+    variant_name = telemetry_data.WhichOneof("variant")
+    if variant_name:
+        return f"Telemetry request/response variant: {variant_name}"
+    return "Telemetry payload with no recognized variant"
+
+
+def _log_unknown_app_diagnostics(
+    mesh_packet: Any,
+    source_name: str,
+    topic: str,
+    channel_name: str,
+    from_node_display: str,
+    via_mqtt_str: str,
+) -> None:
+    """Emit actionable diagnostics for packets that remain UNKNOWN_APP."""
+    payload_len = (
+        len(mesh_packet.encrypted)
+        if hasattr(mesh_packet, "encrypted") and mesh_packet.encrypted
+        else 0
+    )
+    logging.info(
+        "🔒 UNKNOWN_APP after decrypt attempt from %s%s: source=%s topic=%s "
+        "channel_name=%s encrypted_len=%s want_ack=%s pki_encrypted=%s to=%s packet_id=%s",
+        from_node_display,
+        via_mqtt_str,
+        source_name,
+        topic,
+        channel_name or "<primary>",
+        payload_len,
+        getattr(mesh_packet, "want_ack", None),
+        getattr(mesh_packet, "pki_encrypted", None),
+        getattr(mesh_packet, "to", None),
+        getattr(mesh_packet, "id", None),
+    )
+
+
 def log_packet_to_database(
     topic: str,
     service_envelope: Any | None,
@@ -2222,41 +2346,12 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             via_mqtt_str = (
                 " (via MQTT)" if getattr(mesh_packet, "via_mqtt", False) else ""
             )
-
-            if telemetry_data.HasField("device_metrics"):
-                metrics = telemetry_data.device_metrics
-                battery = (
-                    f"{metrics.battery_level}%"
-                    if metrics.HasField("battery_level")
-                    else "N/A"
-                )
-                voltage = (
-                    f"{metrics.voltage / 1000.0:.2f}V"
-                    if metrics.HasField("voltage")
-                    else "N/A"
-                )
-                logging.info(
-                    f"📊 Device telemetry from {from_node_display}{via_mqtt_str}: Battery {battery}, Voltage {voltage}"
-                )
-            elif telemetry_data.HasField("environment_metrics"):
-                metrics = telemetry_data.environment_metrics
-                temp = (
-                    f"{metrics.temperature:.1f}°C"
-                    if metrics.HasField("temperature")
-                    else "N/A"
-                )
-                humidity = (
-                    f"{metrics.relative_humidity:.1f}%"
-                    if metrics.HasField("relative_humidity")
-                    else "N/A"
-                )
-                logging.info(
-                    f"📊 Environment telemetry from {from_node_display}{via_mqtt_str}: Temp {temp}, Humidity {humidity}"
-                )
-            else:
-                logging.info(
-                    f"📊 Telemetry from {from_node_display}{via_mqtt_str}: Unknown type"
-                )
+            logging.info(
+                "📊 %s from %s%s",
+                _format_telemetry_summary(telemetry_data),
+                from_node_display,
+                via_mqtt_str,
+            )
 
             processed_successfully = True
 
@@ -2343,8 +2438,13 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             # If this is still UNKNOWN_APP after decryption attempt, note it
             if mesh_packet.decoded.portnum == portnums_pb2.PortNum.UNKNOWN_APP:
                 if is_encrypted_packet:
-                    logging.info(
-                        f"🔒 Encrypted packet {port_name} from {from_node_display}{via_mqtt_str} (decryption failed)"
+                    _log_unknown_app_diagnostics(
+                        mesh_packet=mesh_packet,
+                        source_name=source_name,
+                        topic=msg.topic,
+                        channel_name=channel_name,
+                        from_node_display=from_node_display,
+                        via_mqtt_str=via_mqtt_str,
                     )
                 else:
                     logging.info(
