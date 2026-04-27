@@ -1634,6 +1634,13 @@ def log_packet_to_database(
     relay_node = getattr(mesh_packet, "relay_node", None) if mesh_packet else None
     tx_after = getattr(mesh_packet, "tx_after", None) if mesh_packet else None
 
+    if (
+        portnum_name == "UNKNOWN_APP"
+        and mesh_packet
+        and getattr(mesh_packet, "pki_encrypted", False)
+    ):
+        portnum_name = "PKI_ENCRYPTED_DM"
+
     with db_lock:
         conn = get_db_connection()
         cursor = conn.cursor()

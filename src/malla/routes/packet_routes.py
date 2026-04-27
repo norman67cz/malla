@@ -925,6 +925,7 @@ def get_protobuf_message_class_for_portnum(portnum_name: str) -> Any | None:
             "PRIVATE_APP": None,  # Custom format
             "RETICULUM_TUNNEL_APP": None,  # Custom format
             "ALERT_APP": None,  # Custom format or not available
+            "PKI_ENCRYPTED_DM": None,
             "UNKNOWN_APP": None,
             "MAX": None,
         }
