@@ -579,6 +579,7 @@
 let map;
 let nodeMarkers = [];
 let markerClusterGroup;
+let alwaysVisibleMarkerGroup;
 let tracerouteLinks = [];
 let packetLinks = [];
 let neighborInfoLinks = [];
@@ -607,6 +608,7 @@ let allNodes = [];
 let linkData = [];
 let firstDisplay = true; // prevent recenter after initial load
 let currentHopDepth = 1; // max hop depth to display around selected node
+const NON_CLUSTERED_NODE_ROLES = new Set(['ROUTER']);
 
 function getMobileBtsDistanceKm() {
     const input = document.getElementById('mobileBtsDistanceKm');
@@ -1047,6 +1049,7 @@ function initMap() {
         }
     });
     map.addLayer(markerClusterGroup);
+    alwaysVisibleMarkerGroup = L.layerGroup().addTo(map);
 
     map.on('moveend zoomend', function() {
         if (showMobileBtsSites) {
@@ -1285,7 +1288,7 @@ function applyClientSideFilters() {
 
 // Update map display with filtered data
 function updateMapDisplay() {
-    if (!map || !markerClusterGroup) {
+    if (!map || !markerClusterGroup || !alwaysVisibleMarkerGroup) {
         return;
     }
 
@@ -1294,6 +1297,7 @@ function updateMapDisplay() {
 
     // Clear existing markers
     markerClusterGroup.clearLayers();
+    alwaysVisibleMarkerGroup.clearLayers();
     nodeMarkers = [];
 
     // Add markers for each filtered node
@@ -1368,7 +1372,11 @@ function addNodeMarker(node) {
         selectNode(node);
     });
 
-    markerClusterGroup.addLayer(marker);
+    if (NON_CLUSTERED_NODE_ROLES.has(node.role)) {
+        alwaysVisibleMarkerGroup.addLayer(marker);
+    } else {
+        markerClusterGroup.addLayer(marker);
+    }
     nodeMarkers.push(marker);
 }
 
@@ -2539,7 +2547,7 @@ function computeNodesWithinHops(startNodeId, maxHops) {
 
 // Draw network limited by hop depth around the selected node
 function drawHopNetwork(skipFit = false) {
-    if (selectedNodeId === null || !map || !markerClusterGroup) {
+    if (selectedNodeId === null || !map || !markerClusterGroup || !alwaysVisibleMarkerGroup) {
         return;
     }
 
@@ -2555,6 +2563,7 @@ function drawHopNetwork(skipFit = false) {
 
     // Re-render markers and links
     markerClusterGroup.clearLayers();
+    alwaysVisibleMarkerGroup.clearLayers();
     nodeMarkers = [];
 
     // Clear existing links
