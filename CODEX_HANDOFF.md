@@ -2,10 +2,13 @@
 
 Updated: 2026.03.09
 
+Server roles and workflow confirmed 2026.10.28: `10.5.0.71` is test and deployed directly; `10.5.0.125` is production and updated on the server with `git pull` and a Docker Compose rebuild. Runtime observations below are from the original handoff date.
+
 ## Environment
 
 - Local repo path: `/home/codex/projects/malla`
-- Remote deploy host: `codex@10.5.0.71`
+- Test deploy host: `codex@10.5.0.71`
+- Production host: `10.5.0.125`
 - Remote deploy path: `/home/codex/apps/malla`
 - Local toolchain is prepared:
   - `uv`
@@ -24,7 +27,7 @@ Updated: 2026.03.09
   - `make bootstrap`
 - Local tests:
   - `make test`
-- Remote deploy:
+- Test deploy:
   - `DEPLOY_USER=codex DEPLOY_HOST=10.5.0.71 DEPLOY_PATH=/home/codex/apps/malla make deploy-remote`
 
 Files added for this workflow:
@@ -35,7 +38,7 @@ Files added for this workflow:
 
 ## Runtime state
 
-- App is deployed on `10.5.0.71`
+- Test app was deployed on `10.5.0.71`
 - Web UI responds on:
   - `http://10.5.0.71:5008`
 - MQTT broker in `.env` is configured to:
@@ -59,7 +62,7 @@ Files added for this workflow:
 
 ## Important caveat
 
-- Current production data on `10.5.0.71` does not yet contain any `ADMIN_APP` packets in `packet_history`.
+- At the time of this handoff, test data on `10.5.0.71` did not contain any `ADMIN_APP` packets in `packet_history`.
 - Because of that, LoRa preset rendering is implemented and deployed, but most nodes currently show `Not captured yet`.
 - This is expected and not a bug unless `ADMIN_APP` traffic is known to exist.
 

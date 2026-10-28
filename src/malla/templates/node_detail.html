@@ -995,6 +995,8 @@
 {% endif %}
 
 <script data-node-id="{{ node.node_id }}">
+const cartoApiKey = {{ APP_CONFIG.carto_api_key|tojson }};
+const cartoTileQuery = cartoApiKey ? '?key=' + encodeURIComponent(cartoApiKey) : '';
 document.addEventListener('DOMContentLoaded', function() {
     // Set progress bar widths from data attributes
     document.querySelectorAll('.progress-bar[data-width]').forEach(function(bar) {
@@ -1033,8 +1035,8 @@ function loadCurrentLocationMap() {
     // Add theme-appropriate tile layer
     const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
     const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoTileQuery
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + cartoTileQuery;
 
     L.tileLayer(tileUrl, {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
@@ -1097,8 +1099,8 @@ async function loadLocationHistoryMap() {
         // Add theme-appropriate tile layer
         const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
         const tileUrl = isDark
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoTileQuery
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + cartoTileQuery;
 
         L.tileLayer(tileUrl, {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',

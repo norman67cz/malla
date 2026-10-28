@@ -26,6 +26,7 @@ class AppConfig:
     wiki_directory: str = "wiki"
     wiki_default_page: str = "index.md"
     wiki_edit_key: str | None = None
+    carto_api_key: str = field(default="", repr=False)
 
     # Flask/server settings
     secret_key: str = "dev-secret-key-change-in-production"

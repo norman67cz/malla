@@ -19,6 +19,7 @@ services:
       - MALLA_DATABASE_FILE=/app/data/meshtastic_history.db
       - MALLA_POSTGRES_DSN=${MALLA_POSTGRES_DSN:-}
       - MALLA_NAME=${MALLA_NAME:-Malla}
+      - MALLA_CARTO_API_KEY=${MALLA_CARTO_API_KEY:-}
       - MALLA_SECRET_KEY=${MALLA_SECRET_KEY:-dev-secret-key-change-in-production}
       - MALLA_DEBUG=${MALLA_DEBUG:-false}
       - MALLA_LOG_LEVEL=${MALLA_LOG_LEVEL:-INFO}

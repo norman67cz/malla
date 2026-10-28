@@ -915,6 +915,8 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 
 <script>
+const cartoApiKey = {{ APP_CONFIG.carto_api_key|tojson }};
+const cartoTileQuery = cartoApiKey ? '?key=' + encodeURIComponent(cartoApiKey) : '';
 // Embed data directly in JavaScript variables to avoid HTML attribute parsing issues
 window.packetData = {{ {
     'primaryGateway': packet.gateway_id,
@@ -1115,8 +1117,8 @@ async function loadTracerouteMap(routeNodes) {
         // Add theme-appropriate tile layer
         const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
         const tileUrl = isDark
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoTileQuery
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + cartoTileQuery;
 
         L.tileLayer(tileUrl, {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
@@ -1321,8 +1323,8 @@ async function loadReceptionMap(primaryGateway, otherReceptions, gatewayLocation
         // Add theme-appropriate tile layer
         const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
         const tileUrl = isDark
-            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoTileQuery
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + cartoTileQuery;
 
         L.tileLayer(tileUrl, {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',

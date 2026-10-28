@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Default to the test server; set DEPLOY_HOST explicitly for production.
 DEPLOY_HOST="${DEPLOY_HOST:-10.5.0.71}"
 DEPLOY_USER="${DEPLOY_USER:-}"
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/malla}"

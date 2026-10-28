@@ -33,6 +33,19 @@ class TestMainRoutes:
         assert b"leaflet" in response.data or b"map" in response.data.lower()
 
     @pytest.mark.integration
+    def test_map_route_uses_carto_api_key(self, client, monkeypatch):
+        """The configured raster key reaches both map tile layers."""
+        monkeypatch.setattr(
+            client.application.config["APP_CONFIG"], "carto_api_key", "raster-test-key"
+        )
+
+        response = client.get("/map")
+
+        assert response.status_code == 200
+        assert b'const cartoApiKey = "raster-test-key";' in response.data
+        assert response.data.count(b".png' + cartoTileQuery") == 2
+
+    @pytest.mark.integration
     def test_map_route_includes_sidebar_collapse_logic(self, client):
         """Test that the map route includes frontend logic for sidebar collapse."""
         response = client.get("/map")

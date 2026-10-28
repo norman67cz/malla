@@ -58,7 +58,7 @@ check_optional_docker_compose() {
 }
 
 printf 'Project root: %s\n' "$PROJECT_ROOT"
-printf 'Remote Docker host: %s\n' "${DEPLOY_HOST:-10.5.0.71}"
+printf 'Deploy Docker host (test by default): %s\n' "${DEPLOY_HOST:-10.5.0.71}"
 
 check_cmd git "git"
 check_cmd ssh "ssh"

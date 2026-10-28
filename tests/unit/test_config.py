@@ -43,3 +43,12 @@ def test_env_override(monkeypatch):
 
     assert cfg.name == "EnvName"
     assert cfg.debug is True
+
+
+def test_carto_api_key_env_override(monkeypatch, tmp_path):
+    """The raster basemap key is read from its own environment variable."""
+    monkeypatch.setenv("MALLA_CARTO_API_KEY", "raster-test-key")
+
+    cfg = load_config(config_path=tmp_path / "missing.yaml")
+
+    assert cfg.carto_api_key == "raster-test-key"

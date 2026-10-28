@@ -25,6 +25,27 @@ Made by codex:
   printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
   this file is used by the footer to show the deployed commit hash
 
+### Server environments
+
+| Environment | Web UI | Deployment host |
+| --- | --- | --- |
+| Test | `http://10.5.0.71:5008` | `10.5.0.71` (default for `make deploy-remote`) |
+| Production | `http://10.5.0.125:5008` | `10.5.0.125` (pull and build on the server) |
+
+The local development server is available at `http://localhost:5008`.
+
+Deploy to the test server directly with `make deploy-remote` (default host: `10.5.0.71`).
+For production, connect to `10.5.0.125`, change to the Malla repository directory,
+and update and rebuild there:
+
+```bash
+git pull --ff-only
+printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.remote-build.yml up -d --build
+```
+
+Set `MALLA_CARTO_API_KEY` in each server's own `.env` before rebuilding. The deploy script does not copy `.env`.
+
 ## Data Retention
   packet history cleanup already exists in `malla-capture` and runs automatically on startup and then every hour
   configure it in `.env` using either:
@@ -191,6 +212,7 @@ The following keys are recognised:
 | YAML key        | Type   | Default                                  | Description                                   | Env-var override |
 | --------------- | ------ | ---------------------------------------- | --------------------------------------------- | ---------------- |
 | `name`          | str    | `"Malla"`                                | Display name shown in the navigation bar.     | `MALLA_NAME` |
+| `carto_api_key` | str    | `""`                                     | CARTO raster basemap key for map, node, and packet pages. Set it in `.env` for Docker deployments. | `MALLA_CARTO_API_KEY` |
 | `home_markdown` | str    | `""`                                     | Markdown rendered on the dashboard homepage.  | `MALLA_HOME_MARKDOWN` |
 | `secret_key`    | str    | `"dev-secret-key-change-in-production"` | Flask session secret key (change in prod!). (currently unused)   | `MALLA_SECRET_KEY` |
 | `database_file` | str    | `"meshtastic_history.db"`                | SQLite database file location.                | `MALLA_DATABASE_FILE` |
