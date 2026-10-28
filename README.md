@@ -30,21 +30,24 @@ Made by codex:
 | Environment | Web UI | Deployment host |
 | --- | --- | --- |
 | Test | `http://10.5.0.71:5008` | `10.5.0.71` (default for `make deploy-remote`) |
-| Production | `http://10.5.0.125:5008` | `10.5.0.125` (pull and build on the server) |
+| Production | `http://10.5.0.125:5008` | `10.5.0.125` (`/home/pavelka/malla`) |
 
 The local development server is available at `http://localhost:5008`.
 
 Deploy to the test server directly with `make deploy-remote` (default host: `10.5.0.71`).
-For production, connect to `10.5.0.125`, change to the Malla repository directory,
-and update and rebuild there:
+For production, connect to `10.5.0.125`, set the raster basemap key in
+`/home/pavelka/malla/.env`, and run the server's `refresh-malla` script:
 
 ```bash
-git pull --ff-only
-printf '%s\n' "$(git rev-parse --short HEAD)" > BUILD_COMMIT
-docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.remote-build.yml up -d --build
+refresh-malla
 ```
 
-Set `MALLA_CARTO_API_KEY` in each server's own `.env` before rebuilding. The deploy script does not copy `.env`.
+The script pulls the latest commit, updates build metadata, stops the current
+containers, rebuilds them, and starts them again. With PostgreSQL configured,
+it also applies `scripts/sql/2026-03-29-postgres-performance-indexes.sql`.
+Set `MALLA_CARTO_API_KEY` to the key value alone, not a tile URL, in each
+server's own `.env` before rebuilding. The
+test deploy script does not copy `.env`.
 
 ## Data Retention
   packet history cleanup already exists in `malla-capture` and runs automatically on startup and then every hour

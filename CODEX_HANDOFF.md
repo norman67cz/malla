@@ -2,7 +2,7 @@
 
 Updated: 2026.03.09
 
-Server roles and workflow confirmed 2026.10.28: `10.5.0.71` is test and deployed directly; `10.5.0.125` is production and updated on the server with `git pull` and a Docker Compose rebuild. Runtime observations below are from the original handoff date.
+Server roles and workflow confirmed 2026.10.28: `10.5.0.71` is test and deployed directly; `10.5.0.125` is production, with the repository at `/home/pavelka/malla` and updates performed by its `refresh-malla` script. Runtime observations below are from the original handoff date.
 
 ## Environment
 
@@ -29,6 +29,8 @@ Server roles and workflow confirmed 2026.10.28: `10.5.0.71` is test and deployed
   - `make test`
 - Test deploy:
   - `DEPLOY_USER=codex DEPLOY_HOST=10.5.0.71 DEPLOY_PATH=/home/codex/apps/malla make deploy-remote`
+- Production deploy:
+  - Set `MALLA_CARTO_API_KEY` to the key value alone in `/home/pavelka/malla/.env`, then run `refresh-malla` on `10.5.0.125`.
 
 Files added for this workflow:
 
